@@ -131,6 +131,9 @@ __pypackages__/
 celerybeat-schedule
 celerybeat.pid
 
+# Claude Code local config
+.claude/
+
 # Redis
 *.rdb
 *.aof
@@ -216,3 +219,10 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Great Docs build output
+great-docs/
+/*.md
+!README.md
+!ROADMAP.md
+.DS_Store
