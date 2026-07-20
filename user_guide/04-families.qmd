@@ -28,7 +28,7 @@ model = wk.GAM("y ~ s(x)", family=wk.Gaussian())  # family object
 **When to use**: continuous data without a natural lower bound, or after a variance-stabilizing
 transformation.
 
-## Poisson: count responses *(Phase 1)*
+## Poisson: count responses
 
 For non-negative integer count data where variance scales with the mean.
 
@@ -39,7 +39,7 @@ model = wk.GAM("count ~ s(x) + offset(log_exposure)", family="poisson")
 
 **Default link**: `log`.
 
-## Binomial: binary / proportion responses *(Phase 1)*
+## Binomial: binary / proportion responses
 
 For binary outcomes (0/1) or proportions with a known denominator.
 
@@ -50,7 +50,7 @@ model = wk.GAM("cbind(y, n) ~ s(x)", family="binomial") # proportion
 
 **Default link**: `logit`. Alternatives: `probit`, `cloglog`, `cauchit`.
 
-## Gamma: positive continuous responses *(Phase 1)*
+## Gamma: positive continuous responses
 
 For positive continuous data where variance scales with the square of the mean (e.g., costs,
 rainfall amounts).
@@ -61,7 +61,7 @@ model = wk.GAM("y ~ s(x)", family="gamma")
 
 **Default link**: `inverse`. Alternatives are `log` and `identity`.
 
-## Negative Binomial: overdispersed counts *(Phase 1)*
+## Negative Binomial: overdispersed counts
 
 An extension of Poisson that allows the variance to exceed the mean.
 
