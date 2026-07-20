@@ -1,0 +1,127 @@
+[build-system]
+requires = ["setuptools>=45", "wheel", "setuptools_scm>=6.2"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools_scm]
+
+[tool.setuptools.packages.find]
+include = ["whittaker", "whittaker.*"]
+
+[tool.setuptools.package-data]
+whittaker = ["py.typed"]
+
+[project]
+name = "whittaker"
+description = "A next-generation Generalized Additive Model (GAM) library for Python."
+readme = "README.md"
+keywords = [
+    "generalized additive models",
+    "GAM",
+    "splines",
+    "smoothing",
+    "penalized regression",
+    "REML",
+    "P-splines",
+    "thin plate splines",
+    "distributional regression",
+    "GAMLSS",
+    "statistics",
+    "machine learning",
+]
+license = { file = "LICENSE" }
+authors = [{ name = "Richard Iannone", email = "riannone@me.com" }]
+maintainers = [{ name = "Richard Iannone", email = "riannone@me.com" }]
+dynamic = ["version"]
+requires-python = ">=3.10"
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Scientific/Engineering",
+    "Typing :: Typed",
+]
+dependencies = [
+    "narwhals>=2.0",
+    "numpy>=1.24",
+    "scipy>=1.11",
+    "typing_extensions>=4.0",
+]
+
+[project.optional-dependencies]
+pd = ["pandas>=2.0"]
+pl = ["polars>=1.0"]
+pa = ["pyarrow>=15"]
+formula = ["formulaic>=1.0"]
+altair = ["altair>=6", "vl-convert-python>=1.9"]
+tables = ["great-tables>=0.22"]
+fast = ["numba>=0.59"]
+all = ["whittaker[pd,pl,pa,formula,altair,tables]"]
+dev = [
+    "pytest>=8",
+    "pytest-cov",
+    "pytest-snapshot",
+    "pytest-randomly",
+    "hypothesis>=6.100",
+    "ruff",
+    "pyright",
+    "build",
+    "pandas>=2.0",
+    "polars>=1.0",
+    "pyarrow>=15",
+    "formulaic>=1.0",
+    "altair>=6",
+    "vl-convert-python>=1.9",
+]
+docs = [
+    "jupyter",
+    "nbclient",
+    "nbformat",
+    "pandas>=2.0",
+    "polars>=1.0",
+    "pyarrow>=15",
+    "altair>=6",
+    "vl-convert-python>=1.9",
+    "formulaic>=1.0",
+    "great-tables>=0.22",
+]
+
+[project.urls]
+Homepage = "https://github.com/rich-iannone/whittaker"
+Repository = "https://github.com/rich-iannone/whittaker"
+Documentation = "https://rich-iannone.github.io/whittaker/"
+"Bug Tracker" = "https://github.com/rich-iannone/whittaker/issues"
+
+[tool.pyright]
+include = ["whittaker"]
+pythonVersion = "3.10"
+typeCheckingMode = "strict"
+reportPrivateUsage = false
+reportMissingTypeStubs = false
+reportUnknownMemberType = false
+reportUnknownArgumentType = false
+reportUnknownVariableType = false
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+addopts = "-ra --cov=whittaker --cov-report=term-missing --durations 10"
+testpaths = ["tests"]
+markers = [
+    "rparity: numeric validation against R fixtures",
+    "slow: longer-running tests",
+]
+
+[tool.coverage.report]
+exclude_also = ["if TYPE_CHECKING:"]
