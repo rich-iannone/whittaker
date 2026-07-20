@@ -1,0 +1,69 @@
+---
+title: Model fitting
+guide-section: "Fitting models"
+---
+
+Whittaker fits GAMs by **penalized iteratively reweighted least squares (P-IRLS)**, a generalization
+of weighted least squares that handles non-Gaussian responses by iterating over a sequence of
+penalized weighted regression problems.
+
+## The P-IRLS algorithm
+
+For a given set of smoothing parameters $\boldsymbol{\lambda} = (\lambda_1, \ldots, \lambda_J)$,
+fitting proceeds as follows:
+
+1. **Initialize**: set $\mu = $ `family.initialize(y)`, $\eta = g(\mu)$.
+2. **Pseudo-data**: $z = \eta + (y - \mu)\, g'(\mu)$ (a linearized response).
+3. **Working weights**: $W = \bigl[g'(\mu)\bigr]^2 \,/\, V(\mu)$.
+4. **Penalized WLS**: solve
+   $$\bigl(X^\top W X + \textstyle\sum_j \lambda_j S_j\bigr)\,\hat\beta = X^\top W z$$
+5. **Update**: $\eta = X\hat\beta$, $\mu = g^{-1}(\eta)$.
+6. **Repeat** steps 2–5 until the relative change in penalized deviance falls below
+   $10^{-7}$.
+
+For the Gaussian family with an identity link, P-IRLS reduces to a single penalized least-squares
+solve (no iteration is required).
+
+## Smoothness selection
+
+The roughness of each smooth is controlled by a non-negative smoothing parameter $\lambda_j$. Larger
+$\lambda_j$ → smoother $f_j$; $\lambda_j = 0$ → no penalty (interpolating spline).
+
+### GCV
+
+Generalized cross-validation selects $\boldsymbol\lambda$ by minimizing:
+
+$$\text{GCV}(\boldsymbol\lambda) = \frac{n\, D(y,\hat\mu)}{[n - \text{tr}(\mathbf{A})]^2}$$
+
+where $D$ is the deviance and $\mathbf{A} = X(X^\top W X + \sum_j \lambda_j S_j)^{-1}X^\top W$ is
+the influence (hat) matrix.
+
+GCV is minimized over $\log\boldsymbol\lambda$ using a Newton method with analytical gradient.
+
+### REML
+
+Restricted maximum likelihood (REML) treats the smooth terms as random effects and maximizes the
+restricted log-likelihood over $\boldsymbol\lambda$. It has better finite-sample properties than GCV
+and is the recommended default.
+
+## Solver strategy
+
+| Model matrix size | Solver |
+|---|---|
+| $k < 500$ | Dense Cholesky (LAPACK via SciPy) |
+| $k \geq 500$ | Sparse Cholesky (SciPy sparse) |
+
+## Convergence settings
+
+```python
+model = wk.GAM(
+    "y ~ s(x1) + s(x2)",
+    tol=1e-7,          # relative change in penalized deviance
+    max_iter=200,      # maximum P-IRLS iterations
+    method="gcv",      # smoothness selection method
+)
+model.fit(data)
+```
+
+After fitting, `model.converged` is `True` if the inner P-IRLS loop converged, and `model.n_iter`
+reports the number of iterations taken.
