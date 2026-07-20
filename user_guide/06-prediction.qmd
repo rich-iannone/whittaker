@@ -1,0 +1,72 @@
+---
+title: Prediction and inference
+guide-section: "Results"
+---
+
+After fitting, `model.predict()` generates predictions for new covariate values.
+
+## Point predictions
+
+```python
+preds = model.predict(new_data)
+```
+
+By default, predictions are on the **response scale** (after applying the inverse link). Use `type=`
+to change the scale:
+
+| `type=` | Returns |
+|---|---|
+| `"response"` | $\hat\mu = g^{-1}(\hat\eta)$: fitted values on the response scale (default) |
+| `"link"` | $\hat\eta = X\hat\beta$: fitted values on the linear predictor scale |
+| `"terms"` | A frame with one column per model term, showing each term's contribution to $\hat\eta$ |
+
+```python
+# On the linear predictor scale
+preds_link = model.predict(new_data, type="link")
+
+# Term contributions
+term_preds = model.predict(new_data, type="terms")
+```
+
+## Standard errors
+
+Set `se=True` to also return a standard error for each prediction:
+
+```python
+preds = model.predict(new_data, se=True)
+# Returns a frame with columns: fit, se_fit
+```
+
+Standard errors are computed from the Bayesian covariance matrix
+$V_\beta = (X^\top W X + \sum_j \lambda_j S_j)^{-1}$, which accounts for smoothing parameter
+uncertainty via the empirical Bayes correction of Marra & Wood.
+
+## Confidence intervals
+
+```python
+ci = model.predict_interval(new_data, level=0.95)
+# Returns: fit, lower, upper
+```
+
+By default these are **pointwise** intervals. For **simultaneous** bands that hold uniformly across
+the covariate range:
+
+```python
+ci = model.predict_interval(new_data, level=0.95, simultaneous=True)
+```
+
+## In-sample fitted values
+
+```python
+fitted = model.fitted_values          # on the response scale
+linear_pred = model.linear_predictor  # on the link scale
+```
+
+## Residuals
+
+```python
+model.residuals()                     # deviance residuals (default)
+model.residuals(type="pearson")
+model.residuals(type="response")
+model.residuals(type="working")
+```
