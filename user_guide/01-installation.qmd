@@ -1,0 +1,39 @@
+---
+title: Installation
+guide-section: "Getting started"
+---
+
+Whittaker targets Python 3.10+ and is not yet on PyPI. Once released:
+
+```bash
+pip install whittaker
+```
+
+## Optional extras
+
+The core package depends only on Narwhals, NumPy, SciPy, and `typing_extensions`.
+Backend- and feature-specific pieces are optional extras:
+
+| Extra | Adds |
+|---|---|
+| `pd` | pandas |
+| `pl` | Polars |
+| `pa` | PyArrow |
+| `formula` | formulaic (alternative formula parsing) |
+| `altair` | Altair + vl-convert (visualization) |
+| `tables` | Great Tables (publication tables) |
+| `fast` | numba (accelerated kernels) |
+| `all` | pd, pl, pa, formula, altair, tables |
+
+```bash
+pip install "whittaker[all]"
+```
+
+## From source
+
+```bash
+git clone https://github.com/rich-iannone/whittaker.git
+cd whittaker
+make install   # pip install -e ".[dev]"
+make check     # ruff + pyright + pytest
+```
