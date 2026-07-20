@@ -1,0 +1,74 @@
+---
+title: Whittaker
+toc: false
+---
+
+## Next-generation GAMs for Python
+
+Whittaker is a modern Generalized Additive Model (GAM) library for Python. It aims to hold a candle
+to R's `mgcv` in functionality, performance, and usability. It's built on a modern data stack with
+[Narwhals](https://narwhals-dev.github.io/narwhals/) for backend-agnostic compute,
+[NumPy](https://numpy.org/) and [SciPy](https://scipy.org/) for numerical work, and
+[Altair](https://altair-viz.github.io/) for publication-quality visualization.
+
+Named after the Whittaker smoother (one of the earliest penalized smoothing methods and a direct
+mathematical ancestor of P-splines) the library honors that lineage while delivering a modern
+implementation.
+
+## Why Whittaker?
+
+- **Works with your dataframe library**: Pandas, Polars, PyArrow, or any
+  [Narwhals](https://narwhals-dev.github.io/narwhals/)-compatible frame.
+- **Full smooth catalog**: thin plate regression splines, cubic splines, P-splines, tensor products,
+cyclic splines, random effects, and more (matching mgcv's complete offering).
+- **Principled smoothness selection**: REML by default, with GCV, ML, and UBRE as alternatives.
+- **Beautiful diagnostics**: `model.check()` and `model.plot()` produce interactive Altair charts
+right in your notebook.
+- **Type-safe**: full annotations, strict Pyright-clean codebase.
+- **Production-ready**: serialization, scikit-learn compatibility, ONNX export (planned).
+
+## The analytical pipeline
+
+1. **Specify** your model with a formula string or programmatic term list.
+2. **Fit** with `model.fit(data)`: automatic smoothness selection via REML.
+3. **Inspect** with `model.summary()`: EDF, p-values, and smoothing parameters for every term.
+4. **Check** with `model.check()`: basis dimension adequacy, residual plots, convergence info.
+5. **Predict** with `model.predict(new_data)`: point estimates, standard errors, or term
+contributions.
+6. **Visualize** with `model.plot()`: partial-effect plots with confidence bands for every smooth.
+
+## A first look
+
+::: {.callout-note}
+The API is under active development. The snippets below show the intended interface but not all
+features are implemented yet.
+:::
+
+**Fit a simple GAM to the motorcycle acceleration dataset**
+
+```python
+import whittaker as wk
+import polars as pl
+
+mcycle = wk.load_dataset("mcycle", backend="polars")
+
+model = wk.GAM("accel ~ s(times)")
+model.fit(mcycle)
+model.summary()
+```
+
+**Inspect the smooth and check model adequacy**
+
+```python
+model.plot()    # partial-effect plot with 95% confidence band
+model.check()   # basis dimension test, residual plots, convergence
+```
+
+**Predict on new data**
+
+```python
+import narwhals as nw
+
+new_data = pl.DataFrame({"times": [10.0, 20.0, 30.0]})
+preds = model.predict(new_data, se=True)
+```
