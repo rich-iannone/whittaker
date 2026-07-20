@@ -1,0 +1,87 @@
+---
+title: Quick start
+guide-section: "Getting started"
+---
+
+::: {.callout-note}
+The API is under active development. The snippets below show the intended interface.
+:::
+
+This is a short tour from raw data to a fitted GAM, a model summary, and a plot. Each step is only a
+few lines. The rest of the guide covers every piece in depth.
+
+## Load the data
+
+Whittaker ships a small collection of classic datasets for examples. The motorcycle acceleration
+dataset (`mcycle`) records the head acceleration of a crash-test dummy over time following impact.
+
+```python
+import whittaker as wk
+import polars as pl
+
+mcycle = wk.load_dataset("mcycle", backend="polars")
+mcycle.head()
+```
+
+The two columns are `times` (milliseconds post-impact) and `accel` (acceleration in g).
+
+## Specify and fit the model
+
+A GAM formula looks like an R formula. Wrapping a predictor in `s()` tells Whittaker to model it as
+a smooth function using a thin plate regression spline (the default basis).
+
+```python
+model = wk.GAM("accel ~ s(times)")
+model.fit(mcycle)
+```
+
+Whittaker automatically selects the smoothing parameter $\lambda$ by REML. No tuning is required.
+
+## Inspect the summary
+
+```python
+model.summary()
+```
+
+The summary reports:
+
+- **Parametric terms**: the intercept and any linear terms, with standard errors and p-values.
+- **Smooth terms**: effective degrees of freedom (EDF), reference degrees of freedom, and an
+approximate p-value for each smooth.
+- **Model fit statistics**: deviance explained, adjusted R², GCV score, scale estimate.
+
+## Check model adequacy
+
+```python
+model.check()
+```
+
+The `check()` method runs a basis dimension adequacy test (the k-index), prints convergence
+information, and produces four diagnostic plots: QQ plot of residuals, residuals vs. fitted values,
+a histogram of residuals, and response vs. fitted values.
+
+## Plot the smooth
+
+```python
+model.plot()
+```
+
+The `plot()` method produces a partial-effect plot for every smooth term: the estimated function
+with a 95% pointwise confidence band and a rug of the observed covariate values.
+
+## Predict on new data
+
+```python
+new_times = pl.DataFrame({"times": [10.0, 20.0, 30.0, 40.0]})
+preds = model.predict(new_times, se=True)
+preds
+```
+
+Set `se=True` to also return standard errors on the linear predictor scale, or `type="terms"` to get
+the contribution of each smooth term separately.
+
+## Where to go next
+
+- **[Smooth terms](03-smooths.qmd)**: TPRS, cubic splines, P-splines, tensor products.
+- **[Response families](04-families.qmd)**: fit count, binary, or continuous responses.
+- **[Model fitting](05-fitting.qmd)**: the P-IRLS algorithm and smoothness selection.
