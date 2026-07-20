@@ -1,0 +1,82 @@
+---
+title: Response families
+guide-section: "Fitting models"
+---
+
+A GAM's **family** specifies the conditional distribution of the response $y$ and the **link
+function** $g$ that relates the linear predictor $\eta$ to the conditional mean $\mu$:
+
+$$g(\mu) = \eta = \beta_0 + f_1(x_1) + f_2(x_2) + \cdots$$
+
+Whittaker's family system mirrors mgcv's, with the same interface for all families.
+
+## Gaussian: continuous responses
+
+The default family. Appropriate for unbounded continuous responses with approximately constant
+variance.
+
+```python
+model = wk.GAM("y ~ s(x)")                        # Gaussian, identity link (default)
+model = wk.GAM("y ~ s(x)", family="gaussian")     # explicit
+model = wk.GAM("y ~ s(x)", family=wk.Gaussian())  # family object
+```
+
+**Link functions**: `identity` (default), `log`, `inverse`.
+
+**Variance function**: $\text{Var}(\mu) = \phi$ (constant, estimated from data).
+
+**When to use**: continuous data without a natural lower bound, or after a variance-stabilizing
+transformation.
+
+## Poisson: count responses *(Phase 1)*
+
+For non-negative integer count data where variance scales with the mean.
+
+```python
+model = wk.GAM("count ~ s(x)", family="poisson")
+model = wk.GAM("count ~ s(x) + offset(log_exposure)", family="poisson")
+```
+
+**Default link**: `log`.
+
+## Binomial: binary / proportion responses *(Phase 1)*
+
+For binary outcomes (0/1) or proportions with a known denominator.
+
+```python
+model = wk.GAM("y ~ s(x)", family="binomial")           # binary
+model = wk.GAM("cbind(y, n) ~ s(x)", family="binomial") # proportion
+```
+
+**Default link**: `logit`. Alternatives: `probit`, `cloglog`, `cauchit`.
+
+## Gamma: positive continuous responses *(Phase 1)*
+
+For positive continuous data where variance scales with the square of the mean (e.g., costs,
+rainfall amounts).
+
+```python
+model = wk.GAM("y ~ s(x)", family="gamma")
+```
+
+**Default link**: `inverse`. Alternatives are `log` and `identity`.
+
+## Negative Binomial: overdispersed counts *(Phase 1)*
+
+An extension of Poisson that allows the variance to exceed the mean.
+
+```python
+model = wk.GAM("y ~ s(x)", family="nb")
+```
+
+## Specifying families programmatically
+
+Each family is also available as a class for full control over link functions and initial parameter
+values:
+
+```python
+from whittaker.families import Gaussian, Binomial, Poisson
+
+model = wk.GAM("y ~ s(x)", family=Gaussian(link="log"))
+model = wk.GAM("y ~ s(x)", family=Binomial(link="probit"))
+```
