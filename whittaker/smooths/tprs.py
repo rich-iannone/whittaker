@@ -198,13 +198,13 @@ class TPRS(SmoothBasis):
 
         if r < 1:
             raise ValueError(
-                f"k={self.k} is too small for d={d}: need `k > {M}` "
+                f"k={self.k} is too small for d={d}: need k > {M} "
                 f"(the null-space dimension M = d + 1 = {M})."
             )
         if n < self.k:
             raise ValueError(
-                f"Number of observations n={n} is smaller than `k={self.k}`. "
-                f"Reduce `k` to at most {n - 1}."
+                f"Number of observations n={n} is smaller than k={self.k}. "
+                f"Reduce k to at most {n - 1}."
             )
 
         self._d = d
