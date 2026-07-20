@@ -1,0 +1,15 @@
+# Summary
+
+Thank you for contributing to Whittaker! Please explain the context and purpose of your
+contribution, and list the changes made to the code or docs.
+
+# Related GitHub Issues and PRs
+
+- Ref: #
+
+# Checklist
+
+- [ ] `make check` passes (ruff, pyright, pytest).
+- [ ] I have added tests for any new functionality.
+- [ ] For new/changed statistics, I have added or updated R-parity fixtures.
+- [ ] I have updated docs (docstrings and/or `user_guide/`) as needed.
