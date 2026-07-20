@@ -1,0 +1,70 @@
+---
+title: Data input
+guide-section: "Results"
+---
+
+Whittaker uses [Narwhals](https://narwhals-dev.github.io/narwhals/) to accept any DataFrame library
+without coupling the package to a specific backend.
+
+## Supported backends
+
+Any DataFrame that Narwhals supports works directly with `model.fit()` and `model.predict()`:
+
+| Library | Install |
+|---|---|
+| [Polars](https://pola.rs/) | `pip install "whittaker[pl]"` |
+| [Pandas](https://pandas.pydata.org/) | `pip install "whittaker[pd]"` |
+| [PyArrow](https://arrow.apache.org/docs/python/) | `pip install "whittaker[pa]"` |
+| [Modin](https://modin.readthedocs.io/) | no extra needed (Narwhals detects it) |
+| [cuDF](https://docs.rapids.ai/api/cudf/stable/) | no extra needed |
+
+## Usage example
+
+```python
+import polars as pl
+import pandas as pd
+import whittaker as wk
+
+# Works with Polars
+data_pl = pl.read_csv("data.csv")
+model.fit(data_pl)
+
+# Works with Pandas (same call, same result)
+data_pd = pd.read_csv("data.csv")
+model.fit(data_pd)
+```
+
+## Output format
+
+Predictions and other tabular outputs use the same DataFrame type as the input by default. Pass
+`format=` to override:
+
+```python
+preds = model.predict(data_pd, format="polars")   # always get a Polars frame
+preds = model.predict(data_pl, format="pandas")   # always get a Pandas frame
+```
+
+## Narwhals internals
+
+Internally Whittaker converts your frame to a Narwhals frame with `nw.from_native()`, extracts the
+required columns, and converts to NumPy arrays for computation. The conversion is zero-copy for
+Polars and Arrow-backed frames.
+
+```python
+import narwhals as nw
+
+df = nw.from_native(your_dataframe)       # accepts any supported backend
+arr = df["x"].to_numpy()                  # zero-copy for Polars/Arrow
+```
+
+## Missing values
+
+GAMs do not support missing values in model predictors. Whittaker raises a clear error at fit time:
+
+```
+WhittakerError: Cannot fit model: column 'x1' contains 3 null values.
+
+Options:
+  1. Drop rows with nulls:   data.drop_nulls(["x1"])
+  2. Set na_action="exclude" to drop and reindex predictions automatically.
+```
