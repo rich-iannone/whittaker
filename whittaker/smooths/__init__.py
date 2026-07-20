@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 from whittaker.smooths.base import SmoothBasis
+from whittaker.smooths.cubic import CRS
 from whittaker.smooths.tprs import TPRS
 
 __all__ = [
+    "CRS",
     "SmoothBasis",
     "TPRS",
 ]

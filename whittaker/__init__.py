@@ -6,7 +6,7 @@ from importlib.metadata import PackageNotFoundError, version
 
 from whittaker.formula import Formula, InteractionTerm, LinearTerm, OffsetTerm, SmoothTerm
 from whittaker.formula import parse as parse_formula
-from whittaker.smooths import TPRS, SmoothBasis
+from whittaker.smooths import CRS, TPRS, SmoothBasis
 
 try:
     __version__: str = version("whittaker")
@@ -15,6 +15,7 @@ except PackageNotFoundError:
 
 __all__ = [
     "__version__",
+    "CRS",
     "Formula",
     "InteractionTerm",
     "LinearTerm",
