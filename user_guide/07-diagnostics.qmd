@@ -1,0 +1,76 @@
+---
+title: Model diagnostics
+guide-section: "Results"
+---
+
+Always run `model.check()` after fitting. GAMs can fail silently when a basis dimension is too small
+or when the data contain structure the smoother cannot capture.
+
+## `model.check()`
+
+```python
+model.check()
+```
+
+`check()` produces four pieces of output:
+
+1. **Basis dimension adequacy**: for each smooth term, reports the k-index and an approximate
+p-value. A k-index below 1 with a significant p-value indicates that the basis dimension is too
+small. Re-fit with a larger `k`.
+2. **Convergence**: reports the number of P-IRLS iterations and whether the algorithm converged
+within the tolerance.
+3. **Residual plots**: four-panel figure: QQ plot, residuals vs. fitted, histogram of residuals, and
+response vs. fitted.
+
+## Residuals
+
+```python
+model.residuals()                      # deviance residuals (default)
+model.residuals(type="pearson")        # Pearson residuals
+model.residuals(type="response")       # y - fitted (on response scale)
+model.residuals(type="working")        # from the final IRLS pseudo-data
+```
+
+For Gaussian models with an identity link, all residual types are equivalent to the raw
+residuals $y - \hat\mu$.
+
+## Summary output
+
+```python
+model.summary()
+```
+
+The summary table contains:
+
+- **Parametric coefficients**: estimate, standard error, z-statistic, p-value for each linear term.
+- **Approximate significance of smooth terms**: reference df, EDF, test statistic, and p-value for
+each smooth.
+- **Model-level statistics**: deviance explained, adjusted R², GCV score, scale estimate
+($\hat\phi$), $n$.
+
+The EDF (effective degrees of freedom) measures how much of the maximum complexity the smoothness
+selection actually used. An EDF near 1 means the smooth is nearly linear. An EDF near `k-1` (or `k`)
+suggests the basis may be too small.
+
+## Basis dimension test (k-index)
+
+The k-index is based on the ratio of the mean square of the first differences of the residuals to
+their variance. Values below 1 suggest inadequate basis dimension. Re-fit with a larger `k` if this
+test is significant:
+
+```python
+# Increase k and re-check
+model2 = wk.GAM("y ~ s(x, k=20)")
+model2.fit(data)
+model2.check()
+```
+
+## Plotting
+
+```python
+model.plot()             # partial-effect plots for all smooth terms
+model.plot("s(x1)")     # a specific term
+```
+
+Each panel shows the estimated function $\hat{f}_j(x_j)$ centered at zero, with a 95% pointwise
+confidence band and a rug of observed covariate values along the x-axis.
