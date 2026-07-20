@@ -1,0 +1,70 @@
+# Great Docs Configuration
+# See https://posit-dev.github.io/great-docs/user-guide/configuration.html
+
+parser: numpy
+
+site_url: "https://rich-iannone.github.io/whittaker/"
+
+dynamic: true
+
+# Logo & Favicon
+# ---------------
+# Uncomment once logo assets are in place:
+# logo:
+#   light: assets/whittaker_logo_light.svg
+#   dark: assets/whittaker_logo_dark.svg
+
+hero:
+  name: false
+  logo_height: 120px
+  badges: false
+
+# Lucide icons prepended to user-guide sidebar entries (keyed by page title).
+nav_icons:
+  sidebar:
+    "Get started": compass
+    "Installation": download
+    "Quick start": rocket
+    "Smooth terms": chart-spline
+    "Response families": layers
+    "Model fitting": cpu
+    "Prediction and inference": telescope
+    "Model diagnostics": stethoscope
+    "Data input": database
+
+authors:
+  - name: Richard Iannone
+    role: Maintainer
+    email: riannone@me.com
+    github: rich-iannone
+    orcid: 0000-0003-3925-190X
+
+# API Reference Structure
+# -----------------------
+# Populated as the API is implemented. Will uncomment each section as classes and
+# functions are implemented in the codebase.
+#
+# reference:
+#   - title: Core model
+#     desc: The main GAM interface.
+#     contents:
+#       - name: GAM
+#         members: true
+#
+#   - title: Smooth terms
+#     desc: Basis constructors for use inside a formula or term list.
+#     contents:
+#       - s
+#       - te
+#       - ti
+#
+#   - title: Response families
+#     desc: Distributions and link functions for the response variable.
+#     contents:
+#       - name: Gaussian
+#         members: true
+#
+#   - title: Utilities
+#     desc: Dataset loaders and helper functions.
+#     contents:
+#       - load_dataset
