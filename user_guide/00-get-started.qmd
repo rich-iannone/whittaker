@@ -1,0 +1,39 @@
+---
+title: Get started
+guide-section: "Getting started"
+---
+
+Whittaker brings the full power of Generalized Additive Models (GAMs) to Python. It is built
+on [Narwhals](https://narwhals-dev.github.io/narwhals/) for backend-agnostic compute, follows
+the mathematical framework of Wood's `mgcv` (the R gold standard), and is visualized with
+[Altair](https://altair-viz.github.io/).
+
+## The pipeline
+
+Every Whittaker analysis follows a consistent workflow:
+
+1. **Specify the model**: write a formula string like `"y ~ s(x1) + s(x2)"` or build terms
+   programmatically with `s()`, `te()`, and `ti()`.
+2. **Fit**: call `model.fit(data)`. Smoothness parameters are estimated automatically by
+   REML unless you specify otherwise.
+3. **Summarize**: `model.summary()` reports effective degrees of freedom, approximate
+   p-values, and smoothing parameters for every term.
+4. **Check**: `model.check()` runs basis dimension adequacy tests and plots residual
+   diagnostics.
+5. **Predict**: `model.predict(new_data)` returns fitted values on the response scale,
+   with optional standard errors or term-level contributions.
+6. **Visualize**: `model.plot()` produces partial-effect plots with confidence bands for
+   every smooth term.
+
+## How this guide is organized
+
+The user guide walks through each part of the pipeline in depth:
+
+- **Installation**: how to get Whittaker and its optional extras.
+- **Quick start**: a complete example from raw data to a fitted model and plot.
+- **Smooth terms**: the full catalog of basis types and how to choose among them.
+- **Response families**: Gaussian, Poisson, Binomial, and more.
+- **Model fitting**: the P-IRLS algorithm, smoothness selection, and convergence.
+- **Prediction and inference**: point estimates, standard errors, and confidence bands.
+- **Model diagnostics**: how to check that your model is adequate.
+- **Data input**: how Whittaker uses Narwhals to accept any dataframe library.
