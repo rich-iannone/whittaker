@@ -1,0 +1,94 @@
+---
+title: Smooth terms
+guide-section: "Fitting models"
+---
+
+::: {.callout-note}
+This page is a work in progress. Content is added as each smooth type is implemented.
+:::
+
+A GAM replaces a linear term $\beta x$ with a smooth function $f(x)$, where the shape of $f$ is
+estimated from the data subject to a roughness penalty. The **basis** determines which family of
+functions $f$ can belong to, and the **penalty** controls how wiggly the fit is allowed to be.
+
+## Thin plate regression splines (TPRS): `bs="tp"`
+
+TPRS is the default basis in Whittaker, as it is in mgcv. It is an optimal smoother in the sense
+that it minimizes a global measure of roughness for a given fit quality, with no need to place knots
+manually.
+
+```python
+model = wk.GAM("y ~ s(x)")              # TPRS, default k=10
+model = wk.GAM("y ~ s(x, k=20)")        # increase basis dimension
+model = wk.GAM("y ~ s(x, bs='tp')")     # explicit
+```
+
+**Penalty**: integrated squared second derivative (for 1D), or the thin plate spline penalty (for 2D
+and higher).
+
+**When to use**: the safe default for any univariate or low-dimensional smooth.
+
+## Cubic regression splines: `bs="cr"`
+
+Cubic splines are piecewise cubic polynomials joined at knots with continuous first and second
+derivatives. They are slightly cheaper to compute than TPRS and are the best choice when you need an
+interpretable, knot-based basis.
+
+```python
+model = wk.GAM("y ~ s(x, bs='cr')")
+model = wk.GAM("y ~ s(x, bs='cr', k=15)")
+```
+
+**Penalty**: integrated squared second derivative.
+
+**When to use**: when computational speed matters, or when you want explicit control over knot
+placement.
+
+## P-splines: `bs="ps"`
+
+P-splines combine a B-spline basis with a difference penalty on adjacent coefficients. They are
+highly efficient and well-suited to regularly-spaced data.
+
+```python
+model = wk.GAM("y ~ s(x, bs='ps')")
+model = wk.GAM("y ~ s(x, bs='ps', k=20, m=2)")  # order-2 difference penalty
+```
+
+**Penalty**: $m$-th order difference penalty on adjacent B-spline coefficients.
+
+**When to use**: large datasets, time series, or when you want a penalty that does not depend on the
+data locations.
+
+## Tensor product smooths: `te()` and `ti()`
+
+For smooth interactions between two or more variables, use tensor products. Unlike `s(x1, x2)`
+(which applies a single isotropic penalty), `te()` applies a separate penalty to each margin
+(appropriate when the predictors are measured on different scales).
+
+```python
+model = wk.GAM("y ~ te(x1, x2)")            # tensor product smooth
+model = wk.GAM("y ~ ti(x1) + ti(x2) + ti(x1, x2)")  # main effects + interaction
+```
+
+**When to use**: modelling spatial data, time × space interactions, or any smooth interaction
+between predictors on different scales.
+
+## Choosing the basis dimension `k`
+
+The basis dimension `k` is the maximum complexity of the smooth. Whittaker selects the actual
+smoothness via REML, so `k` is an upper bound, not the effective degrees of freedom.
+
+Rules of thumb:
+
+- start with the default (`k=10`)
+- if `model.check()` reports a low k-index (< 1) with a significant p-value, increase `k`
+- `k` cannot exceed the number of unique covariate values
+
+## Cyclic splines: `bs="cc"`
+
+For periodic predictors (time of day, day of year, angle), use a cyclic cubic spline. The basis is
+constrained so that the function and its first derivative match at the endpoints.
+
+```python
+model = wk.GAM("y ~ s(doy, bs='cc', k=12)")   # day of year, 12 basis functions
+```
