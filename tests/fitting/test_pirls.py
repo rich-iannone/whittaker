@@ -6,12 +6,10 @@ import numpy as np
 import pytest
 from numpy.testing import assert_allclose
 
-from whittaker.families.gaussian import Gaussian
 from whittaker.fitting.pirls import (
     FitResult,
     _gcv_score,
     _penalized_solve,
-    _select_smoothing_params_gcv,
     pirls_fit,
 )
 from whittaker.formula.parser import parse
@@ -21,7 +19,7 @@ from whittaker.model_matrix import build_model_matrix
 # Helpers
 # ---------------------------------------------------------------------------
 
-RNG = np.random.default_rng(42)
+RNG = np.random.default_rng(23)
 
 
 def _sin_data(n: int = 200) -> dict[str, np.ndarray]:
