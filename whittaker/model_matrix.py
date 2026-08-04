@@ -67,3 +67,17 @@ def _resolve_basis(term: SmoothTerm) -> SmoothBasis:
     return cls(**kwargs)
 
 
+def _extract_column(data: dict[str, NDArray], name: str) -> NDArray:
+    """Get a 1-D float array from *data*, raising a clear error if missing."""
+    if name not in data:
+        available = ", ".join(sorted(data))
+        raise KeyError(
+            f"Column {name!r} required by the formula is not in the data. "
+            f"Available columns: {available}."
+        )
+    col = np.asarray(data[name], dtype=float)
+    if col.ndim != 1:
+        raise ValueError(f"Column {name!r} must be 1-D, got shape {col.shape}.")
+    return col
+
+
