@@ -1,0 +1,327 @@
+"""Tests for whittaker.fitting.pirls (P-IRLS fitting engine)."""
+
+from __future__ import annotations
+
+import numpy as np
+import pytest
+from numpy.testing import assert_allclose
+
+from whittaker.families.gaussian import Gaussian
+from whittaker.fitting.pirls import (
+    FitResult,
+    _gcv_score,
+    _penalized_solve,
+    _select_smoothing_params_gcv,
+    pirls_fit,
+)
+from whittaker.formula.parser import parse
+from whittaker.model_matrix import build_model_matrix
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+RNG = np.random.default_rng(42)
+
+
+def _sin_data(n: int = 200) -> dict[str, np.ndarray]:
+    x = np.linspace(0, 2 * np.pi, n)
+    return {
+        "y": np.sin(x) + RNG.normal(0, 0.2, n),
+        "x": x,
+    }
+
+
+def _linear_data(n: int = 200) -> dict[str, np.ndarray]:
+    x = np.linspace(0, 1, n)
+    return {
+        "y": 3.0 * x + 1.0 + RNG.normal(0, 0.1, n),
+        "x": x,
+    }
+
+
+def _multi_data(n: int = 200) -> dict[str, np.ndarray]:
+    x1 = np.linspace(0, 2 * np.pi, n)
+    x2 = np.linspace(0, np.pi, n)
+    return {
+        "y": np.sin(x1) + 0.5 * np.cos(x2) + RNG.normal(0, 0.2, n),
+        "x1": x1,
+        "x2": x2,
+    }
+
+
+# ---------------------------------------------------------------------------
+# _gcv_score
+# ---------------------------------------------------------------------------
+
+
+class TestGCVScore:
+    def test_gcv_positive(self) -> None:
+        score = _gcv_score(deviance=10.0, n=100, hat_trace=5.0)
+        assert score > 0
+
+    def test_gcv_increases_with_deviance(self) -> None:
+        s1 = _gcv_score(deviance=10.0, n=100, hat_trace=5.0)
+        s2 = _gcv_score(deviance=20.0, n=100, hat_trace=5.0)
+        assert s2 > s1
+
+    def test_gcv_inf_when_overfit(self) -> None:
+        score = _gcv_score(deviance=1.0, n=10, hat_trace=10.0)
+        assert score == np.inf
+
+    def test_gcv_formula(self) -> None:
+        dev, n, tr = 50.0, 200, 10.0
+        expected = n * dev / (n - tr) ** 2
+        assert_allclose(_gcv_score(dev, n, tr), expected)
+
+
+# ---------------------------------------------------------------------------
+# _penalized_solve
+# ---------------------------------------------------------------------------
+
+
+class TestPenalizedSolve:
+    def test_unpenalized_equals_ols(self) -> None:
+        n, p = 50, 3
+        rng = np.random.default_rng(0)
+        X = rng.standard_normal((n, p))
+        y = rng.standard_normal(n)
+
+        beta, _ = _penalized_solve(X, y, penalties=[], sp=[])
+        beta_ols = np.linalg.lstsq(X, y, rcond=None)[0]
+        assert_allclose(beta, beta_ols, atol=1e-10)
+
+    def test_penalty_shrinks_coefficients(self) -> None:
+        n, p = 50, 5
+        rng = np.random.default_rng(1)
+        X = rng.standard_normal((n, p))
+        y = rng.standard_normal(n)
+        S = np.eye(p)
+
+        beta_unpen, _ = _penalized_solve(X, y, [], [])
+        beta_pen, _ = _penalized_solve(X, y, [S], [10.0])
+        assert np.linalg.norm(beta_pen) < np.linalg.norm(beta_unpen)
+
+    def test_hat_trace_bounded(self) -> None:
+        n, p = 50, 5
+        rng = np.random.default_rng(2)
+        X = rng.standard_normal((n, p))
+        y = rng.standard_normal(n)
+        S = np.eye(p)
+
+        _, hat_arr = _penalized_solve(X, y, [S], [1.0])
+        hat_trace = float(hat_arr[0])
+        assert 0 < hat_trace < p
+
+
+# ---------------------------------------------------------------------------
+# pirls_fit — basic Gaussian
+# ---------------------------------------------------------------------------
+
+
+class TestPirlsFitGaussian:
+    def test_returns_fit_result(self) -> None:
+        data = _sin_data()
+        formula = parse("y ~ s(x, k=10)")
+        mm = build_model_matrix(formula, data)
+        result = pirls_fit(mm)
+        assert isinstance(result, FitResult)
+
+    def test_converged(self) -> None:
+        data = _sin_data()
+        formula = parse("y ~ s(x, k=10)")
+        mm = build_model_matrix(formula, data)
+        result = pirls_fit(mm)
+        assert result.converged
+
+    def test_one_iteration_for_gaussian(self) -> None:
+        data = _sin_data()
+        formula = parse("y ~ s(x, k=10)")
+        mm = build_model_matrix(formula, data)
+        result = pirls_fit(mm)
+        assert result.n_iter == 1
+
+    def test_coefficients_shape(self) -> None:
+        data = _sin_data()
+        formula = parse("y ~ s(x, k=10)")
+        mm = build_model_matrix(formula, data)
+        result = pirls_fit(mm)
+        assert result.coefficients.shape == (mm.n_coefs,)
+
+    def test_fitted_values_shape(self) -> None:
+        data = _sin_data()
+        formula = parse("y ~ s(x, k=10)")
+        mm = build_model_matrix(formula, data)
+        result = pirls_fit(mm)
+        assert result.fitted_values.shape == (mm.n_obs,)
+
+    def test_residuals_sum_approximately_zero(self) -> None:
+        data = _sin_data()
+        formula = parse("y ~ s(x, k=10)")
+        mm = build_model_matrix(formula, data)
+        result = pirls_fit(mm)
+        assert abs(np.mean(result.residuals)) < 0.05
+
+    def test_fitted_plus_residuals_equals_y(self) -> None:
+        data = _sin_data()
+        formula = parse("y ~ s(x, k=10)")
+        mm = build_model_matrix(formula, data)
+        result = pirls_fit(mm)
+        assert_allclose(result.fitted_values + result.residuals, data["y"], atol=1e-10)
+
+
+# ---------------------------------------------------------------------------
+# pirls_fit — smoothing parameter selection
+# ---------------------------------------------------------------------------
+
+
+class TestSmoothingSelection:
+    def test_auto_selects_positive_sp(self) -> None:
+        data = _sin_data()
+        formula = parse("y ~ s(x, k=10)")
+        mm = build_model_matrix(formula, data)
+        result = pirls_fit(mm)
+        assert all(sp > 0 for sp in result.smoothing_params)
+
+    def test_fixed_sp_used(self) -> None:
+        data = _sin_data()
+        formula = parse("y ~ s(x, k=10)")
+        mm = build_model_matrix(formula, data)
+        result = pirls_fit(mm, smoothing_params=[5.0])
+        assert result.smoothing_params == [5.0]
+
+    def test_wrong_number_of_sp_raises(self) -> None:
+        data = _sin_data()
+        formula = parse("y ~ s(x, k=10)")
+        mm = build_model_matrix(formula, data)
+        with pytest.raises(ValueError, match="smoothing parameters"):
+            pirls_fit(mm, smoothing_params=[1.0, 2.0])
+
+    def test_gcv_score_positive(self) -> None:
+        data = _sin_data()
+        formula = parse("y ~ s(x, k=10)")
+        mm = build_model_matrix(formula, data)
+        result = pirls_fit(mm)
+        assert result.gcv_score > 0
+
+
+# ---------------------------------------------------------------------------
+# pirls_fit — EDF
+# ---------------------------------------------------------------------------
+
+
+class TestEDF:
+    def test_edf_per_smooth(self) -> None:
+        data = _sin_data()
+        formula = parse("y ~ s(x, k=10)")
+        mm = build_model_matrix(formula, data)
+        result = pirls_fit(mm)
+        assert len(result.edf) == 1
+        assert 1.0 < result.edf[0] < 10.0
+
+    def test_edf_multiple_smooths(self) -> None:
+        data = _multi_data()
+        formula = parse("y ~ s(x1, k=10) + s(x2, k=10)")
+        mm = build_model_matrix(formula, data)
+        result = pirls_fit(mm)
+        assert len(result.edf) == 2
+        assert all(1.0 < e < 10.0 for e in result.edf)
+
+    def test_edf_total_reasonable(self) -> None:
+        data = _sin_data()
+        formula = parse("y ~ s(x, k=10)")
+        mm = build_model_matrix(formula, data)
+        result = pirls_fit(mm)
+        assert 2.0 < result.edf_total < 10.0
+
+    def test_linear_data_low_edf(self) -> None:
+        data = _linear_data()
+        formula = parse("y ~ s(x, k=10)")
+        mm = build_model_matrix(formula, data)
+        result = pirls_fit(mm)
+        assert result.edf[0] < 4.0
+
+
+# ---------------------------------------------------------------------------
+# pirls_fit — scale estimation
+# ---------------------------------------------------------------------------
+
+
+class TestScaleEstimation:
+    def test_scale_positive(self) -> None:
+        data = _sin_data()
+        formula = parse("y ~ s(x, k=10)")
+        mm = build_model_matrix(formula, data)
+        result = pirls_fit(mm)
+        assert result.scale > 0
+
+    def test_scale_close_to_true_variance(self) -> None:
+        data = _sin_data()
+        formula = parse("y ~ s(x, k=20)")
+        mm = build_model_matrix(formula, data)
+        result = pirls_fit(mm)
+        assert abs(result.scale - 0.04) < 0.03
+
+
+# ---------------------------------------------------------------------------
+# pirls_fit — numerical accuracy
+# ---------------------------------------------------------------------------
+
+
+class TestNumericalAccuracy:
+    def test_sin_recovery(self) -> None:
+        n = 300
+        x = np.linspace(0, 2 * np.pi, n)
+        y_true = np.sin(x)
+        y = y_true + RNG.normal(0, 0.15, n)
+
+        formula = parse("y ~ s(x, k=20)")
+        data = {"y": y, "x": x}
+        mm = build_model_matrix(formula, data)
+        result = pirls_fit(mm)
+
+        rmse = np.sqrt(np.mean((result.fitted_values - y_true) ** 2))
+        assert rmse < 0.1
+
+    def test_two_smooth_recovery(self) -> None:
+        n = 300
+        x1 = np.linspace(0, 2 * np.pi, n)
+        x2 = np.linspace(0, np.pi, n)
+        y_true = np.sin(x1) + 0.5 * np.cos(x2)
+        y = y_true + RNG.normal(0, 0.2, n)
+
+        formula = parse("y ~ s(x1, k=15) + s(x2, k=15)")
+        data = {"y": y, "x1": x1, "x2": x2}
+        mm = build_model_matrix(formula, data)
+        result = pirls_fit(mm)
+
+        rmse = np.sqrt(np.mean((result.fitted_values - y_true) ** 2))
+        assert rmse < 0.25
+
+    def test_higher_k_at_least_as_good(self) -> None:
+        data = _sin_data(300)
+        rmses = []
+        for k in [5, 15]:
+            formula = parse(f"y ~ s(x, k={k})")
+            mm = build_model_matrix(formula, data)
+            result = pirls_fit(mm)
+
+            x = data["x"]
+            y_true = np.sin(x)
+            rmse = np.sqrt(np.mean((result.fitted_values - y_true) ** 2))
+            rmses.append(rmse)
+
+        assert rmses[1] <= rmses[0] + 0.01
+
+    def test_different_basis_types(self) -> None:
+        data = _sin_data(200)
+        x = data["x"]
+        y_true = np.sin(x)
+
+        for bs in ["tp", "cr", "ps"]:
+            formula = parse(f"y ~ s(x, bs='{bs}', k=15)")
+            mm = build_model_matrix(formula, data)
+            result = pirls_fit(mm)
+
+            rmse = np.sqrt(np.mean((result.fitted_values - y_true) ** 2))
+            assert rmse < 0.15, f"bs={bs!r} RMSE={rmse:.4f} too high"
