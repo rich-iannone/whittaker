@@ -196,6 +196,26 @@ def _edf_per_smooth(
     return edfs
 
 
+def _eval_gcv(
+    X: NDArray,
+    y: NDArray,
+    penalties: list[NDArray],
+    sp: list[float],
+    family: Family,
+    offset: NDArray | None,
+) -> float:
+    """Evaluate GCV score at the given smoothing parameters."""
+    n = X.shape[0]
+    beta, hat_arr = _penalized_solve(X, y, penalties, sp, offset=offset)
+    hat_trace = float(hat_arr[0])
+    eta = X @ beta
+    if offset is not None:
+        eta = eta + offset
+    mu = family.link_inverse(eta)
+    dev = family.deviance(y, mu)
+    return _gcv_score(dev, n, hat_trace)
+
+
 def _select_smoothing_params_gcv(
     X: NDArray,
     y: NDArray,
@@ -206,33 +226,51 @@ def _select_smoothing_params_gcv(
 ) -> list[float]:
     """Select smoothing parameters by minimizing GCV score.
 
-    For a single smoothing parameter (shared across all terms), uses Brent's method on a log scale.
-    For multiple parameters, uses a coordinate-wise search.
+    For a single smoothing parameter, uses Brent's method on log(λ).
+    For multiple parameters, uses coordinate-wise Brent optimization:
+    each λ_j is optimized in turn while the others are held fixed,
+    cycling until the GCV score converges.
     """
-    n = X.shape[0]
-
     if n_sp == 0:
         return []
 
-    def gcv_objective(log_sp: float) -> float:
+    if len(penalties) == 1:
+        def scalar_obj(log_sp: float) -> float:
+            return _eval_gcv(X, y, penalties, [np.exp(log_sp)], family, offset)
+
+        result = minimize_scalar(scalar_obj, bounds=(-15, 15), method="bounded")
+        return [float(np.exp(result.x))]
+
+    # Multiple penalties: initialize with shared-λ, then coordinate descent.
+    def shared_obj(log_sp: float) -> float:
         sp_val = np.exp(log_sp)
-        sp_list = [sp_val] * len(penalties)
+        return _eval_gcv(X, y, penalties, [sp_val] * len(penalties), family, offset)
 
-        beta, hat_arr = _penalized_solve(X, y, penalties, sp_list, offset=offset)
-        hat_trace = float(hat_arr[0])
+    init_result = minimize_scalar(shared_obj, bounds=(-15, 15), method="bounded")
+    sp = [float(np.exp(init_result.x))] * len(penalties)
 
-        eta = X @ beta
-        if offset is not None:
-            eta = eta + offset
-        mu = family.link_inverse(eta)
-        dev = family.deviance(y, mu)
+    max_cycles = 20
+    tol = 1e-6
 
-        return _gcv_score(dev, n, hat_trace)
+    for _ in range(max_cycles):
+        gcv_before = _eval_gcv(X, y, penalties, sp, family, offset)
 
-    result = minimize_scalar(gcv_objective, bounds=(-15, 15), method="bounded")
-    optimal_sp = float(np.exp(result.x))
+        for j in range(len(penalties)):
+            def coord_obj(log_sp_j: float) -> float:
+                sp_trial = list(sp)
+                sp_trial[j] = np.exp(log_sp_j)
+                return _eval_gcv(X, y, penalties, sp_trial, family, offset)
 
-    return [optimal_sp] * len(penalties)
+            result = minimize_scalar(
+                coord_obj, bounds=(-15, 15), method="bounded",
+            )
+            sp[j] = float(np.exp(result.x))
+
+        gcv_after = _eval_gcv(X, y, penalties, sp, family, offset)
+        if abs(gcv_after - gcv_before) / (abs(gcv_before) + 1e-12) < tol:
+            break
+
+    return sp
 
 
 def pirls_fit(

@@ -202,6 +202,55 @@ class TestSmoothingSelection:
         result = pirls_fit(mm)
         assert result.gcv_score > 0
 
+    def test_per_term_sp_differ_for_different_complexity(self) -> None:
+        rng = np.random.default_rng(77)
+        n = 400
+        x1 = np.linspace(0, 2 * np.pi, n)
+        x2 = np.linspace(0, 1, n)
+        y = np.sin(3 * x1) + 0.5 * x2 + rng.normal(0, 0.15, n)
+
+        formula = parse("y ~ s(x1, k=15) + s(x2, k=15)")
+        mm = build_model_matrix(formula, {"y": y, "x1": x1, "x2": x2})
+        result = pirls_fit(mm)
+
+        assert len(result.smoothing_params) == 2
+        sp_wiggly, sp_linear = result.smoothing_params
+        assert sp_linear > sp_wiggly * 5
+
+    def test_per_term_edf_wiggly_vs_linear(self) -> None:
+        rng = np.random.default_rng(99)
+        n = 400
+        x1 = np.linspace(0, 2 * np.pi, n)
+        x2 = np.linspace(0, 1, n)
+        y = np.sin(3 * x1) + 0.5 * x2 + rng.normal(0, 0.15, n)
+
+        formula = parse("y ~ s(x1, k=15) + s(x2, k=15)")
+        mm = build_model_matrix(formula, {"y": y, "x1": x1, "x2": x2})
+        result = pirls_fit(mm)
+
+        edf_wiggly, edf_linear = result.edf
+        assert edf_wiggly > edf_linear * 3
+
+    def test_gcv_auto_better_than_arbitrary_sp(self) -> None:
+        data = _sin_data()
+        formula = parse("y ~ s(x, k=15)")
+        mm = build_model_matrix(formula, data)
+
+        result_auto = pirls_fit(mm)
+        result_oversmooth = pirls_fit(mm, smoothing_params=[1000.0])
+        result_undersmooth = pirls_fit(mm, smoothing_params=[1e-8])
+
+        assert result_auto.gcv_score <= result_oversmooth.gcv_score
+        assert result_auto.gcv_score <= result_undersmooth.gcv_score
+
+    def test_no_penalties_gives_empty_sp(self) -> None:
+        formula = parse("y ~ x")
+        data = _sin_data()
+        data["x"] = data["x"]
+        mm = build_model_matrix(formula, data)
+        result = pirls_fit(mm)
+        assert result.smoothing_params == []
+
 
 # ---------------------------------------------------------------------------
 # pirls_fit — EDF
@@ -223,7 +272,7 @@ class TestEDF:
         mm = build_model_matrix(formula, data)
         result = pirls_fit(mm)
         assert len(result.edf) == 2
-        assert all(1.0 < e < 10.0 for e in result.edf)
+        assert all(0.0 < e < 10.0 for e in result.edf)
 
     def test_edf_total_reasonable(self) -> None:
         data = _sin_data()

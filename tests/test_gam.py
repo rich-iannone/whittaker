@@ -258,6 +258,20 @@ class TestMultipleSmooths:
         rmse = np.sqrt(np.mean((model.fitted_values - y_true) ** 2))
         assert rmse < 0.25
 
+    def test_per_term_gcv_different_sp(self) -> None:
+        rng = np.random.default_rng(77)
+        n = 400
+        x1 = np.linspace(0, 2 * np.pi, n)
+        x2 = np.linspace(0, 1, n)
+        y = np.sin(3 * x1) + 0.5 * x2 + rng.normal(0, 0.15, n)
+
+        model = GAM("y ~ s(x1, k=15) + s(x2, k=15)").fit(
+            {"y": y, "x1": x1, "x2": x2}
+        )
+        sp = model.smoothing_params
+        assert sp[1] > sp[0] * 5
+        assert model.edf[0] > model.edf[1] * 3
+
 
 # ---------------------------------------------------------------------------
 # Mixed parametric + smooth
