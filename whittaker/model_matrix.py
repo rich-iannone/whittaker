@@ -81,3 +81,17 @@ def _extract_column(data: dict[str, NDArray], name: str) -> NDArray:
     return col
 
 
+def _apply_constraint(B: NDArray, C: NDArray) -> NDArray:
+    """Absorb identifiability constraints into the basis matrix.
+
+    Given an `(n, k)` basis matrix *B* and a `(1, k)` constraint row *C* (representing `C @ β = 0`),
+    this returns an `(n, k - 1)` matrix whose column space satisfies the constraint.
+
+    The method uses QR decomposition of `C.T` to find a `(k, k - 1)` null-space matrix *Z* such that
+    `C @ Z = 0`, then returns `B @ Z`.
+    """
+    Q, _ = np.linalg.qr(C.T, mode="complete")
+    Z = Q[:, C.shape[0] :]  # (k, k - 1)
+    return B @ Z
+
+
