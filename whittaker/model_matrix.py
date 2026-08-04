@@ -184,3 +184,166 @@ class ModelMatrix:
         return sum(self.penalties)  # type: ignore[return-value]
 
 
+def build_model_matrix(
+    formula: Formula,
+    data: dict[str, NDArray],
+    *,
+    apply_constraints: bool = True,
+) -> ModelMatrix:
+    """Assemble the full design matrix and penalty structure from a formula.
+
+    Parameters
+    ----------
+    formula:
+        A parsed `~whittaker.formula.Formula`.
+    data:
+        Column-oriented data as `{name: 1-D array}`. Every column referenced by the formula must be
+        present. All arrays must have the same length.
+    apply_constraints:
+        If `True` (the default), apply sum-to-zero identifiability constraints to each smooth term
+        so the intercept is identifiable.
+
+    Returns
+    -------
+    ModelMatrix
+        Bundled design matrix, penalties, and metadata.
+
+    Raises
+    ------
+    KeyError
+        If a required column is missing from *data*.
+    ValueError
+        If an unsupported basis type is requested.
+    """
+    # --- validate lengths ---------------------------------------------------
+    lengths = {name: len(arr) for name, arr in data.items()}
+    unique_lengths = set(lengths.values())
+    if len(unique_lengths) > 1:
+        detail = ", ".join(f"{k}: {v}" for k, v in lengths.items())
+        raise ValueError(f"All data columns must have the same length. Got: {detail}.")
+    n = next(iter(lengths.values())) if lengths else 0
+
+    # --- response -----------------------------------------------------------
+    response = _extract_column(data, formula.response)
+
+    # --- intercept ----------------------------------------------------------
+    blocks: list[NDArray] = []
+    col_names: list[str] = []
+
+    if formula.intercept:
+        blocks.append(np.ones((n, 1)))
+        col_names.append("(Intercept)")
+
+    # --- parametric terms ---------------------------------------------------
+    n_parametric = 0
+    offset: NDArray | None = None
+
+    for term in formula.terms:
+        if isinstance(term, LinearTerm):
+            col = _extract_column(data, term.variable)
+            blocks.append(col[:, np.newaxis])
+            col_names.append(term.variable)
+            n_parametric += 1
+
+        elif isinstance(term, InteractionTerm):
+            left = _extract_column(data, term.left)
+            right = _extract_column(data, term.right)
+
+            if term.full:
+                blocks.append(left[:, np.newaxis])
+                col_names.append(term.left)
+                blocks.append(right[:, np.newaxis])
+                col_names.append(term.right)
+                n_parametric += 2
+
+            interaction = left * right
+            blocks.append(interaction[:, np.newaxis])
+            col_names.append(f"{term.left}:{term.right}")
+            n_parametric += 1
+
+        elif isinstance(term, OffsetTerm):
+            offset_col = _extract_column(data, term.expression)
+            if offset is None:
+                offset = offset_col.copy()
+            else:
+                offset = offset + offset_col
+
+    # --- smooth terms -------------------------------------------------------
+    smooth_infos: list[SmoothInfo] = []
+    penalty_blocks: list[tuple[int, int, NDArray]] = []
+
+    for term in formula.terms:
+        if not isinstance(term, SmoothTerm):
+            continue
+
+        if term.smooth_type != "s":
+            raise NotImplementedError(
+                f"Smooth type {term.smooth_type!r} is not yet supported. Only s() is implemented."
+            )
+
+        basis = _resolve_basis(term)
+
+        if len(term.variables) == 1:
+            x = _extract_column(data, term.variables[0])
+        else:
+            x = np.column_stack([_extract_column(data, v) for v in term.variables])
+
+        basis.fit(x)
+
+        basis_mat = basis.basis_matrix(x)  # (n, k)
+        pen_mat = basis.penalty_matrix()  # (k, k)
+        nsd = basis.null_space_dimension()
+
+        if apply_constraints:
+            constraint = basis.identifiability_constraints()
+            if constraint is not None:
+                basis_mat = _apply_constraint(basis_mat, constraint)
+                pen_mat = _apply_constraint_to_penalty(pen_mat, constraint)
+                nsd = max(nsd - constraint.shape[0], 0)
+
+        k_eff = basis_mat.shape[1]
+        col_start = sum(b.shape[1] for b in blocks)
+        col_end = col_start + k_eff
+
+        blocks.append(basis_mat)
+        for j in range(k_eff):
+            label = f"{term!r}[{j}]"
+            col_names.append(label)
+
+        smooth_infos.append(
+            SmoothInfo(
+                term=term,
+                basis=basis,
+                col_start=col_start,
+                col_end=col_end,
+                null_space_dim=nsd,
+            )
+        )
+        penalty_blocks.append((col_start, col_end, pen_mat))
+
+    # --- assemble X ---------------------------------------------------------
+    if not blocks:
+        raise ValueError("The formula produces no model columns.")
+
+    X = np.column_stack(blocks)  # (n, p)
+    p = X.shape[1]
+
+    # --- expand penalties to full model size ---------------------------------
+    penalties: list[NDArray] = []
+    for col_start, col_end, S_block in penalty_blocks:
+        S_full = np.zeros((p, p))
+        S_full[col_start:col_end, col_start:col_end] = S_block
+        penalties.append(S_full)
+
+    return ModelMatrix(
+        X=X,
+        penalties=penalties,
+        smooths=smooth_infos,
+        column_names=col_names,
+        has_intercept=formula.intercept,
+        n_parametric=n_parametric,
+        offset=offset,
+        response=response,
+    )
+
+
