@@ -7,9 +7,9 @@ import pytest
 from numpy.testing import assert_allclose
 
 from whittaker.formula.parser import parse
+from whittaker.formula.terms import SmoothTerm
 from whittaker.model_matrix import (
     ModelMatrix,
-    SmoothInfo,
     _apply_constraint,
     _apply_constraint_to_penalty,
     _extract_column,
@@ -17,14 +17,13 @@ from whittaker.model_matrix import (
     build_model_matrix,
     predict_matrix,
 )
-from whittaker.formula.terms import LinearTerm, SmoothTerm
 from whittaker.smooths import CRS, TPRS, PSpline
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
-RNG = np.random.default_rng(42)
+RNG = np.random.default_rng(23)
 
 
 def _simple_data(n: int = 100) -> dict[str, np.ndarray]:
@@ -259,11 +258,11 @@ class TestBuildModelMatrixMultipleSmooths:
 
         for i, (pen, info) in enumerate(zip(result.penalties, result.smooths)):
             assert pen.shape == (result.n_coefs, result.n_coefs)
-            block = pen[info.col_start:info.col_end, info.col_start:info.col_end]
+            block = pen[info.col_start : info.col_end, info.col_start : info.col_end]
             assert np.any(block != 0.0)
 
             mask = np.ones_like(pen, dtype=bool)
-            mask[info.col_start:info.col_end, info.col_start:info.col_end] = False
+            mask[info.col_start : info.col_end, info.col_start : info.col_end] = False
             assert_allclose(pen[mask], 0.0)
 
 
