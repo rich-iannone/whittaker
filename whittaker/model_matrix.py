@@ -347,3 +347,69 @@ def build_model_matrix(
     )
 
 
+def predict_matrix(
+    model: ModelMatrix,
+    new_data: dict[str, NDArray],
+) -> NDArray:
+    """Build the prediction design matrix for new data.
+
+    Re-uses the fitted smooth bases stored in *model* to evaluate basis matrices at new covariate
+    values, then assembles the same column structure as the training matrix.
+
+    Parameters
+    ----------
+    model:
+        A `ModelMatrix` previously returned by `build_model_matrix()`.
+    new_data:
+        Column-oriented new data.
+
+    Returns
+    -------
+    NDArray
+        Design matrix of shape `(n_new, p)` with the same column layout as `model.X`.
+    """
+    lengths = {name: len(arr) for name, arr in new_data.items()}
+    unique_lengths = set(lengths.values())
+    if len(unique_lengths) > 1:
+        detail = ", ".join(f"{k}: {v}" for k, v in lengths.items())
+        raise ValueError(f"All data columns must have the same length. Got: {detail}.")
+    n_new = next(iter(lengths.values())) if lengths else 0
+
+    formula = _reconstruct_formula(model)
+
+    blocks: list[NDArray] = []
+
+    if model.has_intercept:
+        blocks.append(np.ones((n_new, 1)))
+
+    for term in formula.terms:
+        if isinstance(term, LinearTerm):
+            col = _extract_column(new_data, term.variable)
+            blocks.append(col[:, np.newaxis])
+
+        elif isinstance(term, InteractionTerm):
+            left = _extract_column(new_data, term.left)
+            right = _extract_column(new_data, term.right)
+            if term.full:
+                blocks.append(left[:, np.newaxis])
+                blocks.append(right[:, np.newaxis])
+            blocks.append((left * right)[:, np.newaxis])
+
+    for info in model.smooths:
+        term = info.term
+        if len(term.variables) == 1:
+            x = _extract_column(new_data, term.variables[0])
+        else:
+            x = np.column_stack([_extract_column(new_data, v) for v in term.variables])
+
+        basis_mat = info.basis.basis_matrix(x)
+
+        constraint = info.basis.identifiability_constraints()
+        if constraint is not None and (info.col_end - info.col_start) < info.basis.n_basis:
+            basis_mat = _apply_constraint(basis_mat, constraint)
+
+        blocks.append(basis_mat)
+
+    return np.column_stack(blocks)
+
+
