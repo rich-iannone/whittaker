@@ -3,13 +3,11 @@
 from __future__ import annotations
 
 import numpy as np
-import pytest
 from numpy.testing import assert_allclose
 
 from whittaker.families.gaussian import Gaussian
 
-
-RNG = np.random.default_rng(42)
+RNG = np.random.default_rng(23)
 
 
 class TestLink:
