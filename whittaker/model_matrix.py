@@ -95,3 +95,10 @@ def _apply_constraint(B: NDArray, C: NDArray) -> NDArray:
     return B @ Z
 
 
+def _apply_constraint_to_penalty(S: NDArray, C: NDArray) -> NDArray:
+    """Project the penalty matrix through the same constraint null space."""
+    Q, _ = np.linalg.qr(C.T, mode="complete")
+    Z = Q[:, C.shape[0] :]  # (k, k - 1)
+    return Z.T @ S @ Z
+
+
