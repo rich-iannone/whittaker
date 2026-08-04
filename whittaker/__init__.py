@@ -6,6 +6,7 @@ from importlib.metadata import PackageNotFoundError, version
 
 from whittaker.formula import Formula, InteractionTerm, LinearTerm, OffsetTerm, SmoothTerm
 from whittaker.formula import parse as parse_formula
+from whittaker.model_matrix import ModelMatrix, build_model_matrix, predict_matrix
 from whittaker.smooths import CRS, TPRS, PSpline, SmoothBasis
 
 try:
@@ -17,6 +18,7 @@ __all__ = [
     "__version__",
     "CRS",
     "Formula",
+    "ModelMatrix",
     "PSpline",
     "InteractionTerm",
     "LinearTerm",
@@ -24,5 +26,7 @@ __all__ = [
     "SmoothBasis",
     "SmoothTerm",
     "TPRS",
+    "build_model_matrix",
     "parse_formula",
+    "predict_matrix",
 ]
