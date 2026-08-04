@@ -12,7 +12,7 @@ from whittaker.smooths.tprs import TPRS, _kernel_matrix, _polynomial_null_space,
 # Helpers
 # ---------------------------------------------------------------------------
 
-RNG = np.random.default_rng(42)
+RNG = np.random.default_rng(23)
 
 
 def _make_1d(n: int = 50) -> np.ndarray:
