@@ -42,3 +42,28 @@ _BS_REGISTRY: dict[str, type[SmoothBasis]] = {
 }
 
 
+def _resolve_basis(term: SmoothTerm) -> SmoothBasis:
+    """Instantiate a :class:`SmoothBasis` from a parsed :class:`SmoothTerm`."""
+    cls = _BS_REGISTRY.get(term.bs)
+    if cls is None:
+        supported = ", ".join(sorted(_BS_REGISTRY))
+        raise ValueError(
+            f"Unknown basis type bs={term.bs!r} in {term!r}. Supported types: {supported}."
+        )
+
+    kwargs: dict[str, Any] = {}
+    if term.k != -1:
+        kwargs["k"] = term.k
+
+    if term.bs == "ps":
+        if "degree" in term.extra:
+            kwargs["degree"] = term.extra["degree"]
+        if "m" in term.extra:
+            kwargs["m"] = term.extra["m"]
+    elif term.bs == "tp":
+        if "m" in term.extra:
+            kwargs["m"] = term.extra["m"]
+
+    return cls(**kwargs)
+
+
