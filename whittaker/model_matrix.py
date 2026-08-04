@@ -127,3 +127,60 @@ class SmoothInfo:
     null_space_dim: int
 
 
+@dataclass
+class ModelMatrix:
+    """Result of :func:`build_model_matrix`.
+
+    Attributes
+    ----------
+    X:
+        Full design matrix, shape `(n, p)` where *p* is the total number of columns (intercept +
+        parametric + all constrained smooth bases).
+    penalties:
+        List of `(p, p)` penalty matrices, one per smooth term, each containing that term's penalty
+        embedded in the appropriate block of the full model dimension.
+    smooths:
+        Per-smooth metadata (`SmoothInfo`) in formula order.
+    column_names:
+        Human-readable label for each column of `X`, in order.
+    has_intercept:
+        Whether column 0 is the intercept.
+    n_parametric:
+        Number of parametric (linear + interaction) columns, not counting the intercept.
+    offset:
+        Offset vector of shape `(n,)`, or `None` if no offset term.
+    response:
+        The response column as a 1-D float array (`numpy.ndarray`).
+    """
+
+    X: NDArray
+    penalties: list[NDArray]
+    smooths: list[SmoothInfo] = field(default_factory=list)
+    column_names: list[str] = field(default_factory=list)
+    has_intercept: bool = True
+    n_parametric: int = 0
+    offset: NDArray | None = None
+    response: NDArray = field(default_factory=lambda: np.empty(0))
+
+    @property
+    def n_obs(self) -> int:
+        """Number of observations."""
+        return self.X.shape[0]
+
+    @property
+    def n_coefs(self) -> int:
+        """Total number of model coefficients (columns of ``X``)."""
+        return self.X.shape[1]
+
+    @property
+    def penalty_matrix(self) -> NDArray:
+        """Combined penalty `S_total = sum(S_j)` (unweighted by λ).
+
+        Useful as a quick reference; the fitting engine should use `penalties` with per-smooth λ
+        weights.
+        """
+        if not self.penalties:
+            return np.zeros((self.n_coefs, self.n_coefs))
+        return sum(self.penalties)  # type: ignore[return-value]
+
+
