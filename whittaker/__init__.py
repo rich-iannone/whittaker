@@ -1,11 +1,13 @@
-"""Whittaker: a next-generation Generalized Additive Model (GAM) library for Python."""
+"""Whittaker: a Generalized Additive Model (GAM) library for Python."""
 
 from __future__ import annotations
 
 from importlib.metadata import PackageNotFoundError, version
 
+from whittaker.families import Family, Gaussian
 from whittaker.formula import Formula, InteractionTerm, LinearTerm, OffsetTerm, SmoothTerm
 from whittaker.formula import parse as parse_formula
+from whittaker.gam import GAM
 from whittaker.model_matrix import ModelMatrix, build_model_matrix, predict_matrix
 from whittaker.smooths import CRS, TPRS, PSpline, SmoothBasis
 
@@ -17,7 +19,10 @@ except PackageNotFoundError:
 __all__ = [
     "__version__",
     "CRS",
+    "Family",
     "Formula",
+    "GAM",
+    "Gaussian",
     "ModelMatrix",
     "PSpline",
     "InteractionTerm",
