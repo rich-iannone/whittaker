@@ -15,3 +15,30 @@ builds the basis matrix, and applies identifiability constraints (sum-to-zero ab
 dimension.
 """
 
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from typing import Any
+
+import numpy as np
+from numpy.typing import NDArray
+
+from whittaker.formula.terms import (
+    Formula,
+    InteractionTerm,
+    LinearTerm,
+    OffsetTerm,
+    SmoothTerm,
+)
+from whittaker.smooths.base import SmoothBasis
+from whittaker.smooths.cubic import CRS
+from whittaker.smooths.pspline import PSpline
+from whittaker.smooths.tprs import TPRS
+
+_BS_REGISTRY: dict[str, type[SmoothBasis]] = {
+    "tp": TPRS,
+    "cr": CRS,
+    "ps": PSpline,
+}
+
+
