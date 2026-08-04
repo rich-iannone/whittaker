@@ -102,3 +102,28 @@ def _apply_constraint_to_penalty(S: NDArray, C: NDArray) -> NDArray:
     return Z.T @ S @ Z
 
 
+@dataclass
+class SmoothInfo:
+    """Metadata and matrices for a single smooth term in the model.
+
+    Attributes
+    ----------
+    term:
+        The parsed `SmoothTerm` this info belongs to.
+    basis:
+        The fitted `SmoothBasis` instance.
+    col_start:
+        Start column index (inclusive) in the full model matrix `X`.
+    col_end:
+        End column index (exclusive) in the full model matrix `X`.
+    null_space_dim:
+        Dimension of the penalty null space for this smooth.
+    """
+
+    term: SmoothTerm
+    basis: SmoothBasis
+    col_start: int
+    col_end: int
+    null_space_dim: int
+
+
