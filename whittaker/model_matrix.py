@@ -413,3 +413,32 @@ def predict_matrix(
     return np.column_stack(blocks)
 
 
+def _reconstruct_formula(model: ModelMatrix) -> Formula:
+    """Recover the original formula terms from a ModelMatrix.
+
+    This is a helper for `predict_matrix()`: it reads `column_names` and smooths to rebuild the term
+    list in the correct order.
+    """
+    terms = []
+    col_idx = 1 if model.has_intercept else 0
+
+    names = model.column_names
+    smooth_starts = {s.col_start for s in model.smooths}
+    smooth_by_start = {s.col_start: s for s in model.smooths}
+
+    while col_idx < len(names):
+        if col_idx in smooth_starts:
+            info = smooth_by_start[col_idx]
+            terms.append(info.term)
+            col_idx = info.col_end
+        else:
+            name = names[col_idx]
+            if ":" in name:
+                left, right = name.split(":", 1)
+                terms.append(InteractionTerm(left=left, right=right, full=False))
+                col_idx += 1
+            else:
+                terms.append(LinearTerm(variable=name))
+                col_idx += 1
+
+    return Formula(response="y", terms=terms, intercept=model.has_intercept)
