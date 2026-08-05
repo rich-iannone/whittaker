@@ -6,6 +6,8 @@ import numpy as np
 import pytest
 from numpy.testing import assert_allclose
 
+from whittaker.families.binomial import Binomial
+from whittaker.families.poisson import Poisson
 from whittaker.fitting.pirls import (
     FitResult,
     _gcv_score,
@@ -372,3 +374,184 @@ class TestNumericalAccuracy:
 
             rmse = np.sqrt(np.mean((result.fitted_values - y_true) ** 2))
             assert rmse < 0.15, f"bs={bs!r} RMSE={rmse:.4f} too high"
+
+
+# ---------------------------------------------------------------------------
+# pirls_fit — Binomial (logistic GAM)
+# ---------------------------------------------------------------------------
+
+
+class TestBinomialFit:
+    def test_binomial_converges(self) -> None:
+        rng = np.random.default_rng(42)
+        n = 300
+        x = np.linspace(-3, 3, n)
+        eta_true = np.sin(x)
+        p_true = 1.0 / (1.0 + np.exp(-eta_true))
+        y = rng.binomial(1, p_true, n).astype(float)
+
+        formula = parse("y ~ s(x, k=10)")
+        mm = build_model_matrix(formula, {"y": y, "x": x})
+        result = pirls_fit(mm, Binomial())
+        assert result.converged
+        assert result.n_iter > 1
+
+    def test_binomial_scale_is_one(self) -> None:
+        rng = np.random.default_rng(42)
+        n = 200
+        x = np.linspace(-2, 2, n)
+        y = rng.binomial(1, 0.5 * np.ones(n), n).astype(float)
+
+        formula = parse("y ~ s(x, k=8)")
+        mm = build_model_matrix(formula, {"y": y, "x": x})
+        result = pirls_fit(mm, Binomial())
+        assert result.scale == 1.0
+
+    def test_binomial_fitted_values_in_01(self) -> None:
+        rng = np.random.default_rng(42)
+        n = 300
+        x = np.linspace(-3, 3, n)
+        eta_true = 1.5 * np.sin(x)
+        p_true = 1.0 / (1.0 + np.exp(-eta_true))
+        y = rng.binomial(1, p_true, n).astype(float)
+
+        formula = parse("y ~ s(x, k=10)")
+        mm = build_model_matrix(formula, {"y": y, "x": x})
+        result = pirls_fit(mm, Binomial())
+        assert np.all(result.fitted_values > 0)
+        assert np.all(result.fitted_values < 1)
+
+    def test_binomial_recovers_smooth_effect(self) -> None:
+        rng = np.random.default_rng(42)
+        n = 500
+        x = np.linspace(-3, 3, n)
+        eta_true = np.sin(x)
+        p_true = 1.0 / (1.0 + np.exp(-eta_true))
+        y = rng.binomial(1, p_true, n).astype(float)
+
+        formula = parse("y ~ s(x, k=15)")
+        mm = build_model_matrix(formula, {"y": y, "x": x})
+        result = pirls_fit(mm, Binomial())
+
+        rmse = np.sqrt(np.mean((result.fitted_values - p_true) ** 2))
+        assert rmse < 0.1
+
+    def test_binomial_edf_reasonable(self) -> None:
+        rng = np.random.default_rng(42)
+        n = 300
+        x = np.linspace(-3, 3, n)
+        eta_true = np.sin(x)
+        p_true = 1.0 / (1.0 + np.exp(-eta_true))
+        y = rng.binomial(1, p_true, n).astype(float)
+
+        formula = parse("y ~ s(x, k=10)")
+        mm = build_model_matrix(formula, {"y": y, "x": x})
+        result = pirls_fit(mm, Binomial())
+        assert 1.0 < result.edf[0] < 10.0
+
+    def test_binomial_fixed_sp(self) -> None:
+        rng = np.random.default_rng(42)
+        n = 200
+        x = np.linspace(-2, 2, n)
+        y = rng.binomial(1, 0.5 * np.ones(n), n).astype(float)
+
+        formula = parse("y ~ s(x, k=8)")
+        mm = build_model_matrix(formula, {"y": y, "x": x})
+        result = pirls_fit(mm, Binomial(), smoothing_params=[10.0])
+        assert result.smoothing_params == [10.0]
+        assert result.converged
+
+
+# ---------------------------------------------------------------------------
+# pirls_fit — Poisson (count GAM)
+# ---------------------------------------------------------------------------
+
+
+class TestPoissonFit:
+    def test_poisson_converges(self) -> None:
+        rng = np.random.default_rng(42)
+        n = 300
+        x = np.linspace(0, 2 * np.pi, n)
+        mu_true = np.exp(0.5 + 0.8 * np.sin(x))
+        y = rng.poisson(mu_true).astype(float)
+
+        formula = parse("y ~ s(x, k=10)")
+        mm = build_model_matrix(formula, {"y": y, "x": x})
+        result = pirls_fit(mm, Poisson())
+        assert result.converged
+        assert result.n_iter > 1
+
+    def test_poisson_scale_is_one(self) -> None:
+        rng = np.random.default_rng(42)
+        n = 200
+        x = np.linspace(0, 1, n)
+        y = rng.poisson(3.0, n).astype(float)
+
+        formula = parse("y ~ s(x, k=8)")
+        mm = build_model_matrix(formula, {"y": y, "x": x})
+        result = pirls_fit(mm, Poisson())
+        assert result.scale == 1.0
+
+    def test_poisson_fitted_values_positive(self) -> None:
+        rng = np.random.default_rng(42)
+        n = 300
+        x = np.linspace(0, 2 * np.pi, n)
+        mu_true = np.exp(0.5 + 0.8 * np.sin(x))
+        y = rng.poisson(mu_true).astype(float)
+
+        formula = parse("y ~ s(x, k=10)")
+        mm = build_model_matrix(formula, {"y": y, "x": x})
+        result = pirls_fit(mm, Poisson())
+        assert np.all(result.fitted_values > 0)
+
+    def test_poisson_recovers_smooth_effect(self) -> None:
+        rng = np.random.default_rng(42)
+        n = 500
+        x = np.linspace(0, 2 * np.pi, n)
+        mu_true = np.exp(0.5 + 0.8 * np.sin(x))
+        y = rng.poisson(mu_true).astype(float)
+
+        formula = parse("y ~ s(x, k=15)")
+        mm = build_model_matrix(formula, {"y": y, "x": x})
+        result = pirls_fit(mm, Poisson())
+
+        rmse = np.sqrt(np.mean((result.fitted_values - mu_true) ** 2))
+        assert rmse < 0.5
+
+    def test_poisson_edf_reasonable(self) -> None:
+        rng = np.random.default_rng(42)
+        n = 300
+        x = np.linspace(0, 2 * np.pi, n)
+        mu_true = np.exp(0.5 + 0.8 * np.sin(x))
+        y = rng.poisson(mu_true).astype(float)
+
+        formula = parse("y ~ s(x, k=10)")
+        mm = build_model_matrix(formula, {"y": y, "x": x})
+        result = pirls_fit(mm, Poisson())
+        assert 1.0 < result.edf[0] < 10.0
+
+    def test_poisson_fixed_sp(self) -> None:
+        rng = np.random.default_rng(42)
+        n = 200
+        x = np.linspace(0, 1, n)
+        y = rng.poisson(3.0, n).astype(float)
+
+        formula = parse("y ~ s(x, k=8)")
+        mm = build_model_matrix(formula, {"y": y, "x": x})
+        result = pirls_fit(mm, Poisson(), smoothing_params=[10.0])
+        assert result.smoothing_params == [10.0]
+        assert result.converged
+
+    def test_poisson_handles_zero_counts(self) -> None:
+        rng = np.random.default_rng(42)
+        n = 300
+        x = np.linspace(0, 2 * np.pi, n)
+        mu_true = np.exp(-0.5 + 0.5 * np.sin(x))
+        y = rng.poisson(mu_true).astype(float)
+        assert np.sum(y == 0) > 0
+
+        formula = parse("y ~ s(x, k=10)")
+        mm = build_model_matrix(formula, {"y": y, "x": x})
+        result = pirls_fit(mm, Poisson())
+        assert result.converged
+        assert np.all(np.isfinite(result.fitted_values))
