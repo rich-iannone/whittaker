@@ -6,6 +6,8 @@ import numpy as np
 import pytest
 from numpy.testing import assert_allclose
 
+from whittaker.families.binomial import Binomial
+from whittaker.families.poisson import Poisson
 from whittaker.gam import GAM, PredictionResult
 
 # ---------------------------------------------------------------------------
@@ -304,3 +306,142 @@ class TestBasisTypes:
         assert model.is_fitted
         rmse = np.sqrt(np.mean((model.fitted_values - np.sin(data["x"])) ** 2))
         assert rmse < 0.15
+
+
+# ---------------------------------------------------------------------------
+# Binomial (logistic GAM)
+# ---------------------------------------------------------------------------
+
+
+class TestBinomialGAM:
+    def test_binomial_fit_and_predict(self) -> None:
+        rng = np.random.default_rng(42)
+        n = 400
+        x = np.linspace(-3, 3, n)
+        eta_true = np.sin(x)
+        p_true = 1.0 / (1.0 + np.exp(-eta_true))
+        y = rng.binomial(1, p_true, n).astype(float)
+
+        model = GAM("y ~ s(x, k=10)", family=Binomial()).fit({"y": y, "x": x})
+        assert model.is_fitted
+        assert model.scale == 1.0
+
+        pred = model.predict({"x": x})
+        assert np.all(pred.values > 0)
+        assert np.all(pred.values < 1)
+
+    def test_binomial_recovery(self) -> None:
+        rng = np.random.default_rng(42)
+        n = 500
+        x = np.linspace(-3, 3, n)
+        eta_true = np.sin(x)
+        p_true = 1.0 / (1.0 + np.exp(-eta_true))
+        y = rng.binomial(1, p_true, n).astype(float)
+
+        model = GAM("y ~ s(x, k=15)", family=Binomial()).fit({"y": y, "x": x})
+        rmse = np.sqrt(np.mean((model.fitted_values - p_true) ** 2))
+        assert rmse < 0.1
+
+    def test_binomial_predict_with_se(self) -> None:
+        rng = np.random.default_rng(42)
+        n = 300
+        x = np.linspace(-2, 2, n)
+        y = rng.binomial(1, 0.5 * np.ones(n), n).astype(float)
+
+        model = GAM("y ~ s(x, k=8)", family=Binomial()).fit({"y": y, "x": x})
+        pred = model.predict({"x": np.array([0.0, 1.0])}, se=True)
+        assert pred.se is not None
+        assert np.all(pred.se > 0)
+
+    def test_binomial_summary_shows_family(self) -> None:
+        rng = np.random.default_rng(42)
+        n = 200
+        x = np.linspace(-2, 2, n)
+        y = rng.binomial(1, 0.5 * np.ones(n), n).astype(float)
+
+        model = GAM("y ~ s(x, k=8)", family=Binomial()).fit({"y": y, "x": x})
+        text = model.summary()
+        assert "Binomial" in text
+
+    def test_binomial_two_smooths(self) -> None:
+        rng = np.random.default_rng(42)
+        n = 500
+        x1 = np.linspace(-3, 3, n)
+        x2 = np.linspace(-2, 2, n)
+        eta_true = 0.8 * np.sin(x1) + 0.5 * x2
+        p_true = 1.0 / (1.0 + np.exp(-eta_true))
+        y = rng.binomial(1, p_true, n).astype(float)
+
+        model = GAM("y ~ s(x1, k=10) + s(x2, k=10)", family=Binomial()).fit(
+            {"y": y, "x1": x1, "x2": x2}
+        )
+        assert len(model.edf) == 2
+        assert len(model.smoothing_params) == 2
+
+
+# ---------------------------------------------------------------------------
+# Poisson (count GAM)
+# ---------------------------------------------------------------------------
+
+
+class TestPoissonGAM:
+    def test_poisson_fit_and_predict(self) -> None:
+        rng = np.random.default_rng(42)
+        n = 400
+        x = np.linspace(0, 2 * np.pi, n)
+        mu_true = np.exp(0.5 + 0.8 * np.sin(x))
+        y = rng.poisson(mu_true).astype(float)
+
+        model = GAM("y ~ s(x, k=10)", family=Poisson()).fit({"y": y, "x": x})
+        assert model.is_fitted
+        assert model.scale == 1.0
+
+        pred = model.predict({"x": x})
+        assert np.all(pred.values > 0)
+
+    def test_poisson_recovery(self) -> None:
+        rng = np.random.default_rng(42)
+        n = 500
+        x = np.linspace(0, 2 * np.pi, n)
+        mu_true = np.exp(0.5 + 0.8 * np.sin(x))
+        y = rng.poisson(mu_true).astype(float)
+
+        model = GAM("y ~ s(x, k=15)", family=Poisson()).fit({"y": y, "x": x})
+        rmse = np.sqrt(np.mean((model.fitted_values - mu_true) ** 2))
+        assert rmse < 0.5
+
+    def test_poisson_predict_with_se(self) -> None:
+        rng = np.random.default_rng(42)
+        n = 300
+        x = np.linspace(0, 2 * np.pi, n)
+        mu_true = np.exp(0.5 + 0.5 * np.sin(x))
+        y = rng.poisson(mu_true).astype(float)
+
+        model = GAM("y ~ s(x, k=10)", family=Poisson()).fit({"y": y, "x": x})
+        pred = model.predict({"x": np.array([1.0, 2.0])}, se=True)
+        assert pred.se is not None
+        assert np.all(pred.se > 0)
+
+    def test_poisson_summary_shows_family(self) -> None:
+        rng = np.random.default_rng(42)
+        n = 200
+        x = np.linspace(0, 1, n)
+        y = rng.poisson(3.0, n).astype(float)
+
+        model = GAM("y ~ s(x, k=8)", family=Poisson()).fit({"y": y, "x": x})
+        text = model.summary()
+        assert "Poisson" in text
+
+    def test_poisson_two_smooths(self) -> None:
+        rng = np.random.default_rng(42)
+        n = 500
+        x1 = np.linspace(0, 2 * np.pi, n)
+        x2 = np.linspace(0, 1, n)
+        mu_true = np.exp(0.3 + 0.5 * np.sin(x1) + 0.3 * x2)
+        y = rng.poisson(mu_true).astype(float)
+
+        model = GAM("y ~ s(x1, k=10) + s(x2, k=10)", family=Poisson()).fit(
+            {"y": y, "x1": x1, "x2": x2}
+        )
+        assert len(model.edf) == 2
+        assert len(model.smoothing_params) == 2
