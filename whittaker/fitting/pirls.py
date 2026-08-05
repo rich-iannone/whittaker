@@ -198,29 +198,32 @@ def _edf_per_smooth(
 
 def _eval_gcv(
     X: NDArray,
-    y: NDArray,
+    z: NDArray,
     penalties: list[NDArray],
     sp: list[float],
-    family: Family,
-    offset: NDArray | None,
+    W: NDArray | None = None,
+    offset: NDArray | None = None,
 ) -> float:
-    """Evaluate GCV score at the given smoothing parameters."""
+    """Evaluate GCV score on a (possibly weighted) linear working model."""
     n = X.shape[0]
-    beta, hat_arr = _penalized_solve(X, y, penalties, sp, offset=offset)
+    beta, hat_arr = _penalized_solve(X, z, penalties, sp, W=W, offset=offset)
     hat_trace = float(hat_arr[0])
     eta = X @ beta
     if offset is not None:
         eta = eta + offset
-    mu = family.link_inverse(eta)
-    dev = family.deviance(y, mu)
+    resid = z - eta
+    if W is not None:
+        dev = float(np.sum(W * resid**2))
+    else:
+        dev = float(np.sum(resid**2))
     return _gcv_score(dev, n, hat_trace)
 
 
 def _select_smoothing_params_gcv(
     X: NDArray,
-    y: NDArray,
+    z: NDArray,
     penalties: list[NDArray],
-    family: Family,
+    W: NDArray | None = None,
     offset: NDArray | None = None,
     n_sp: int = 1,
 ) -> list[float]:
@@ -230,13 +233,16 @@ def _select_smoothing_params_gcv(
     For multiple parameters, uses coordinate-wise Brent optimization:
     each λ_j is optimized in turn while the others are held fixed,
     cycling until the GCV score converges.
+
+    When *W* is provided, optimizes the weighted working-model GCV used in
+    performance iteration for non-Gaussian families.
     """
     if n_sp == 0:
         return []
 
     if len(penalties) == 1:
         def scalar_obj(log_sp: float) -> float:
-            return _eval_gcv(X, y, penalties, [np.exp(log_sp)], family, offset)
+            return _eval_gcv(X, z, penalties, [np.exp(log_sp)], W=W, offset=offset)
 
         result = minimize_scalar(scalar_obj, bounds=(-15, 15), method="bounded")
         return [float(np.exp(result.x))]
@@ -244,7 +250,7 @@ def _select_smoothing_params_gcv(
     # Multiple penalties: initialize with shared-λ, then coordinate descent.
     def shared_obj(log_sp: float) -> float:
         sp_val = np.exp(log_sp)
-        return _eval_gcv(X, y, penalties, [sp_val] * len(penalties), family, offset)
+        return _eval_gcv(X, z, penalties, [sp_val] * len(penalties), W=W, offset=offset)
 
     init_result = minimize_scalar(shared_obj, bounds=(-15, 15), method="bounded")
     sp = [float(np.exp(init_result.x))] * len(penalties)
@@ -253,20 +259,20 @@ def _select_smoothing_params_gcv(
     tol = 1e-6
 
     for _ in range(max_cycles):
-        gcv_before = _eval_gcv(X, y, penalties, sp, family, offset)
+        gcv_before = _eval_gcv(X, z, penalties, sp, W=W, offset=offset)
 
         for j in range(len(penalties)):
             def coord_obj(log_sp_j: float) -> float:
                 sp_trial = list(sp)
                 sp_trial[j] = np.exp(log_sp_j)
-                return _eval_gcv(X, y, penalties, sp_trial, family, offset)
+                return _eval_gcv(X, z, penalties, sp_trial, W=W, offset=offset)
 
             result = minimize_scalar(
                 coord_obj, bounds=(-15, 15), method="bounded",
             )
             sp[j] = float(np.exp(result.x))
 
-        gcv_after = _eval_gcv(X, y, penalties, sp, family, offset)
+        gcv_after = _eval_gcv(X, z, penalties, sp, W=W, offset=offset)
         if abs(gcv_after - gcv_before) / (abs(gcv_before) + 1e-12) < tol:
             break
 
@@ -314,7 +320,8 @@ def pirls_fit(
     n, p = X.shape
     offset = model.offset
 
-    if smoothing_params is not None:
+    auto_select = smoothing_params is None
+    if not auto_select:
         if len(smoothing_params) != len(model.penalties):
             raise ValueError(
                 f"Expected {len(model.penalties)} smoothing parameters, "
@@ -322,18 +329,16 @@ def pirls_fit(
             )
         sp = list(smoothing_params)
     else:
-        sp = _select_smoothing_params_gcv(
-            X,
-            y,
-            model.penalties,
-            family,
-            offset=offset,
-            n_sp=len(model.penalties),
-        )
+        sp = []
 
     is_gaussian_identity = isinstance(family, Gaussian)
 
     if is_gaussian_identity:
+        if not sp:
+            sp = _select_smoothing_params_gcv(
+                X, y, model.penalties, offset=offset,
+                n_sp=len(model.penalties),
+            )
         beta, hat_arr = _penalized_solve(X, y, model.penalties, sp, offset=offset)
         hat_trace = float(hat_arr[0])
 
@@ -357,8 +362,13 @@ def pirls_fit(
 
             dmu_deta = 1.0 / family.link_derivative(mu)
             W = dmu_deta**2 / family.variance(mu)
-
             z = eta + (y - mu) / dmu_deta
+
+            if auto_select:
+                sp = _select_smoothing_params_gcv(
+                    X, z, model.penalties, W=W, offset=offset,
+                    n_sp=len(model.penalties),
+                )
 
             beta, hat_arr = _penalized_solve(X, z, model.penalties, sp, W=W, offset=offset)
 
@@ -380,8 +390,11 @@ def pirls_fit(
     edf = _edf_per_smooth(X, model.penalties, sp, smooths_info)
     edf_total = sum(edf) + (1 if model.has_intercept else 0) + model.n_parametric
 
-    residual_dof = n - edf_total
-    scale = dev / residual_dof if residual_dof > 0 else dev / n
+    if family.scale_known:
+        scale = 1.0
+    else:
+        residual_dof = n - edf_total
+        scale = dev / residual_dof if residual_dof > 0 else dev / n
 
     gcv = _gcv_score(dev, n, hat_trace)
 
