@@ -206,7 +206,10 @@ def _eval_gcv(
 ) -> float:
     """Evaluate GCV score on a (possibly weighted) linear working model."""
     n = X.shape[0]
-    beta, hat_arr = _penalized_solve(X, z, penalties, sp, W=W, offset=offset)
+    try:
+        beta, hat_arr = _penalized_solve(X, z, penalties, sp, W=W, offset=offset)
+    except np.linalg.LinAlgError:
+        return np.inf
     hat_trace = float(hat_arr[0])
     eta = X @ beta
     if offset is not None:
