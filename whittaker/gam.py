@@ -262,6 +262,45 @@ class GAM:
         text = "\n".join(lines)
         return text
 
+    def plot(
+        self,
+        *,
+        n_points: int = 200,
+        level: float = 0.95,
+    ) -> object:
+        """Plot partial effects with confidence bands for each smooth term.
+
+        Parameters
+        ----------
+        n_points:
+            Number of evenly spaced evaluation points per smooth.
+        level:
+            Confidence level for the bands (the default is `0.95`).
+
+        Returns
+        -------
+        altair.VConcatChart or altair.Chart
+            One panel per smooth term.
+        """
+        from whittaker.plotting import partial_effects
+
+        return partial_effects(self, n_points=n_points, level=level)
+
+    def check(self) -> object:
+        """Produce GAM diagnostic plots (analogous to `mgcv::gam.check`).
+
+        Returns a 2×2 panel: QQ plot of residuals, residuals vs fitted values, histogram of
+        residuals, and response vs fitted values.
+
+        Returns
+        -------
+        altair.VConcatChart
+            A 2×2 diagnostic panel.
+        """
+        from whittaker.plotting import check as _check
+
+        return _check(self)
+
     def _check_fitted(self) -> None:
         if not self._fitted:
             raise RuntimeError("This GAM has not been fitted yet. Call .fit(data) first.")
