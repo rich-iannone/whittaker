@@ -54,6 +54,11 @@ class Family(ABC):
         """Log-likelihood ℓ(y; μ, φ) evaluated at the given scale parameter φ."""
         ...
 
+    @property
+    def scale_known(self) -> bool:
+        """Whether the scale parameter is fixed (True for Binomial, Poisson)."""
+        return False
+
     def initialize(self, y: NDArray) -> NDArray:
         """Starting values for μ given the response *y*.
 
