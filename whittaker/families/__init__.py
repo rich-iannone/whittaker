@@ -3,9 +3,13 @@
 from __future__ import annotations
 
 from whittaker.families.base import Family
+from whittaker.families.binomial import Binomial
 from whittaker.families.gaussian import Gaussian
+from whittaker.families.poisson import Poisson
 
 __all__ = [
+    "Binomial",
     "Family",
     "Gaussian",
+    "Poisson",
 ]
