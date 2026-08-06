@@ -82,6 +82,7 @@ class FitResult:
     hat_matrix_trace: float
     residuals: NDArray
     weights: NDArray | None = None
+    null_deviance: float | None = None
     aic: float | None = None
     bic: float | None = None
 
@@ -601,6 +602,9 @@ def pirls_fit(
 
     gcv = _gcv_score(dev, n, hat_trace)
 
+    mu_null = family.link_inverse(np.full_like(y, family.link(np.atleast_1d(np.mean(y)))[0]))
+    null_dev = family.deviance(y, mu_null)
+
     ll = family.log_likelihood(y, mu, scale)
     aic = -2.0 * ll + 2.0 * edf_total
     bic = -2.0 * ll + np.log(n) * edf_total
@@ -620,6 +624,7 @@ def pirls_fit(
         hat_matrix_trace=hat_trace,
         residuals=y - mu,
         weights=W_final,
+        null_deviance=float(null_dev),
         aic=float(aic),
         bic=float(bic),
     )
