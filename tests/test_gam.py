@@ -267,9 +267,7 @@ class TestMultipleSmooths:
         x2 = np.linspace(0, 1, n)
         y = np.sin(3 * x1) + 0.5 * x2 + rng.normal(0, 0.15, n)
 
-        model = GAM("y ~ s(x1, k=15) + s(x2, k=15)").fit(
-            {"y": y, "x1": x1, "x2": x2}
-        )
+        model = GAM("y ~ s(x1, k=15) + s(x2, k=15)").fit({"y": y, "x1": x1, "x2": x2})
         sp = model.smoothing_params
         assert sp[1] > sp[0] * 5
         assert model.edf[0] > model.edf[1] * 3
@@ -462,9 +460,7 @@ class TestREMLGAM:
 
     def test_reml_multi_smooth(self) -> None:
         data = _multi_data()
-        model = GAM("y ~ s(x1, k=10) + s(x2, k=10)").fit(
-            data, method="REML"
-        )
+        model = GAM("y ~ s(x1, k=10) + s(x2, k=10)").fit(data, method="REML")
         assert len(model.smoothing_params) == 2
         assert len(model.edf) == 2
 
@@ -482,9 +478,7 @@ class TestREMLGAM:
         p_true = 1.0 / (1.0 + np.exp(-np.sin(x)))
         y = rng.binomial(1, p_true, n).astype(float)
 
-        model = GAM("y ~ s(x, k=10)", family=Binomial()).fit(
-            {"y": y, "x": x}, method="REML"
-        )
+        model = GAM("y ~ s(x, k=10)", family=Binomial()).fit({"y": y, "x": x}, method="REML")
         assert model.is_fitted
         assert np.all(model.fitted_values > 0)
         assert np.all(model.fitted_values < 1)
@@ -496,9 +490,7 @@ class TestREMLGAM:
         mu_true = np.exp(0.5 + 0.5 * np.sin(x))
         y = rng.poisson(mu_true).astype(float)
 
-        model = GAM("y ~ s(x, k=10)", family=Poisson()).fit(
-            {"y": y, "x": x}, method="REML"
-        )
+        model = GAM("y ~ s(x, k=10)", family=Poisson()).fit({"y": y, "x": x}, method="REML")
         assert model.is_fitted
         assert np.all(model.fitted_values > 0)
 
@@ -524,9 +516,7 @@ class TestTensorProductGAM:
         x2 = rng.uniform(0, 2 * np.pi, n)
         y = np.sin(x1) + np.cos(x2) + rng.normal(0, 0.3, n)
 
-        model = GAM("y ~ te(x1, x2, k=5)").fit(
-            {"y": y, "x1": x1, "x2": x2}
-        )
+        model = GAM("y ~ te(x1, x2, k=5)").fit({"y": y, "x1": x1, "x2": x2})
         assert model.is_fitted
         assert len(model.smoothing_params) == 2
         assert len(model.edf) == 1
@@ -539,9 +529,7 @@ class TestTensorProductGAM:
         f_true = np.sin(x1) + np.cos(x2)
         y = f_true + rng.normal(0, 0.3, n)
 
-        model = GAM("y ~ te(x1, x2, k=5)").fit(
-            {"y": y, "x1": x1, "x2": x2}
-        )
+        model = GAM("y ~ te(x1, x2, k=5)").fit({"y": y, "x1": x1, "x2": x2})
         rmse = np.sqrt(np.mean((model.fitted_values - f_true) ** 2))
         assert rmse < 0.25
 
@@ -552,12 +540,8 @@ class TestTensorProductGAM:
         x2 = rng.uniform(0, 1, n)
         y = x1 + x2 + rng.normal(0, 0.1, n)
 
-        model = GAM("y ~ te(x1, x2, k=5)").fit(
-            {"y": y, "x1": x1, "x2": x2}
-        )
-        pred = model.predict(
-            {"x1": np.array([0.5]), "x2": np.array([0.5])}, se=True
-        )
+        model = GAM("y ~ te(x1, x2, k=5)").fit({"y": y, "x1": x1, "x2": x2})
+        pred = model.predict({"x1": np.array([0.5]), "x2": np.array([0.5])}, se=True)
         assert pred.se is not None
         assert pred.se[0] > 0
         assert abs(pred.values[0] - 1.0) < 0.3
@@ -569,9 +553,7 @@ class TestTensorProductGAM:
         x2 = rng.uniform(0, 2 * np.pi, n)
         y = np.sin(x1) + np.cos(x2) + rng.normal(0, 0.3, n)
 
-        model = GAM("y ~ te(x1, x2, k=5)").fit(
-            {"y": y, "x1": x1, "x2": x2}, method="REML"
-        )
+        model = GAM("y ~ te(x1, x2, k=5)").fit({"y": y, "x1": x1, "x2": x2}, method="REML")
         assert model.is_fitted
         assert len(model.smoothing_params) == 2
 
@@ -583,9 +565,7 @@ class TestTensorProductGAM:
         x3 = np.linspace(0, 1, n)
         y = np.sin(x1) * np.cos(x2) + 0.5 * x3 + rng.normal(0, 0.3, n)
 
-        model = GAM("y ~ te(x1, x2, k=4) + s(x3, k=6)").fit(
-            {"y": y, "x1": x1, "x2": x2, "x3": x3}
-        )
+        model = GAM("y ~ te(x1, x2, k=4) + s(x3, k=6)").fit({"y": y, "x1": x1, "x2": x2, "x3": x3})
         assert len(model.edf) == 2
         assert len(model.smoothing_params) == 3  # 2 for te + 1 for s
 
@@ -596,9 +576,7 @@ class TestTensorProductGAM:
         x2 = rng.uniform(0, 1, n)
         y = x1 + x2 + rng.normal(0, 0.1, n)
 
-        model = GAM("y ~ te(x1, x2, k=[4, 6])").fit(
-            {"y": y, "x1": x1, "x2": x2}
-        )
+        model = GAM("y ~ te(x1, x2, k=[4, 6])").fit({"y": y, "x1": x1, "x2": x2})
         assert model.is_fitted
         # 4 * 6 = 24 product basis, minus 1 for constraint = 23, plus intercept = 24
         assert model.coefficients.shape[0] == 24
@@ -610,9 +588,7 @@ class TestTensorProductGAM:
         x2 = rng.uniform(0, 1, n)
         y = x1 * x2 + rng.normal(0, 0.1, n)
 
-        model = GAM("y ~ te(x1, x2, k=4)").fit(
-            {"y": y, "x1": x1, "x2": x2}
-        )
+        model = GAM("y ~ te(x1, x2, k=4)").fit({"y": y, "x1": x1, "x2": x2})
         text = model.summary()
         assert "te(x1, x2" in text
 
@@ -625,9 +601,7 @@ class TestTensorProductGAM:
         p = 1.0 / (1.0 + np.exp(-eta))
         y = rng.binomial(1, p, n).astype(float)
 
-        model = GAM("y ~ te(x1, x2, k=4)", family=Binomial()).fit(
-            {"y": y, "x1": x1, "x2": x2}
-        )
+        model = GAM("y ~ te(x1, x2, k=4)", family=Binomial()).fit({"y": y, "x1": x1, "x2": x2})
         assert model.is_fitted
         assert np.all(model.fitted_values > 0)
         assert np.all(model.fitted_values < 1)
@@ -640,8 +614,6 @@ class TestTensorProductGAM:
         mu = np.exp(0.5 + 0.3 * x1 + 0.3 * x2)
         y = rng.poisson(mu).astype(float)
 
-        model = GAM("y ~ te(x1, x2, k=4)", family=Poisson()).fit(
-            {"y": y, "x1": x1, "x2": x2}
-        )
+        model = GAM("y ~ te(x1, x2, k=4)", family=Poisson()).fit({"y": y, "x1": x1, "x2": x2})
         assert model.is_fitted
         assert np.all(model.fitted_values > 0)

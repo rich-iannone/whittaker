@@ -32,7 +32,10 @@ class TestBayesianCovariance:
         result = pirls_fit(mm)
 
         V = _bayesian_covariance(
-            mm.X, mm.penalties, result.smoothing_params, result.scale,
+            mm.X,
+            mm.penalties,
+            result.smoothing_params,
+            result.scale,
         )
         p = mm.X.shape[1]
         assert V.shape == (p, p)
@@ -48,7 +51,10 @@ class TestBayesianCovariance:
         result = pirls_fit(mm)
 
         V = _bayesian_covariance(
-            mm.X, mm.penalties, result.smoothing_params, result.scale,
+            mm.X,
+            mm.penalties,
+            result.smoothing_params,
+            result.scale,
         )
         assert_allclose(V, V.T, atol=1e-12)
 
@@ -63,7 +69,10 @@ class TestBayesianCovariance:
         result = pirls_fit(mm)
 
         V = _bayesian_covariance(
-            mm.X, mm.penalties, result.smoothing_params, result.scale,
+            mm.X,
+            mm.penalties,
+            result.smoothing_params,
+            result.scale,
         )
         eigvals = np.linalg.eigvalsh(V)
         assert np.all(eigvals >= -1e-10)
@@ -81,7 +90,10 @@ class TestBayesianCovariance:
 
         assert result.weights is not None
         V = _bayesian_covariance(
-            mm.X, mm.penalties, result.smoothing_params, result.scale,
+            mm.X,
+            mm.penalties,
+            result.smoothing_params,
+            result.scale,
             W=result.weights,
         )
         assert V.shape == (mm.n_coefs, mm.n_coefs)
@@ -99,7 +111,10 @@ class TestSmoothTest:
         result = pirls_fit(mm)
 
         V = _bayesian_covariance(
-            mm.X, mm.penalties, result.smoothing_params, result.scale,
+            mm.X,
+            mm.penalties,
+            result.smoothing_params,
+            result.scale,
         )
         info = mm.smooths[0]
         cs, ce = info.col_start, info.col_end
@@ -125,7 +140,10 @@ class TestSmoothTest:
         result = pirls_fit(mm)
 
         V = _bayesian_covariance(
-            mm.X, mm.penalties, result.smoothing_params, result.scale,
+            mm.X,
+            mm.penalties,
+            result.smoothing_params,
+            result.scale,
         )
         info = mm.smooths[0]
         cs, ce = info.col_start, info.col_end
@@ -149,7 +167,10 @@ class TestSmoothTest:
         result = pirls_fit(mm)
 
         V = _bayesian_covariance(
-            mm.X, mm.penalties, result.smoothing_params, result.scale,
+            mm.X,
+            mm.penalties,
+            result.smoothing_params,
+            result.scale,
         )
         info = mm.smooths[0]
         cs, ce = info.col_start, info.col_end
@@ -285,8 +306,6 @@ class TestGAMSmoothTests:
         x = np.linspace(0, 2 * np.pi, n)
         y = np.sin(x) + rng.normal(0, 0.2, n)
 
-        model = GAM("y ~ s(x, k=10)").fit(
-            {"y": y, "x": x}, method="REML"
-        )
+        model = GAM("y ~ s(x, k=10)").fit({"y": y, "x": x}, method="REML")
         tests = model.smooth_tests()
         assert tests[0].p_value < 1e-10

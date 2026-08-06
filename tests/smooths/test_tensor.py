@@ -26,8 +26,10 @@ class TestRowTensorProduct:
         B2 = np.array([[5, 6, 7], [8, 9, 10]])
         result = _row_tensor_product(B1, B2)
         expected = np.array(
-            [[1 * 5, 1 * 6, 1 * 7, 2 * 5, 2 * 6, 2 * 7],
-             [3 * 8, 3 * 9, 3 * 10, 4 * 8, 4 * 9, 4 * 10]]
+            [
+                [1 * 5, 1 * 6, 1 * 7, 2 * 5, 2 * 6, 2 * 7],
+                [3 * 8, 3 * 9, 3 * 10, 4 * 8, 4 * 9, 4 * 10],
+            ]
         )
         assert_allclose(result, expected)
 
@@ -46,10 +48,12 @@ class TestTensorProductBasis:
     def test_fit_and_basis_matrix_shape(self) -> None:
         m1, m2 = CRS(k=5), CRS(k=6)
         tp = TensorProductBasis([m1, m2])
-        x = np.column_stack([
-            np.linspace(0, 1, 50),
-            np.linspace(0, 1, 50),
-        ])
+        x = np.column_stack(
+            [
+                np.linspace(0, 1, 50),
+                np.linspace(0, 1, 50),
+            ]
+        )
         tp.fit(x)
         B = tp.basis_matrix(x)
         assert B.shape == (50, 30)  # 5 * 6
@@ -144,15 +148,19 @@ class TestTensorProductBasis:
 
     def test_prediction_at_new_points(self) -> None:
         tp = TensorProductBasis([CRS(k=5), CRS(k=5)])
-        x_train = np.column_stack([
-            np.linspace(0, 1, 50),
-            np.linspace(0, 1, 50),
-        ])
+        x_train = np.column_stack(
+            [
+                np.linspace(0, 1, 50),
+                np.linspace(0, 1, 50),
+            ]
+        )
         tp.fit(x_train)
-        x_new = np.column_stack([
-            np.array([0.25, 0.5, 0.75]),
-            np.array([0.25, 0.5, 0.75]),
-        ])
+        x_new = np.column_stack(
+            [
+                np.array([0.25, 0.5, 0.75]),
+                np.array([0.25, 0.5, 0.75]),
+            ]
+        )
         B_new = tp.basis_matrix(x_new)
         assert B_new.shape == (3, 25)
         assert np.all(np.isfinite(B_new))

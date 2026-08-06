@@ -691,14 +691,24 @@ class TestREML:
         log_sp = np.array([1.0])
 
         val, grad = _reml_objective(
-            log_sp, mm.X, y, mm.penalties, pen_ranks, n_unpen,
+            log_sp,
+            mm.X,
+            y,
+            mm.penalties,
+            pen_ranks,
+            n_unpen,
             scale_known=False,
         )
 
         eps = 1e-5
         log_sp_plus = log_sp + eps
         val_plus, _ = _reml_objective(
-            log_sp_plus, mm.X, y, mm.penalties, pen_ranks, n_unpen,
+            log_sp_plus,
+            mm.X,
+            y,
+            mm.penalties,
+            pen_ranks,
+            n_unpen,
             scale_known=False,
         )
         fd_grad = (val_plus - val) / eps
