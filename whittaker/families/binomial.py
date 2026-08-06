@@ -44,6 +44,15 @@ class Binomial(Family):
         dev[neg] += (1.0 - y[neg]) * np.log((1.0 - y[neg]) / (1.0 - mu_c[neg]))
         return float(2.0 * np.sum(dev))
 
+    def unit_deviance(self, y: NDArray, mu: NDArray) -> NDArray:
+        mu_c = np.clip(mu, _EPS, 1.0 - _EPS)
+        dev = np.zeros_like(y)
+        pos = y > 0
+        neg = y < 1
+        dev[pos] = y[pos] * np.log(y[pos] / mu_c[pos])
+        dev[neg] += (1.0 - y[neg]) * np.log((1.0 - y[neg]) / (1.0 - mu_c[neg]))
+        return 2.0 * dev
+
     def log_likelihood(self, y: NDArray, mu: NDArray, scale: float) -> float:
         mu_c = np.clip(mu, _EPS, 1.0 - _EPS)
         ll = y * np.log(mu_c) + (1.0 - y) * np.log(1.0 - mu_c)
