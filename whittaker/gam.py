@@ -329,6 +329,28 @@ class GAM:
         self._check_fitted()
         return smooth_tests(self._fit_result, self._model_matrix)
 
+    def concurvity(self, *, full: bool = True) -> object:
+        """Compute concurvity diagnostics for all smooth terms.
+
+        Concurvity is the GAM analogue of collinearity. High values (> 0.8) indicate that a smooth's
+        effect may be confounded with other model terms, making its estimate unstable.
+
+        Parameters
+        ----------
+        full:
+            If `True` (default), measure each smooth against all other model terms combined. If
+            `False`, compute pairwise concurvity between each pair of smooths.
+
+        Returns
+        -------
+        ConcurvityResult
+            Object with `worst`, `observed`, and `estimate` arrays, plus `labels`.
+        """
+        from whittaker.fitting.inference import concurvity
+
+        self._check_fitted()
+        return concurvity(self._fit_result, self._model_matrix, full=full)
+
     def summary(self) -> str:
         """Return a text summary of the fitted model."""
         self._check_fitted()
