@@ -177,12 +177,8 @@ class TestTiModelMatrix:
         x2 = rng.uniform(size=n)
         y = 0.1 * rng.standard_normal(n)
 
-        mm_te = build_model_matrix(
-            parse("y ~ te(x1, x2, k=5)"), {"y": y, "x1": x1, "x2": x2}
-        )
-        mm_ti = build_model_matrix(
-            parse("y ~ ti(x1, x2, k=5)"), {"y": y, "x1": x1, "x2": x2}
-        )
+        mm_te = build_model_matrix(parse("y ~ te(x1, x2, k=5)"), {"y": y, "x1": x1, "x2": x2})
+        mm_ti = build_model_matrix(parse("y ~ ti(x1, x2, k=5)"), {"y": y, "x1": x1, "x2": x2})
 
         te_cols = mm_te.smooths[0].col_end - mm_te.smooths[0].col_start
         ti_cols = mm_ti.smooths[0].col_end - mm_ti.smooths[0].col_start
