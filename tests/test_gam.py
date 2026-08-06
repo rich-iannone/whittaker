@@ -509,3 +509,139 @@ class TestREMLGAM:
         assert model.is_fitted
         rmse = np.sqrt(np.mean((model.fitted_values - np.sin(data["x"])) ** 2))
         assert rmse < 0.15
+
+
+# ---------------------------------------------------------------------------
+# Tensor product smooths (te)
+# ---------------------------------------------------------------------------
+
+
+class TestTensorProductGAM:
+    def test_te_basic_fit(self) -> None:
+        rng = np.random.default_rng(42)
+        n = 300
+        x1 = rng.uniform(0, 2 * np.pi, n)
+        x2 = rng.uniform(0, 2 * np.pi, n)
+        y = np.sin(x1) + np.cos(x2) + rng.normal(0, 0.3, n)
+
+        model = GAM("y ~ te(x1, x2, k=5)").fit(
+            {"y": y, "x1": x1, "x2": x2}
+        )
+        assert model.is_fitted
+        assert len(model.smoothing_params) == 2
+        assert len(model.edf) == 1
+
+    def test_te_recovery(self) -> None:
+        rng = np.random.default_rng(42)
+        n = 500
+        x1 = rng.uniform(0, 2 * np.pi, n)
+        x2 = rng.uniform(0, 2 * np.pi, n)
+        f_true = np.sin(x1) + np.cos(x2)
+        y = f_true + rng.normal(0, 0.3, n)
+
+        model = GAM("y ~ te(x1, x2, k=5)").fit(
+            {"y": y, "x1": x1, "x2": x2}
+        )
+        rmse = np.sqrt(np.mean((model.fitted_values - f_true) ** 2))
+        assert rmse < 0.25
+
+    def test_te_predict(self) -> None:
+        rng = np.random.default_rng(42)
+        n = 300
+        x1 = rng.uniform(0, 1, n)
+        x2 = rng.uniform(0, 1, n)
+        y = x1 + x2 + rng.normal(0, 0.1, n)
+
+        model = GAM("y ~ te(x1, x2, k=5)").fit(
+            {"y": y, "x1": x1, "x2": x2}
+        )
+        pred = model.predict(
+            {"x1": np.array([0.5]), "x2": np.array([0.5])}, se=True
+        )
+        assert pred.se is not None
+        assert pred.se[0] > 0
+        assert abs(pred.values[0] - 1.0) < 0.3
+
+    def test_te_with_reml(self) -> None:
+        rng = np.random.default_rng(42)
+        n = 300
+        x1 = rng.uniform(0, 2 * np.pi, n)
+        x2 = rng.uniform(0, 2 * np.pi, n)
+        y = np.sin(x1) + np.cos(x2) + rng.normal(0, 0.3, n)
+
+        model = GAM("y ~ te(x1, x2, k=5)").fit(
+            {"y": y, "x1": x1, "x2": x2}, method="REML"
+        )
+        assert model.is_fitted
+        assert len(model.smoothing_params) == 2
+
+    def test_te_mixed_with_s(self) -> None:
+        rng = np.random.default_rng(42)
+        n = 300
+        x1 = rng.uniform(0, 2 * np.pi, n)
+        x2 = rng.uniform(0, 2 * np.pi, n)
+        x3 = np.linspace(0, 1, n)
+        y = np.sin(x1) * np.cos(x2) + 0.5 * x3 + rng.normal(0, 0.3, n)
+
+        model = GAM("y ~ te(x1, x2, k=4) + s(x3, k=6)").fit(
+            {"y": y, "x1": x1, "x2": x2, "x3": x3}
+        )
+        assert len(model.edf) == 2
+        assert len(model.smoothing_params) == 3  # 2 for te + 1 for s
+
+    def test_te_per_marginal_k(self) -> None:
+        rng = np.random.default_rng(42)
+        n = 300
+        x1 = rng.uniform(0, 1, n)
+        x2 = rng.uniform(0, 1, n)
+        y = x1 + x2 + rng.normal(0, 0.1, n)
+
+        model = GAM("y ~ te(x1, x2, k=[4, 6])").fit(
+            {"y": y, "x1": x1, "x2": x2}
+        )
+        assert model.is_fitted
+        # 4 * 6 = 24 product basis, minus 1 for constraint = 23, plus intercept = 24
+        assert model.coefficients.shape[0] == 24
+
+    def test_te_summary(self) -> None:
+        rng = np.random.default_rng(42)
+        n = 200
+        x1 = rng.uniform(0, 1, n)
+        x2 = rng.uniform(0, 1, n)
+        y = x1 * x2 + rng.normal(0, 0.1, n)
+
+        model = GAM("y ~ te(x1, x2, k=4)").fit(
+            {"y": y, "x1": x1, "x2": x2}
+        )
+        text = model.summary()
+        assert "te(x1, x2" in text
+
+    def test_te_binomial(self) -> None:
+        rng = np.random.default_rng(42)
+        n = 500
+        x1 = rng.uniform(-2, 2, n)
+        x2 = rng.uniform(-2, 2, n)
+        eta = 0.5 * x1 + 0.5 * x2
+        p = 1.0 / (1.0 + np.exp(-eta))
+        y = rng.binomial(1, p, n).astype(float)
+
+        model = GAM("y ~ te(x1, x2, k=4)", family=Binomial()).fit(
+            {"y": y, "x1": x1, "x2": x2}
+        )
+        assert model.is_fitted
+        assert np.all(model.fitted_values > 0)
+        assert np.all(model.fitted_values < 1)
+
+    def test_te_poisson(self) -> None:
+        rng = np.random.default_rng(42)
+        n = 500
+        x1 = rng.uniform(0, 1, n)
+        x2 = rng.uniform(0, 1, n)
+        mu = np.exp(0.5 + 0.3 * x1 + 0.3 * x2)
+        y = rng.poisson(mu).astype(float)
+
+        model = GAM("y ~ te(x1, x2, k=4)", family=Poisson()).fit(
+            {"y": y, "x1": x1, "x2": x2}
+        )
+        assert model.is_fitted
+        assert np.all(model.fitted_values > 0)
