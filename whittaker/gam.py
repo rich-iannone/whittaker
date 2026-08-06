@@ -232,6 +232,21 @@ class GAM:
         return self._fit_result.gcv_score
 
     @property
+    def null_deviance(self) -> float:
+        """Null deviance (intercept-only model)."""
+        self._check_fitted()
+        return self._fit_result.null_deviance
+
+    @property
+    def deviance_explained(self) -> float:
+        """Proportion of null deviance explained by the model (analogous to R²)."""
+        self._check_fitted()
+        null_dev = self._fit_result.null_deviance
+        if null_dev <= 0:
+            return 0.0
+        return 1.0 - self._fit_result.deviance / null_dev
+
+    @property
     def aic(self) -> float:
         """Akaike Information Criterion."""
         self._check_fitted()
@@ -242,6 +257,22 @@ class GAM:
         """Bayesian Information Criterion."""
         self._check_fitted()
         return self._fit_result.bic
+
+    def parametric_tests(self) -> list:
+        """Compute Wald tests for parametric (non-smooth) coefficients.
+
+        Uses the t-distribution for families with unknown scale (Gaussian, Gamma)
+        and the z-distribution for known-scale families (Binomial, Poisson).
+
+        Returns
+        -------
+        list[ParametricTestResult]
+            One result per parametric coefficient (intercept + linear terms).
+        """
+        from whittaker.fitting.inference import parametric_tests
+
+        self._check_fitted()
+        return parametric_tests(self._fit_result, self._model_matrix, self._family.scale_known)
 
     def smooth_tests(self) -> list:
         """Compute approximate p-values for all smooth terms.
@@ -265,8 +296,6 @@ class GAM:
         r = self._fit_result
         mm = self._model_matrix
 
-        tests = self.smooth_tests()
-
         lines = [
             "GAM fit summary",
             "=" * 60,
@@ -274,24 +303,51 @@ class GAM:
             f"Family:     {self._family!r}",
             f"Observations: {mm.n_obs}",
             f"Coefficients: {mm.n_coefs}",
-            "",
-            "Approximate significance of smooth terms:",
-            f"  {'Term':<24} {'EDF':>6} {'Ref.df':>6} {'Chi.sq':>10} {'p-value':>10}",
-            f"  {'-' * 24} {'-' * 6} {'-' * 6} {'-' * 10} {'-' * 10}",
         ]
 
-        for test in tests:
+        ptests = self.parametric_tests()
+        if ptests:
+            stat_label = "z value" if self._family.scale_known else "t value"
+            lines.extend(
+                [
+                    "",
+                    "Parametric coefficients:",
+                    f"  {'Term':<24} {'Estimate':>10} {'Std.Err':>10} {stat_label:>10} {'p-value':>10}",
+                    f"  {'-' * 24} {'-' * 10} {'-' * 10} {'-' * 10} {'-' * 10}",
+                ]
+            )
+            for pt in ptests:
+                pval_str = f"{pt.p_value:.4g}" if pt.p_value >= 1e-16 else "< 1e-16"
+                lines.append(
+                    f"  {pt.term_label:<24} {pt.estimate:>10.4f} {pt.se:>10.4f} "
+                    f"{pt.stat:>10.3f} {pval_str:>10}"
+                )
+
+        stests = self.smooth_tests()
+        lines.extend(
+            [
+                "",
+                "Approximate significance of smooth terms:",
+                f"  {'Term':<24} {'EDF':>6} {'Ref.df':>6} {'Chi.sq':>10} {'p-value':>10}",
+                f"  {'-' * 24} {'-' * 6} {'-' * 6} {'-' * 10} {'-' * 10}",
+            ]
+        )
+
+        for test in stests:
             pval_str = f"{test.p_value:.4g}" if test.p_value >= 1e-16 else "< 1e-16"
             lines.append(
                 f"  {test.term_label:<24} {test.edf:>6.2f} {test.ref_df:>6.0f} "
                 f"{test.stat:>10.3f} {pval_str:>10}"
             )
 
+        dev_expl = self.deviance_explained
         lines.extend(
             [
                 "",
                 f"Total EDF:  {r.edf_total:.2f}",
                 f"Deviance:   {r.deviance:.4f}",
+                f"Null dev:   {r.null_deviance:.4f}",
+                f"Dev. expl:  {dev_expl:.1%}",
                 f"GCV score:  {r.gcv_score:.6f}",
                 f"Scale est:  {r.scale:.6f}",
                 f"AIC:        {r.aic:.2f}",
