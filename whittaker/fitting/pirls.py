@@ -82,6 +82,8 @@ class FitResult:
     hat_matrix_trace: float
     residuals: NDArray
     weights: NDArray | None = None
+    aic: float | None = None
+    bic: float | None = None
 
 
 def _penalized_solve(
@@ -599,6 +601,10 @@ def pirls_fit(
 
     gcv = _gcv_score(dev, n, hat_trace)
 
+    ll = family.log_likelihood(y, mu, scale)
+    aic = -2.0 * ll + 2.0 * edf_total
+    bic = -2.0 * ll + np.log(n) * edf_total
+
     return FitResult(
         coefficients=beta,
         linear_predictor=eta,
@@ -614,4 +620,6 @@ def pirls_fit(
         hat_matrix_trace=hat_trace,
         residuals=y - mu,
         weights=W_final,
+        aic=float(aic),
+        bic=float(bic),
     )
