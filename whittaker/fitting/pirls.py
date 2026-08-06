@@ -31,6 +31,7 @@ from scipy.optimize import minimize, minimize_scalar
 
 from whittaker.families.base import Family
 from whittaker.families.gaussian import Gaussian
+from whittaker.families.negative_binomial import NegativeBinomial
 from whittaker.model_matrix import ModelMatrix
 
 
@@ -442,6 +443,38 @@ def _select_smoothing_params_reml(
     return [float(np.exp(r)) for r in result.x]
 
 
+def _estimate_nb_theta(
+    y: NDArray,
+    mu: NDArray,
+    theta_old: float,
+) -> float:
+    """Estimate NB θ by maximizing the profile log-likelihood.
+
+    Given fitted μ from the current P-IRLS, find θ that maximizes ℓ(θ | y, μ) using Brent's method
+    on log(θ).
+    """
+    from scipy.special import gammaln
+
+    mu_c = np.maximum(mu, np.finfo(float).eps)
+
+    def neg_ll(log_theta: float) -> float:
+        theta = np.exp(log_theta)
+        ll = np.sum(
+            gammaln(y + theta)
+            - gammaln(theta)
+            + theta * np.log(theta / (mu_c + theta))
+            + y * np.log(mu_c / (mu_c + theta))
+        )
+        return -float(ll)
+
+    result = minimize_scalar(
+        neg_ll,
+        bounds=(np.log(0.01), np.log(1e6)),
+        method="bounded",
+    )
+    return float(np.exp(result.x))
+
+
 def pirls_fit(
     model: ModelMatrix,
     family: Family | None = None,
@@ -556,36 +589,60 @@ def pirls_fit(
         n_iter = 1
         converged = True
     else:
+        is_nb = isinstance(family, NegativeBinomial)
+        max_outer = 20 if is_nb else 1
+        theta_tol = 1e-4
+
         mu = family.initialize(y)
         eta = family.link(mu)
-        dev_old = np.inf
         converged = False
         n_iter = 0
         beta = np.zeros(p)
 
-        for iteration in range(max_iter):
-            n_iter = iteration + 1
+        for _outer in range(max_outer):
+            dev_old = np.inf
+            inner_converged = False
 
-            dmu_deta = 1.0 / family.link_derivative(mu)
-            W = dmu_deta**2 / family.variance(mu)
-            z = eta + (y - mu) / dmu_deta
+            for iteration in range(max_iter):
+                n_iter += 1
 
-            if auto_select:
-                sp = _select_sp(z, W=W)
+                dmu_deta = 1.0 / family.link_derivative(mu)
+                W = dmu_deta**2 / family.variance(mu)
+                z = eta + (y - mu) / dmu_deta
 
-            beta, hat_arr = _penalized_solve(X, z, model.penalties, sp, W=W, offset=offset)
+                if auto_select:
+                    sp = _select_sp(z, W=W)
 
-            eta = X @ beta
-            if offset is not None:
-                eta = eta + offset
-            mu = family.link_inverse(eta)
-            dev = family.deviance(y, mu)
+                beta, hat_arr = _penalized_solve(X, z, model.penalties, sp, W=W, offset=offset)
 
-            if dev_old != np.inf and abs(dev - dev_old) / (abs(dev_old) + 0.1) < tol:
-                converged = True
+                eta = X @ beta
+                if offset is not None:
+                    eta = eta + offset
+                mu = family.link_inverse(eta)
+                dev = family.deviance(y, mu)
+
+                if dev_old != np.inf and abs(dev - dev_old) / (abs(dev_old) + 0.1) < tol:
+                    inner_converged = True
+                    break
+
+                dev_old = dev
+
+            if not is_nb:
+                converged = inner_converged
                 break
 
-            dev_old = dev
+            theta_old = family.theta
+            theta_new = _estimate_nb_theta(y, mu, theta_old)
+            family.theta = theta_new
+
+            if abs(theta_new - theta_old) / (abs(theta_old) + 1e-8) < theta_tol:
+                converged = inner_converged
+                break
+        else:
+            converged = inner_converged
+
+        if is_nb:
+            dev = family.deviance(y, mu)
 
         hat_trace = float(hat_arr[0])
         W_final = W
