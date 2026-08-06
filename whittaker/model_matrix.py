@@ -33,7 +33,7 @@ from whittaker.formula.terms import (
 from whittaker.smooths.base import SmoothBasis
 from whittaker.smooths.cubic import CRS
 from whittaker.smooths.pspline import PSpline
-from whittaker.smooths.tensor import TensorProductBasis
+from whittaker.smooths.tensor import TensorInteractionBasis, TensorProductBasis
 from whittaker.smooths.tprs import TPRS
 
 _BS_REGISTRY: dict[str, type[SmoothBasis]] = {
@@ -44,7 +44,7 @@ _BS_REGISTRY: dict[str, type[SmoothBasis]] = {
 
 
 def _resolve_basis(term: SmoothTerm) -> SmoothBasis:
-    """Instantiate a :class:`SmoothBasis` from a parsed :class:`SmoothTerm`."""
+    """Instantiate a `SmoothBasis` from a parsed `SmoothTerm`."""
     cls = _BS_REGISTRY.get(term.bs)
     if cls is None:
         supported = ", ".join(sorted(_BS_REGISTRY))
@@ -69,7 +69,7 @@ def _resolve_basis(term: SmoothTerm) -> SmoothBasis:
 
 
 def _resolve_tensor_basis(term: SmoothTerm) -> TensorProductBasis:
-    """Instantiate a :class:`TensorProductBasis` from a ``te()`` term."""
+    """Instantiate a `TensorProductBasis` from a `te()` term."""
     d = len(term.variables)
     if d < 2:
         raise ValueError(f"te() requires at least 2 variables, got {d}.")
@@ -112,6 +112,52 @@ def _resolve_tensor_basis(term: SmoothTerm) -> TensorProductBasis:
         marginals.append(_resolve_basis(marginal_term))
 
     return TensorProductBasis(marginals)
+
+
+def _resolve_tensor_interaction_basis(term: SmoothTerm) -> TensorInteractionBasis:
+    """Instantiate a `TensorInteractionBasis` from a `ti()` term."""
+    d = len(term.variables)
+    if d < 2:
+        raise ValueError(f"ti() requires at least 2 variables, got {d}.")
+
+    k_list = term.extra.get("k")
+    if k_list is None:
+        k_per = [term.k] * d if term.k != -1 else [-1] * d
+    elif isinstance(k_list, list):
+        if len(k_list) != d:
+            raise ValueError(
+                f"ti() got k={k_list} but has {d} variables. "
+                f"Length of k must match the number of variables."
+            )
+        k_per = k_list
+    else:
+        k_per = [int(k_list)] * d
+
+    bs_spec = term.extra.get("bs")
+    if bs_spec is None:
+        bs_per = [term.bs] * d
+    elif isinstance(bs_spec, list):
+        if len(bs_spec) != d:
+            raise ValueError(
+                f"ti() got bs={bs_spec} but has {d} variables. "
+                f"Length of bs must match the number of variables."
+            )
+        bs_per = bs_spec
+    else:
+        bs_per = [str(bs_spec)] * d
+
+    marginals: list[SmoothBasis] = []
+    for j in range(d):
+        marginal_term = SmoothTerm(
+            variables=(term.variables[j],),
+            smooth_type="s",
+            bs=bs_per[j],
+            k=k_per[j],
+            extra={k: v for k, v in term.extra.items() if k not in ("k", "bs")},
+        )
+        marginals.append(_resolve_basis(marginal_term))
+
+    return TensorInteractionBasis(marginals)
 
 
 def _is_factor(arr: NDArray) -> bool:
@@ -186,9 +232,8 @@ class SmoothInfo:
     null_space_dim:
         Dimension of the penalty null space for this smooth.
     penalty_indices:
-        Indices into `ModelMatrix.penalties` that belong to this smooth.
-        For ``s()`` terms this is a single index; for ``te()`` terms it is
-        one index per marginal direction.
+        Indices into `ModelMatrix.penalties` that belong to this smooth. For `s()` terms this is a
+        single index; for `te()` terms it is one index per marginal direction.
     """
 
     term: SmoothTerm
@@ -352,12 +397,14 @@ def build_model_matrix(
 
         if term.smooth_type == "te":
             basis = _resolve_tensor_basis(term)
+        elif term.smooth_type == "ti":
+            basis = _resolve_tensor_interaction_basis(term)
         elif term.smooth_type == "s":
             basis = _resolve_basis(term)
         else:
             raise NotImplementedError(
                 f"Smooth type {term.smooth_type!r} is not yet supported. "
-                "Only s() and te() are implemented."
+                "Only s(), te(), and ti() are implemented."
             )
 
         if len(term.variables) == 1:
@@ -370,7 +417,7 @@ def build_model_matrix(
         basis_mat = basis.basis_matrix(x)  # (n, k)
         nsd = basis.null_space_dimension()
 
-        is_tensor = isinstance(basis, TensorProductBasis)
+        is_tensor = isinstance(basis, (TensorProductBasis, TensorInteractionBasis))
 
         if is_tensor:
             pen_mats = basis.penalty_matrices()
