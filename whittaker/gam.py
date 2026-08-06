@@ -231,6 +231,18 @@ class GAM:
         self._check_fitted()
         return self._fit_result.gcv_score
 
+    @property
+    def aic(self) -> float:
+        """Akaike Information Criterion."""
+        self._check_fitted()
+        return self._fit_result.aic
+
+    @property
+    def bic(self) -> float:
+        """Bayesian Information Criterion."""
+        self._check_fitted()
+        return self._fit_result.bic
+
     def smooth_tests(self) -> list:
         """Compute approximate p-values for all smooth terms.
 
@@ -282,6 +294,8 @@ class GAM:
                 f"Deviance:   {r.deviance:.4f}",
                 f"GCV score:  {r.gcv_score:.6f}",
                 f"Scale est:  {r.scale:.6f}",
+                f"AIC:        {r.aic:.2f}",
+                f"BIC:        {r.bic:.2f}",
             ]
         )
 
