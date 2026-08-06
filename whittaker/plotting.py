@@ -209,11 +209,12 @@ def check(
 
     model._check_fitted()
 
-    residuals = model.residuals
+    deviance_resid = model.get_residuals("deviance")
+    pearson_resid = model.get_residuals("pearson")
     fitted = model.fitted_values
     response = model._model_matrix.response
 
-    sorted_resid = np.sort(residuals)
+    sorted_resid = np.sort(deviance_resid)
     n = len(sorted_resid)
     from scipy.stats import norm
 
@@ -236,16 +237,18 @@ def check(
         .mark_circle(size=15, color="#4682B4", opacity=0.6)
         .encode(
             x=alt.X("theoretical:Q").title("Theoretical quantiles"),
-            y=alt.Y("observed:Q").title("Observed quantiles"),
+            y=alt.Y("observed:Q").title("Deviance residuals"),
         )
     )
     qq_ref = (
         alt.Chart(qq_line_data).mark_line(color="gray", strokeDash=[4, 4]).encode(x="x:Q", y="y:Q")
     )
-    qq_plot = (qq_points + qq_ref).properties(width=300, height=250, title="QQ plot of residuals")
+    qq_plot = (qq_points + qq_ref).properties(
+        width=300, height=250, title="QQ plot of deviance residuals"
+    )
 
     resid_fit_data = alt.Data(
-        values=[{"fitted": float(f), "residual": float(r)} for f, r in zip(fitted, residuals)]
+        values=[{"fitted": float(f), "residual": float(r)} for f, r in zip(fitted, pearson_resid)]
     )
 
     resid_fit_plot = (
@@ -253,9 +256,9 @@ def check(
         .mark_circle(size=15, color="#4682B4", opacity=0.5)
         .encode(
             x=alt.X("fitted:Q").title("Fitted values"),
-            y=alt.Y("residual:Q").title("Residuals"),
+            y=alt.Y("residual:Q").title("Pearson residuals"),
         )
-        .properties(width=300, height=250, title="Residuals vs fitted")
+        .properties(width=300, height=250, title="Pearson residuals vs fitted")
     )
     resid_zero = (
         alt.Chart(alt.Data(values=[{}]))
@@ -264,15 +267,15 @@ def check(
     )
     resid_fit_plot = resid_fit_plot + resid_zero
 
-    hist_data = alt.Data(values=[{"residual": float(r)} for r in residuals])
+    hist_data = alt.Data(values=[{"residual": float(r)} for r in deviance_resid])
     hist_plot = (
         alt.Chart(hist_data)
         .mark_bar(color="#4682B4", opacity=0.7)
         .encode(
-            x=alt.X("residual:Q").bin(maxbins=30).title("Residuals"),
+            x=alt.X("residual:Q").bin(maxbins=30).title("Deviance residuals"),
             y=alt.Y("count()").title("Frequency"),
         )
-        .properties(width=300, height=250, title="Histogram of residuals")
+        .properties(width=300, height=250, title="Histogram of deviance residuals")
     )
 
     resp_fit_data = alt.Data(

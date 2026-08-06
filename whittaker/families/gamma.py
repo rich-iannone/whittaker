@@ -37,6 +37,11 @@ class Gamma(Family):
         y_c = np.maximum(y, _EPS)
         return float(2.0 * np.sum(-np.log(y_c / mu_c) + (y - mu_c) / mu_c))
 
+    def unit_deviance(self, y: NDArray, mu: NDArray) -> NDArray:
+        mu_c = np.maximum(mu, _EPS)
+        y_c = np.maximum(y, _EPS)
+        return 2.0 * (-np.log(y_c / mu_c) + (y - mu_c) / mu_c)
+
     def log_likelihood(self, y: NDArray, mu: NDArray, scale: float) -> float:
         from scipy.special import gammaln
 

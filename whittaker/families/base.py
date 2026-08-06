@@ -49,6 +49,13 @@ class Family(ABC):
         """Total (unscaled) deviance: 2 * Σ [ℓ(y; y) − ℓ(y; μ)]."""
         ...
 
+    def unit_deviance(self, y: NDArray, mu: NDArray) -> NDArray:
+        """Per-observation deviance contributions d_i (before summing).
+
+        Default implementation: `(y - mu)^2` (Gaussian). Override for other families.
+        """
+        return (y - mu) ** 2
+
     @abstractmethod
     def log_likelihood(self, y: NDArray, mu: NDArray, scale: float) -> float:
         """Log-likelihood ℓ(y; μ, φ) evaluated at the given scale parameter φ."""
