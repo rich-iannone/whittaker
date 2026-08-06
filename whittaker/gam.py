@@ -82,6 +82,7 @@ class GAM:
         data: dict[str, NDArray],
         *,
         smoothing_params: list[float] | None = None,
+        method: str = "GCV",
     ) -> GAM:
         """Fit the GAM to data.
 
@@ -92,7 +93,9 @@ class GAM:
             be present.
         smoothing_params:
             Fixed smoothing parameters, one per smooth term. If `None`, smoothing parameters are
-            selected automatically via GCV.
+            selected automatically via *method*.
+        method:
+            Smoothing parameter selection: ``"GCV"`` or ``"REML"``.
 
         Returns
         -------
@@ -104,6 +107,7 @@ class GAM:
             self._model_matrix,
             self._family,
             smoothing_params=smoothing_params,
+            method=method,
         )
         self._fitted = True
         return self
