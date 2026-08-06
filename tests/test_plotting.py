@@ -9,6 +9,10 @@ from whittaker.families.binomial import Binomial
 from whittaker.families.poisson import Poisson
 from whittaker.gam import GAM
 
+alt = pytest.importorskip("altair")
+
+
+
 RNG = np.random.default_rng(23)
 
 
@@ -54,21 +58,18 @@ def _fitted_poisson() -> GAM:
 
 class TestPartialEffects:
     def test_returns_altair_chart(self) -> None:
-        import altair as alt
 
         model = _fitted_gaussian()
         chart = model.plot()
         assert isinstance(chart, (alt.Chart, alt.LayerChart, alt.VConcatChart))
 
     def test_single_smooth_not_vconcatted(self) -> None:
-        import altair as alt
 
         model = _fitted_gaussian()
         chart = model.plot()
         assert not isinstance(chart, alt.VConcatChart)
 
     def test_multi_smooth_vconcatted(self) -> None:
-        import altair as alt
 
         model = _fitted_multi()
         chart = model.plot()
@@ -119,7 +120,6 @@ class TestPartialEffects:
 
 class TestCheck:
     def test_returns_altair_vconcatchart(self) -> None:
-        import altair as alt
 
         model = _fitted_gaussian()
         chart = model.check()
