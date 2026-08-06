@@ -1,4 +1,4 @@
-"""Approximate p-values for smooth terms (Wood 2013)."""
+"""Inference for GAM terms: parametric Wald tests and smooth p-values (Wood 2013)."""
 
 from __future__ import annotations
 
@@ -6,10 +6,36 @@ from dataclasses import dataclass
 
 import numpy as np
 from numpy.typing import NDArray
-from scipy.stats import chi2
+from scipy.stats import chi2, norm
+from scipy.stats import t as t_dist
 
 from whittaker.fitting.pirls import FitResult
 from whittaker.model_matrix import ModelMatrix
+
+
+@dataclass
+class ParametricTestResult:
+    """Result of a Wald test for a parametric coefficient.
+
+    Attributes
+    ----------
+    term_label:
+        Human-readable label for the term.
+    estimate:
+        Coefficient estimate β̂.
+    se:
+        Standard error of β̂.
+    stat:
+        Test statistic (t for Gaussian, z for known-scale families).
+    p_value:
+        Two-sided p-value.
+    """
+
+    term_label: str
+    estimate: float
+    se: float
+    stat: float
+    p_value: float
 
 
 @dataclass
@@ -180,6 +206,72 @@ def smooth_tests(
                 stat=stat,
                 edf=edf_j,
                 ref_df=ref_df,
+                p_value=pval,
+            )
+        )
+
+    return results
+
+
+def parametric_tests(
+    fit: FitResult,
+    model: ModelMatrix,
+    scale_known: bool,
+) -> list[ParametricTestResult]:
+    """Compute Wald tests for parametric (non-smooth) coefficients.
+
+    For families with unknown scale (Gaussian, Gamma), uses the t-distribution with residual degrees
+    of freedom. For known-scale families (Binomial, Poisson), uses the standard normal (z-test).
+
+    Parameters
+    ----------
+    fit:
+        Result from `pirls_fit()`.
+    model:
+        The model matrix used for fitting.
+    scale_known:
+        Whether the family has a known scale parameter.
+
+    Returns
+    -------
+    list[ParametricTestResult]
+        One result per parametric coefficient (intercept + linear/interaction terms).
+    """
+    X = model.X
+    V_beta = _bayesian_covariance(
+        X,
+        model.penalties,
+        fit.smoothing_params,
+        fit.scale,
+        W=fit.weights,
+    )
+
+    n = X.shape[0]
+    residual_df = n - fit.edf_total
+
+    results: list[ParametricTestResult] = []
+
+    n_param_cols = (1 if model.has_intercept else 0) + model.n_parametric
+    for j in range(n_param_cols):
+        beta_j = float(fit.coefficients[j])
+        se_j = float(np.sqrt(max(V_beta[j, j], 0.0)))
+
+        if se_j < 1e-30:
+            stat = 0.0
+            pval = 1.0
+        elif scale_known:
+            stat = beta_j / se_j
+            pval = float(2.0 * norm.sf(abs(stat)))
+        else:
+            stat = beta_j / se_j
+            pval = float(2.0 * t_dist.sf(abs(stat), df=max(residual_df, 1.0)))
+
+        results.append(
+            ParametricTestResult(
+                term_label=model.column_names[j],
+                estimate=beta_j,
+                se=se_j,
+                stat=stat,
                 p_value=pval,
             )
         )
