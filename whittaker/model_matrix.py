@@ -359,9 +359,7 @@ def build_model_matrix(
             constraint = basis.identifiability_constraints()
             if constraint is not None:
                 basis_mat = _apply_constraint(basis_mat, constraint)
-                pen_mats = [
-                    _apply_constraint_to_penalty(pm, constraint) for pm in pen_mats
-                ]
+                pen_mats = [_apply_constraint_to_penalty(pm, constraint) for pm in pen_mats]
                 nsd = max(nsd - constraint.shape[0], 0)
 
         k_eff = basis_mat.shape[1]

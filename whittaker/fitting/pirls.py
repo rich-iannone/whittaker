@@ -81,6 +81,7 @@ class FitResult:
     converged: bool
     hat_matrix_trace: float
     residuals: NDArray
+    weights: NDArray | None = None
 
 
 def _penalized_solve(
@@ -244,6 +245,7 @@ def _select_smoothing_params_gcv(
         return []
 
     if len(penalties) == 1:
+
         def scalar_obj(log_sp: float) -> float:
             return _eval_gcv(X, z, penalties, [np.exp(log_sp)], W=W, offset=offset)
 
@@ -265,13 +267,16 @@ def _select_smoothing_params_gcv(
         gcv_before = _eval_gcv(X, z, penalties, sp, W=W, offset=offset)
 
         for j in range(len(penalties)):
+
             def coord_obj(log_sp_j: float) -> float:
                 sp_trial = list(sp)
                 sp_trial[j] = np.exp(log_sp_j)
                 return _eval_gcv(X, z, penalties, sp_trial, W=W, offset=offset)
 
             result = minimize_scalar(
-                coord_obj, bounds=(-15, 15), method="bounded",
+                coord_obj,
+                bounds=(-15, 15),
+                method="bounded",
             )
             sp[j] = float(np.exp(result.x))
 
@@ -411,8 +416,16 @@ def _select_smoothing_params_reml(
 
     def objective(rho: NDArray) -> tuple[float, NDArray]:
         return _reml_objective(
-            rho, X, z, penalties, penalty_ranks, n_unpenalized,
-            scale_known, scale, W=W, offset=offset,
+            rho,
+            X,
+            z,
+            penalties,
+            penalty_ranks,
+            n_unpenalized,
+            scale_known,
+            scale,
+            W=W,
+            offset=offset,
         )
 
     result = minimize(
@@ -450,8 +463,8 @@ def pirls_fit(
         Fixed smoothing parameters λ_j, one per smooth term. If `None`, smoothing parameters are
         selected automatically via *method*.
     method:
-        Smoothing parameter selection method: ``"GCV"`` for Generalized Cross-Validation, or
-        ``"REML"`` for Restricted Maximum Likelihood. Ignored when *smoothing_params* is provided.
+        Smoothing parameter selection method: `"GCV"` for Generalized Cross-Validation, or `"REML"`
+        for Restricted Maximum Likelihood. Ignored when *smoothing_params* is provided.
     max_iter:
         Maximum number of P-IRLS iterations.
     tol:
@@ -504,16 +517,27 @@ def pirls_fit(
         """Dispatch to GCV or REML selection."""
         if use_reml:
             return _select_smoothing_params_reml(
-                X, z, model.penalties, pen_ranks, n_unpenalized,
-                scale_known=family.scale_known, W=W, offset=offset,
+                X,
+                z,
+                model.penalties,
+                pen_ranks,
+                n_unpenalized,
+                scale_known=family.scale_known,
+                W=W,
+                offset=offset,
                 n_sp=len(model.penalties),
             )
         return _select_smoothing_params_gcv(
-            X, z, model.penalties, W=W, offset=offset,
+            X,
+            z,
+            model.penalties,
+            W=W,
+            offset=offset,
             n_sp=len(model.penalties),
         )
 
     is_gaussian_identity = isinstance(family, Gaussian)
+    W_final: NDArray | None = None
 
     if is_gaussian_identity:
         if not sp:
@@ -561,6 +585,7 @@ def pirls_fit(
             dev_old = dev
 
         hat_trace = float(hat_arr[0])
+        W_final = W
 
     smooths_info = [(s.col_start, s.col_end) for s in model.smooths]
     edf = _edf_per_smooth(X, model.penalties, sp, smooths_info)
@@ -588,4 +613,5 @@ def pirls_fit(
         converged=converged,
         hat_matrix_trace=hat_trace,
         residuals=y - mu,
+        weights=W_final,
     )

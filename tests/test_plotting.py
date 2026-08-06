@@ -12,7 +12,6 @@ from whittaker.gam import GAM
 alt = pytest.importorskip("altair")
 
 
-
 RNG = np.random.default_rng(23)
 
 
@@ -28,9 +27,7 @@ def _fitted_multi() -> GAM:
     x1 = np.linspace(0, 2 * np.pi, n)
     x2 = np.linspace(0, 1, n)
     y = np.sin(x1) + 0.5 * x2 + RNG.normal(0, 0.2, n)
-    return GAM("y ~ s(x1, k=10) + s(x2, k=10)").fit(
-        {"y": y, "x1": x1, "x2": x2}
-    )
+    return GAM("y ~ s(x1, k=10) + s(x2, k=10)").fit({"y": y, "x1": x1, "x2": x2})
 
 
 def _fitted_binomial() -> GAM:

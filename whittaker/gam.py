@@ -231,11 +231,29 @@ class GAM:
         self._check_fitted()
         return self._fit_result.gcv_score
 
+    def smooth_tests(self) -> list:
+        """Compute approximate p-values for all smooth terms.
+
+        Uses the Wood (2013) approach: eigendecomposition of the Bayesian covariance block for each
+        smooth, with a chi-squared reference distribution.
+
+        Returns
+        -------
+        list[SmoothTestResult]
+            One result per smooth term.
+        """
+        from whittaker.fitting.inference import smooth_tests
+
+        self._check_fitted()
+        return smooth_tests(self._fit_result, self._model_matrix)
+
     def summary(self) -> str:
         """Return a text summary of the fitted model."""
         self._check_fitted()
         r = self._fit_result
         mm = self._model_matrix
+
+        tests = self.smooth_tests()
 
         lines = [
             "GAM fit summary",
@@ -245,15 +263,17 @@ class GAM:
             f"Observations: {mm.n_obs}",
             f"Coefficients: {mm.n_coefs}",
             "",
-            "Smooth terms:",
-            f"  {'Term':<30} {'EDF':>8} {'λ':>12}",
-            f"  {'-' * 30} {'-' * 8} {'-' * 12}",
+            "Approximate significance of smooth terms:",
+            f"  {'Term':<24} {'EDF':>6} {'Ref.df':>6} {'Chi.sq':>10} {'p-value':>10}",
+            f"  {'-' * 24} {'-' * 6} {'-' * 6} {'-' * 10} {'-' * 10}",
         ]
 
-        for info, edf_j in zip(mm.smooths, r.edf):
-            sp_vals = [r.smoothing_params[i] for i in info.penalty_indices]
-            sp_str = ", ".join(f"{v:.4g}" for v in sp_vals)
-            lines.append(f"  {info.term!r:<30} {edf_j:>8.2f} {sp_str:>12}")
+        for test in tests:
+            pval_str = f"{test.p_value:.4g}" if test.p_value >= 1e-16 else "< 1e-16"
+            lines.append(
+                f"  {test.term_label:<24} {test.edf:>6.2f} {test.ref_df:>6.0f} "
+                f"{test.stat:>10.3f} {pval_str:>10}"
+            )
 
         lines.extend(
             [

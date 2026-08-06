@@ -37,9 +37,7 @@ class TensorProductBasis(SmoothBasis):
     def fit(self, x: NDArray) -> TensorProductBasis:
         x = self._as_2d(x)
         if x.shape[1] != len(self._marginals):
-            raise ValueError(
-                f"Expected {len(self._marginals)} columns, got {x.shape[1]}."
-            )
+            raise ValueError(f"Expected {len(self._marginals)} columns, got {x.shape[1]}.")
         for j, basis in enumerate(self._marginals):
             basis.fit(x[:, j])
         self._fitted = True
