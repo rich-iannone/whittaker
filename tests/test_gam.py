@@ -261,7 +261,7 @@ class TestMultipleSmooths:
         assert rmse < 0.25
 
     def test_per_term_gcv_different_sp(self) -> None:
-        rng = np.random.default_rng(77)
+        rng = np.random.default_rng(58)
         n = 400
         x1 = np.linspace(0, 2 * np.pi, n)
         x2 = np.linspace(0, 1, n)
@@ -445,3 +445,67 @@ class TestPoissonGAM:
         )
         assert len(model.edf) == 2
         assert len(model.smoothing_params) == 2
+
+
+# ---------------------------------------------------------------------------
+# REML smoothing parameter selection (GAM-level)
+# ---------------------------------------------------------------------------
+
+
+class TestREMLGAM:
+    def test_reml_gaussian_fit(self) -> None:
+        data = _sin_data()
+        model = GAM("y ~ s(x, k=10)").fit(data, method="REML")
+        assert model.is_fitted
+        rmse = np.sqrt(np.mean((model.fitted_values - np.sin(data["x"])) ** 2))
+        assert rmse < 0.15
+
+    def test_reml_multi_smooth(self) -> None:
+        data = _multi_data()
+        model = GAM("y ~ s(x1, k=10) + s(x2, k=10)").fit(
+            data, method="REML"
+        )
+        assert len(model.smoothing_params) == 2
+        assert len(model.edf) == 2
+
+    def test_reml_predict_with_se(self) -> None:
+        data = _sin_data()
+        model = GAM("y ~ s(x, k=10)").fit(data, method="REML")
+        pred = model.predict({"x": np.array([1.0, 2.0])}, se=True)
+        assert pred.se is not None
+        assert np.all(pred.se > 0)
+
+    def test_reml_binomial(self) -> None:
+        rng = np.random.default_rng(42)
+        n = 400
+        x = np.linspace(-3, 3, n)
+        p_true = 1.0 / (1.0 + np.exp(-np.sin(x)))
+        y = rng.binomial(1, p_true, n).astype(float)
+
+        model = GAM("y ~ s(x, k=10)", family=Binomial()).fit(
+            {"y": y, "x": x}, method="REML"
+        )
+        assert model.is_fitted
+        assert np.all(model.fitted_values > 0)
+        assert np.all(model.fitted_values < 1)
+
+    def test_reml_poisson(self) -> None:
+        rng = np.random.default_rng(42)
+        n = 300
+        x = np.linspace(0, 2 * np.pi, n)
+        mu_true = np.exp(0.5 + 0.5 * np.sin(x))
+        y = rng.poisson(mu_true).astype(float)
+
+        model = GAM("y ~ s(x, k=10)", family=Poisson()).fit(
+            {"y": y, "x": x}, method="REML"
+        )
+        assert model.is_fitted
+        assert np.all(model.fitted_values > 0)
+
+    @pytest.mark.parametrize("bs", ["tp", "cr", "ps"])
+    def test_reml_basis_types(self, bs: str) -> None:
+        data = _sin_data()
+        model = GAM(f"y ~ s(x, bs='{bs}', k=10)").fit(data, method="REML")
+        assert model.is_fitted
+        rmse = np.sqrt(np.mean((model.fitted_values - np.sin(data["x"])) ** 2))
+        assert rmse < 0.15

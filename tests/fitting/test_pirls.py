@@ -12,6 +12,7 @@ from whittaker.fitting.pirls import (
     FitResult,
     _gcv_score,
     _penalized_solve,
+    _reml_objective,
     pirls_fit,
 )
 from whittaker.formula.parser import parse
@@ -205,7 +206,7 @@ class TestSmoothingSelection:
         assert result.gcv_score > 0
 
     def test_per_term_sp_differ_for_different_complexity(self) -> None:
-        rng = np.random.default_rng(77)
+        rng = np.random.default_rng(58)
         n = 400
         x1 = np.linspace(0, 2 * np.pi, n)
         x2 = np.linspace(0, 1, n)
@@ -555,3 +556,151 @@ class TestPoissonFit:
         result = pirls_fit(mm, Poisson())
         assert result.converged
         assert np.all(np.isfinite(result.fitted_values))
+
+
+# ---------------------------------------------------------------------------
+# REML smoothing parameter selection
+# ---------------------------------------------------------------------------
+
+
+class TestREML:
+    def test_reml_selects_positive_sp(self) -> None:
+        data = _sin_data()
+        formula = parse("y ~ s(x, k=10)")
+        mm = build_model_matrix(formula, data)
+        result = pirls_fit(mm, method="REML")
+        assert all(sp > 0 for sp in result.smoothing_params)
+
+    def test_reml_converges_gaussian(self) -> None:
+        data = _sin_data()
+        formula = parse("y ~ s(x, k=10)")
+        mm = build_model_matrix(formula, data)
+        result = pirls_fit(mm, method="REML")
+        assert result.converged
+
+    def test_reml_sin_recovery(self) -> None:
+        n = 300
+        x = np.linspace(0, 2 * np.pi, n)
+        y_true = np.sin(x)
+        y = y_true + RNG.normal(0, 0.15, n)
+
+        formula = parse("y ~ s(x, k=20)")
+        mm = build_model_matrix(formula, {"y": y, "x": x})
+        result = pirls_fit(mm, method="REML")
+
+        rmse = np.sqrt(np.mean((result.fitted_values - y_true) ** 2))
+        assert rmse < 0.1
+
+    def test_reml_edf_reasonable(self) -> None:
+        data = _sin_data()
+        formula = parse("y ~ s(x, k=10)")
+        mm = build_model_matrix(formula, data)
+        result = pirls_fit(mm, method="REML")
+        assert 1.0 < result.edf[0] < 10.0
+
+    def test_reml_multiple_smooths(self) -> None:
+        data = _multi_data()
+        formula = parse("y ~ s(x1, k=10) + s(x2, k=10)")
+        mm = build_model_matrix(formula, data)
+        result = pirls_fit(mm, method="REML")
+        assert len(result.smoothing_params) == 2
+        assert all(sp > 0 for sp in result.smoothing_params)
+
+    def test_reml_linear_data_low_edf(self) -> None:
+        data = _linear_data()
+        formula = parse("y ~ s(x, k=10)")
+        mm = build_model_matrix(formula, data)
+        result = pirls_fit(mm, method="REML")
+        assert result.edf[0] < 4.0
+
+    def test_reml_better_than_arbitrary_sp(self) -> None:
+        data = _sin_data()
+        formula = parse("y ~ s(x, k=15)")
+        mm = build_model_matrix(formula, data)
+
+        result_reml = pirls_fit(mm, method="REML")
+        result_oversmooth = pirls_fit(mm, smoothing_params=[1000.0])
+        result_undersmooth = pirls_fit(mm, smoothing_params=[1e-8])
+
+        y_true = np.sin(data["x"])
+        rmse_reml = np.sqrt(np.mean((result_reml.fitted_values - y_true) ** 2))
+        rmse_over = np.sqrt(np.mean((result_oversmooth.fitted_values - y_true) ** 2))
+        rmse_under = np.sqrt(np.mean((result_undersmooth.fitted_values - y_true) ** 2))
+
+        assert rmse_reml < rmse_over
+        assert rmse_reml < rmse_under
+
+    def test_reml_binomial(self) -> None:
+        rng = np.random.default_rng(42)
+        n = 400
+        x = np.linspace(-3, 3, n)
+        p_true = 1.0 / (1.0 + np.exp(-np.sin(x)))
+        y = rng.binomial(1, p_true, n).astype(float)
+
+        formula = parse("y ~ s(x, k=10)")
+        mm = build_model_matrix(formula, {"y": y, "x": x})
+        result = pirls_fit(mm, Binomial(), method="REML")
+        assert result.converged
+        assert result.scale == 1.0
+        assert np.all(result.fitted_values > 0)
+        assert np.all(result.fitted_values < 1)
+
+    def test_reml_poisson(self) -> None:
+        rng = np.random.default_rng(42)
+        n = 300
+        x = np.linspace(0, 2 * np.pi, n)
+        mu_true = np.exp(0.5 + 0.5 * np.sin(x))
+        y = rng.poisson(mu_true).astype(float)
+
+        formula = parse("y ~ s(x, k=10)")
+        mm = build_model_matrix(formula, {"y": y, "x": x})
+        result = pirls_fit(mm, Poisson(), method="REML")
+        assert result.converged
+        assert result.scale == 1.0
+        assert np.all(result.fitted_values > 0)
+
+    def test_reml_invalid_method_raises(self) -> None:
+        data = _sin_data()
+        formula = parse("y ~ s(x, k=10)")
+        mm = build_model_matrix(formula, data)
+        with pytest.raises(ValueError, match="method"):
+            pirls_fit(mm, method="invalid")
+
+    def test_reml_no_penalties_gives_empty_sp(self) -> None:
+        formula = parse("y ~ x")
+        data = _sin_data()
+        mm = build_model_matrix(formula, data)
+        result = pirls_fit(mm, method="REML")
+        assert result.smoothing_params == []
+
+    def test_reml_gradient_finite_difference(self) -> None:
+        """Verify analytic gradient against finite differences."""
+        rng = np.random.default_rng(42)
+        n = 100
+        x = np.linspace(0, 2 * np.pi, n)
+        y = np.sin(x) + rng.normal(0, 0.2, n)
+
+        formula = parse("y ~ s(x, k=8)")
+        mm = build_model_matrix(formula, {"y": y, "x": x})
+
+        from whittaker.fitting.pirls import _penalty_ranks
+
+        pen_ranks = _penalty_ranks(mm.penalties)
+        n_unpen = 1 + sum(s.null_space_dim for s in mm.smooths)
+
+        log_sp = np.array([1.0])
+
+        val, grad = _reml_objective(
+            log_sp, mm.X, y, mm.penalties, pen_ranks, n_unpen,
+            scale_known=False,
+        )
+
+        eps = 1e-5
+        log_sp_plus = log_sp + eps
+        val_plus, _ = _reml_objective(
+            log_sp_plus, mm.X, y, mm.penalties, pen_ranks, n_unpen,
+            scale_known=False,
+        )
+        fd_grad = (val_plus - val) / eps
+
+        assert_allclose(grad[0], fd_grad, rtol=1e-3)

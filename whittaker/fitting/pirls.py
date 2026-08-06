@@ -27,7 +27,7 @@ from dataclasses import dataclass
 import numpy as np
 from numpy.typing import NDArray
 from scipy.linalg import cho_factor, cho_solve
-from scipy.optimize import minimize_scalar
+from scipy.optimize import minimize, minimize_scalar
 
 from whittaker.families.base import Family
 from whittaker.families.gaussian import Gaussian
@@ -282,18 +282,163 @@ def _select_smoothing_params_gcv(
     return sp
 
 
+def _penalty_ranks(penalties: list[NDArray]) -> list[int]:
+    """Compute the rank of each penalty matrix from its eigenvalues."""
+    ranks = []
+    for pen in penalties:
+        eigvals = np.linalg.eigvalsh(pen)
+        ranks.append(int(np.sum(eigvals > np.max(eigvals) * pen.shape[0] * np.finfo(float).eps)))
+    return ranks
+
+
+def _reml_objective(
+    log_sp: NDArray,
+    X: NDArray,
+    z: NDArray,
+    penalties: list[NDArray],
+    penalty_ranks: list[int],
+    n_unpenalized: int,
+    scale_known: bool,
+    scale: float = 1.0,
+    W: NDArray | None = None,
+    offset: NDArray | None = None,
+) -> tuple[float, NDArray]:
+    """Evaluate the negative REML log-likelihood and its gradient.
+
+    Parameters
+    ----------
+    log_sp:
+        Log smoothing parameters ρ = log(λ), shape ``(n_sp,)``.
+    n_unpenalized:
+        Number of totally unpenalized parameters (intercept + parametric terms +
+        penalty null-space dimensions).
+    scale_known:
+        If True, use fixed *scale*; otherwise profile out φ (Gaussian).
+
+    Returns
+    -------
+    (value, gradient)
+        Negative REML and its gradient w.r.t. ρ.
+    """
+    n, p = X.shape
+    sp = np.exp(log_sp)
+
+    y = z.copy()
+    if offset is not None:
+        y = y - offset
+
+    if W is not None:
+        sqrtW = np.sqrt(W)
+        Xw = X * sqrtW[:, np.newaxis]
+        yw = y * sqrtW
+    else:
+        Xw = X
+        yw = y
+
+    XtX = Xw.T @ Xw
+    Xty = Xw.T @ yw
+
+    S_total = np.zeros((p, p))
+    for lam, pen in zip(sp, penalties):
+        S_total += lam * pen
+
+    A = XtX + S_total
+    A = (A + A.T) * 0.5
+    ridge = np.finfo(float).eps * max(np.trace(A) / p, 1.0)
+    A[np.diag_indices_from(A)] += ridge
+
+    try:
+        cho, lower = cho_factor(A)
+    except np.linalg.LinAlgError:
+        return 1e20, np.zeros_like(log_sp)
+
+    beta = cho_solve((cho, lower), Xty)
+
+    # Penalized deviance: D_pen = ||√W(z - Xβ̂)||² + β̂'S_λ β̂ = y'y - β̂'X'y
+    d_pen = float(np.dot(yw, yw) - np.dot(beta, Xty))
+
+    # log|A| from Cholesky diagonal
+    log_det_A = 2.0 * float(np.sum(np.log(np.diag(cho))))
+
+    # log|S_λ|⁺ = Σ m_j · log(λ_j)  (block-diagonal penalties)
+    log_det_S = sum(m * rho for m, rho in zip(penalty_ranks, log_sp))
+
+    M = n_unpenalized
+    if scale_known:
+        val = d_pen / (2.0 * scale) + 0.5 * log_det_A - 0.5 * log_det_S
+    else:
+        d_pen = max(d_pen, 1e-30)
+        val = 0.5 * (n - M) * np.log(d_pen) + 0.5 * log_det_A - 0.5 * log_det_S
+
+    # Gradient w.r.t. ρ_j
+    grad = np.zeros_like(log_sp)
+    for j, (lam_j, pen_j, m_j) in enumerate(zip(sp, penalties, penalty_ranks)):
+        beta_Sj_beta = float(beta @ pen_j @ beta)
+        tr_Ainv_Sj = float(np.trace(cho_solve((cho, lower), pen_j)))
+
+        if scale_known:
+            grad[j] = lam_j * beta_Sj_beta / (2.0 * scale) + lam_j * 0.5 * tr_Ainv_Sj - 0.5 * m_j
+        else:
+            grad[j] = (
+                (n - M) * lam_j * beta_Sj_beta / (2.0 * d_pen)
+                + lam_j * 0.5 * tr_Ainv_Sj
+                - 0.5 * m_j
+            )
+
+    return float(val), grad
+
+
+def _select_smoothing_params_reml(
+    X: NDArray,
+    z: NDArray,
+    penalties: list[NDArray],
+    penalty_ranks: list[int],
+    n_unpenalized: int,
+    scale_known: bool,
+    scale: float = 1.0,
+    W: NDArray | None = None,
+    offset: NDArray | None = None,
+    n_sp: int = 1,
+) -> list[float]:
+    """Select smoothing parameters by maximizing REML.
+
+    Uses L-BFGS-B on ρ = log(λ) with analytic gradients.
+    """
+    if n_sp == 0:
+        return []
+
+    rho_init = np.zeros(n_sp)
+
+    def objective(rho: NDArray) -> tuple[float, NDArray]:
+        return _reml_objective(
+            rho, X, z, penalties, penalty_ranks, n_unpenalized,
+            scale_known, scale, W=W, offset=offset,
+        )
+
+    result = minimize(
+        objective,
+        rho_init,
+        method="L-BFGS-B",
+        jac=True,
+        bounds=[(-20, 20)] * n_sp,
+    )
+
+    return [float(np.exp(r)) for r in result.x]
+
+
 def pirls_fit(
     model: ModelMatrix,
     family: Family | None = None,
     *,
     smoothing_params: list[float] | None = None,
+    method: str = "GCV",
     max_iter: int = 50,
     tol: float = 1e-7,
 ) -> FitResult:
     """Fit a GAM using Penalized IRLS.
 
     For Gaussian with identity link, this reduces to a single penalized least squares solve with
-    GCV-selected smoothing parameters.
+    automatically selected smoothing parameters.
 
     Parameters
     ----------
@@ -303,7 +448,10 @@ def pirls_fit(
         Response distribution family. Defaults to `Gaussian()`.
     smoothing_params:
         Fixed smoothing parameters λ_j, one per smooth term. If `None`, smoothing parameters are
-        selected automatically via GCV.
+        selected automatically via *method*.
+    method:
+        Smoothing parameter selection method: ``"GCV"`` for Generalized Cross-Validation, or
+        ``"REML"`` for Restricted Maximum Likelihood. Ignored when *smoothing_params* is provided.
     max_iter:
         Maximum number of P-IRLS iterations.
     tol:
@@ -317,6 +465,12 @@ def pirls_fit(
     """
     if family is None:
         family = Gaussian()
+
+    method_upper = method.upper()
+    if method_upper not in ("GCV", "REML"):
+        raise ValueError(f"method must be 'GCV' or 'REML', got {method!r}.")
+
+    use_reml = method_upper == "REML"
 
     X = model.X
     y = model.response
@@ -334,14 +488,36 @@ def pirls_fit(
     else:
         sp = []
 
+    # Precompute REML-specific quantities
+    pen_ranks: list[int] = []
+    n_unpenalized = 0
+    if use_reml and auto_select and model.penalties:
+        pen_ranks = _penalty_ranks(model.penalties)
+        n_unpenalized = (1 if model.has_intercept else 0) + model.n_parametric
+        for s_info in model.smooths:
+            n_unpenalized += s_info.null_space_dim
+
+    def _select_sp(
+        z: NDArray,
+        W: NDArray | None = None,
+    ) -> list[float]:
+        """Dispatch to GCV or REML selection."""
+        if use_reml:
+            return _select_smoothing_params_reml(
+                X, z, model.penalties, pen_ranks, n_unpenalized,
+                scale_known=family.scale_known, W=W, offset=offset,
+                n_sp=len(model.penalties),
+            )
+        return _select_smoothing_params_gcv(
+            X, z, model.penalties, W=W, offset=offset,
+            n_sp=len(model.penalties),
+        )
+
     is_gaussian_identity = isinstance(family, Gaussian)
 
     if is_gaussian_identity:
         if not sp:
-            sp = _select_smoothing_params_gcv(
-                X, y, model.penalties, offset=offset,
-                n_sp=len(model.penalties),
-            )
+            sp = _select_sp(y)
         beta, hat_arr = _penalized_solve(X, y, model.penalties, sp, offset=offset)
         hat_trace = float(hat_arr[0])
 
@@ -368,10 +544,7 @@ def pirls_fit(
             z = eta + (y - mu) / dmu_deta
 
             if auto_select:
-                sp = _select_smoothing_params_gcv(
-                    X, z, model.penalties, W=W, offset=offset,
-                    n_sp=len(model.penalties),
-                )
+                sp = _select_sp(z, W=W)
 
             beta, hat_arr = _penalized_solve(X, z, model.penalties, sp, W=W, offset=offset)
 
