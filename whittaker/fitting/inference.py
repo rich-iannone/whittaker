@@ -170,9 +170,13 @@ def smooth_tests(
 
         stat, ref_df, pval = _smooth_test(beta_j, V_j, X_j, edf_j)
 
+        label = repr(info.term)
+        if info.by_level is not None:
+            label = f"{label}:{info.by_level}"
+
         results.append(
             SmoothTestResult(
-                term_label=repr(info.term),
+                term_label=label,
                 stat=stat,
                 edf=edf_j,
                 ref_df=ref_df,
