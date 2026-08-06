@@ -191,9 +191,48 @@ class GAM:
 
     @property
     def residuals(self) -> NDArray:
-        """Working residuals (y − μ)."""
+        """Response residuals (y − μ)."""
         self._check_fitted()
         return self._fit_result.residuals.copy()
+
+    def get_residuals(self, type: str = "deviance") -> NDArray:
+        """Compute residuals of the specified type.
+
+        Parameters
+        ----------
+        type:
+            One of `"response"`, `"pearson"`, `"deviance"`, or `"working"`.
+
+        Returns
+        -------
+        NDArray
+            Residual vector of shape `(n,)`.
+        """
+        self._check_fitted()
+        y = self._model_matrix.response
+        mu = self._fit_result.fitted_values
+        type_lower = type.lower()
+
+        if type_lower == "response":
+            return y - mu
+
+        if type_lower == "pearson":
+            v = self._family.variance(mu)
+            return (y - mu) / np.sqrt(v)
+
+        if type_lower == "deviance":
+            d = self._family.unit_deviance(y, mu)
+            return np.sign(y - mu) * np.sqrt(np.maximum(d, 0.0))
+
+        if type_lower == "working":
+            eta = self._fit_result.linear_predictor
+            dmu_deta = 1.0 / self._family.link_derivative(mu)
+            return (y - mu) / dmu_deta
+
+        raise ValueError(
+            f"Unknown residual type {type!r}. "
+            "Choose from 'response', 'pearson', 'deviance', or 'working'."
+        )
 
     @property
     def smoothing_params(self) -> list[float]:
@@ -261,8 +300,8 @@ class GAM:
     def parametric_tests(self) -> list:
         """Compute Wald tests for parametric (non-smooth) coefficients.
 
-        Uses the t-distribution for families with unknown scale (Gaussian, Gamma)
-        and the z-distribution for known-scale families (Binomial, Poisson).
+        Uses the t-distribution for families with unknown scale (Gaussian, Gamma) and the
+        z-distribution for known-scale families (Binomial, Poisson).
 
         Returns
         -------
