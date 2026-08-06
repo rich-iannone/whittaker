@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from importlib.metadata import PackageNotFoundError, version
 
-from whittaker.families import Binomial, Family, Gamma, Gaussian, Poisson
+from whittaker.families import Binomial, Family, Gamma, Gaussian, NegativeBinomial, Poisson
 from whittaker.formula import Formula, InteractionTerm, LinearTerm, OffsetTerm, SmoothTerm
 from whittaker.formula import parse as parse_formula
 from whittaker.gam import GAM
@@ -25,6 +25,7 @@ __all__ = [
     "GAM",
     "Gamma",
     "Gaussian",
+    "NegativeBinomial",
     "Poisson",
     "ModelMatrix",
     "PSpline",
