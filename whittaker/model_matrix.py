@@ -114,6 +114,26 @@ def _resolve_tensor_basis(term: SmoothTerm) -> TensorProductBasis:
     return TensorProductBasis(marginals)
 
 
+def _is_factor(arr: NDArray) -> bool:
+    """Check if an array should be treated as a factor (categorical) variable."""
+    arr = np.asarray(arr)
+    return arr.dtype.kind in ("U", "S", "O")
+
+
+def _extract_by_column(data: dict[str, NDArray], name: str) -> NDArray:
+    """Get a by-variable column from *data* without coercing dtype."""
+    if name not in data:
+        available = ", ".join(sorted(data))
+        raise KeyError(
+            f"Column {name!r} required by the formula is not in the data. "
+            f"Available columns: {available}."
+        )
+    col = np.asarray(data[name])
+    if col.ndim != 1:
+        raise ValueError(f"Column {name!r} must be 1-D, got shape {col.shape}.")
+    return col
+
+
 def _extract_column(data: dict[str, NDArray], name: str) -> NDArray:
     """Get a 1-D float array from *data*, raising a clear error if missing."""
     if name not in data:
@@ -177,6 +197,8 @@ class SmoothInfo:
     col_end: int
     null_space_dim: int
     penalty_indices: list[int] = field(default_factory=list)
+    by_var: str | None = None
+    by_level: str | None = None
 
 
 @dataclass
@@ -355,37 +377,102 @@ def build_model_matrix(
         else:
             pen_mats = [basis.penalty_matrix()]
 
-        if apply_constraints:
+        # by= variables skip identifiability constraints (following mgcv convention)
+        has_by = term.by is not None
+        if apply_constraints and not has_by:
             constraint = basis.identifiability_constraints()
             if constraint is not None:
                 basis_mat = _apply_constraint(basis_mat, constraint)
                 pen_mats = [_apply_constraint_to_penalty(pm, constraint) for pm in pen_mats]
                 nsd = max(nsd - constraint.shape[0], 0)
 
-        k_eff = basis_mat.shape[1]
-        col_start = sum(b.shape[1] for b in blocks)
-        col_end = col_start + k_eff
+        if has_by:
+            by_col = _extract_by_column(data, term.by)
 
-        blocks.append(basis_mat)
-        for j in range(k_eff):
-            label = f"{term!r}[{j}]"
-            col_names.append(label)
+            if _is_factor(by_col):
+                levels = sorted(np.unique(by_col))
+                for level in levels:
+                    indicator = (by_col == level).astype(float)
+                    basis_mat_level = basis_mat * indicator[:, np.newaxis]
 
-        pen_start_idx = len(penalty_blocks)
-        for pm in pen_mats:
-            penalty_blocks.append((col_start, col_end, pm))
-        pen_indices = list(range(pen_start_idx, pen_start_idx + len(pen_mats)))
+                    k_eff = basis_mat_level.shape[1]
+                    col_start = sum(b.shape[1] for b in blocks)
+                    col_end = col_start + k_eff
 
-        smooth_infos.append(
-            SmoothInfo(
-                term=term,
-                basis=basis,
-                col_start=col_start,
-                col_end=col_end,
-                null_space_dim=nsd,
-                penalty_indices=pen_indices,
+                    blocks.append(basis_mat_level)
+                    for j in range(k_eff):
+                        col_names.append(f"{term!r}:{level}[{j}]")
+
+                    pen_start_idx = len(penalty_blocks)
+                    for pm in pen_mats:
+                        penalty_blocks.append((col_start, col_end, pm))
+                    pen_indices = list(range(pen_start_idx, pen_start_idx + len(pen_mats)))
+
+                    smooth_infos.append(
+                        SmoothInfo(
+                            term=term,
+                            basis=basis,
+                            col_start=col_start,
+                            col_end=col_end,
+                            null_space_dim=nsd,
+                            penalty_indices=pen_indices,
+                            by_var=term.by,
+                            by_level=str(level),
+                        )
+                    )
+            else:
+                by_vals = np.asarray(by_col, dtype=float)
+                basis_mat_by = basis_mat * by_vals[:, np.newaxis]
+
+                k_eff = basis_mat_by.shape[1]
+                col_start = sum(b.shape[1] for b in blocks)
+                col_end = col_start + k_eff
+
+                blocks.append(basis_mat_by)
+                for j in range(k_eff):
+                    col_names.append(f"{term!r}[{j}]")
+
+                pen_start_idx = len(penalty_blocks)
+                for pm in pen_mats:
+                    penalty_blocks.append((col_start, col_end, pm))
+                pen_indices = list(range(pen_start_idx, pen_start_idx + len(pen_mats)))
+
+                smooth_infos.append(
+                    SmoothInfo(
+                        term=term,
+                        basis=basis,
+                        col_start=col_start,
+                        col_end=col_end,
+                        null_space_dim=nsd,
+                        penalty_indices=pen_indices,
+                        by_var=term.by,
+                    )
+                )
+        else:
+            k_eff = basis_mat.shape[1]
+            col_start = sum(b.shape[1] for b in blocks)
+            col_end = col_start + k_eff
+
+            blocks.append(basis_mat)
+            for j in range(k_eff):
+                label = f"{term!r}[{j}]"
+                col_names.append(label)
+
+            pen_start_idx = len(penalty_blocks)
+            for pm in pen_mats:
+                penalty_blocks.append((col_start, col_end, pm))
+            pen_indices = list(range(pen_start_idx, pen_start_idx + len(pen_mats)))
+
+            smooth_infos.append(
+                SmoothInfo(
+                    term=term,
+                    basis=basis,
+                    col_start=col_start,
+                    col_end=col_end,
+                    null_space_dim=nsd,
+                    penalty_indices=pen_indices,
+                )
             )
-        )
 
     # --- assemble X ---------------------------------------------------------
     if not blocks:
@@ -470,9 +557,19 @@ def predict_matrix(
 
         basis_mat = info.basis.basis_matrix(x)
 
-        constraint = info.basis.identifiability_constraints()
-        if constraint is not None and (info.col_end - info.col_start) < info.basis.n_basis:
-            basis_mat = _apply_constraint(basis_mat, constraint)
+        has_by = info.by_var is not None
+        if not has_by:
+            constraint = info.basis.identifiability_constraints()
+            if constraint is not None and (info.col_end - info.col_start) < info.basis.n_basis:
+                basis_mat = _apply_constraint(basis_mat, constraint)
+
+        if info.by_level is not None:
+            by_col = _extract_by_column(new_data, info.by_var)
+            indicator = (by_col == info.by_level).astype(float)
+            basis_mat = basis_mat * indicator[:, np.newaxis]
+        elif info.by_var is not None:
+            by_vals = _extract_column(new_data, info.by_var)
+            basis_mat = basis_mat * by_vals[:, np.newaxis]
 
         blocks.append(basis_mat)
 

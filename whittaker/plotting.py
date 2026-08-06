@@ -83,12 +83,14 @@ def partial_effects(
 
         B_grid = info.basis.basis_matrix(x_grid)
 
-        constraint = info.basis.identifiability_constraints()
-        n_constrained = info.col_end - info.col_start
-        if constraint is not None and n_constrained < info.basis.n_basis:
-            from whittaker.model_matrix import _apply_constraint
+        has_by = info.by_var is not None
+        if not has_by:
+            constraint = info.basis.identifiability_constraints()
+            n_constrained = info.col_end - info.col_start
+            if constraint is not None and n_constrained < info.basis.n_basis:
+                from whittaker.model_matrix import _apply_constraint
 
-            B_grid = _apply_constraint(B_grid, constraint)
+                B_grid = _apply_constraint(B_grid, constraint)
 
         beta_j = beta[info.col_start : info.col_end]
         f_j = B_grid @ beta_j
@@ -96,14 +98,18 @@ def partial_effects(
         X_partial = np.zeros((n_points, X_train.shape[1]))
         X_partial[:, info.col_start : info.col_end] = B_grid
 
-        # var = scale * diag(X_partial @ A⁻¹ @ X_partial.T)
-        #     = scale * rowSums((X_partial @ V) .* (X_partial @ V * 1/λ))
-        # where A = V diag(λ) V.T from eigh
         Xp_V = X_partial @ eigvecs
         var_diag = np.sum(Xp_V**2 * eigvals_inv[np.newaxis, :], axis=1) * scale
         se_j = np.sqrt(np.maximum(var_diag, 0.0))
 
         edf_j = model._fit_result.edf[idx]
+
+        if info.by_level is not None:
+            title_str = f"s({var_name}, by={info.by_var}):{info.by_level}, edf={edf_j:.1f}"
+        elif info.by_var is not None:
+            title_str = f"s({var_name}, by={info.by_var}), edf={edf_j:.1f}"
+        else:
+            title_str = f"s({var_name}, edf={edf_j:.1f})"
 
         data_dict = {
             var_name: x_grid.tolist(),
@@ -118,7 +124,7 @@ def partial_effects(
             .mark_area(opacity=0.25, color="#4682B4")
             .encode(
                 x=alt.X(f"{var_name}:Q").title(var_name),
-                y=alt.Y("lower:Q").title(f"s({var_name}, edf={edf_j:.1f})"),
+                y=alt.Y("lower:Q").title(title_str),
                 y2="upper:Q",
             )
         )
@@ -141,7 +147,7 @@ def partial_effects(
         chart = (band + line + zero_rule).properties(
             width=450,
             height=300,
-            title=f"s({var_name}, edf={edf_j:.1f})",
+            title=title_str,
         )
         charts.append(chart)
 
