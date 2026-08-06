@@ -47,7 +47,7 @@ class FitResult:
     fitted_values:
         μ = g⁻¹(η), shape `(n,)`.
     smoothing_params:
-        Smoothing parameter λ_j for each smooth term.
+        Smoothing parameter λ_j for each penalty (one per penalty matrix).
     scale:
         Estimated scale parameter φ (σ² for Gaussian).
     gcv_score:

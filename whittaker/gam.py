@@ -250,8 +250,10 @@ class GAM:
             f"  {'-' * 30} {'-' * 8} {'-' * 12}",
         ]
 
-        for info, edf_j, sp_j in zip(mm.smooths, r.edf, r.smoothing_params):
-            lines.append(f"  {info.term!r:<30} {edf_j:>8.2f} {sp_j:>12.4g}")
+        for info, edf_j in zip(mm.smooths, r.edf):
+            sp_vals = [r.smoothing_params[i] for i in info.penalty_indices]
+            sp_str = ", ".join(f"{v:.4g}" for v in sp_vals)
+            lines.append(f"  {info.term!r:<30} {edf_j:>8.2f} {sp_str:>12}")
 
         lines.extend(
             [

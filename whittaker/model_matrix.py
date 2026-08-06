@@ -33,6 +33,7 @@ from whittaker.formula.terms import (
 from whittaker.smooths.base import SmoothBasis
 from whittaker.smooths.cubic import CRS
 from whittaker.smooths.pspline import PSpline
+from whittaker.smooths.tensor import TensorProductBasis
 from whittaker.smooths.tprs import TPRS
 
 _BS_REGISTRY: dict[str, type[SmoothBasis]] = {
@@ -65,6 +66,52 @@ def _resolve_basis(term: SmoothTerm) -> SmoothBasis:
             kwargs["m"] = term.extra["m"]
 
     return cls(**kwargs)
+
+
+def _resolve_tensor_basis(term: SmoothTerm) -> TensorProductBasis:
+    """Instantiate a :class:`TensorProductBasis` from a ``te()`` term."""
+    d = len(term.variables)
+    if d < 2:
+        raise ValueError(f"te() requires at least 2 variables, got {d}.")
+
+    k_list = term.extra.get("k")
+    if k_list is None:
+        k_per = [term.k] * d if term.k != -1 else [-1] * d
+    elif isinstance(k_list, list):
+        if len(k_list) != d:
+            raise ValueError(
+                f"te() got k={k_list} but has {d} variables. "
+                f"Length of k must match the number of variables."
+            )
+        k_per = k_list
+    else:
+        k_per = [int(k_list)] * d
+
+    bs_spec = term.extra.get("bs")
+    if bs_spec is None:
+        bs_per = [term.bs] * d
+    elif isinstance(bs_spec, list):
+        if len(bs_spec) != d:
+            raise ValueError(
+                f"te() got bs={bs_spec} but has {d} variables. "
+                f"Length of bs must match the number of variables."
+            )
+        bs_per = bs_spec
+    else:
+        bs_per = [str(bs_spec)] * d
+
+    marginals: list[SmoothBasis] = []
+    for j in range(d):
+        marginal_term = SmoothTerm(
+            variables=(term.variables[j],),
+            smooth_type="s",
+            bs=bs_per[j],
+            k=k_per[j],
+            extra={k: v for k, v in term.extra.items() if k not in ("k", "bs")},
+        )
+        marginals.append(_resolve_basis(marginal_term))
+
+    return TensorProductBasis(marginals)
 
 
 def _extract_column(data: dict[str, NDArray], name: str) -> NDArray:
@@ -118,6 +165,10 @@ class SmoothInfo:
         End column index (exclusive) in the full model matrix `X`.
     null_space_dim:
         Dimension of the penalty null space for this smooth.
+    penalty_indices:
+        Indices into `ModelMatrix.penalties` that belong to this smooth.
+        For ``s()`` terms this is a single index; for ``te()`` terms it is
+        one index per marginal direction.
     """
 
     term: SmoothTerm
@@ -125,6 +176,7 @@ class SmoothInfo:
     col_start: int
     col_end: int
     null_space_dim: int
+    penalty_indices: list[int] = field(default_factory=list)
 
 
 @dataclass
@@ -276,12 +328,15 @@ def build_model_matrix(
         if not isinstance(term, SmoothTerm):
             continue
 
-        if term.smooth_type != "s":
+        if term.smooth_type == "te":
+            basis = _resolve_tensor_basis(term)
+        elif term.smooth_type == "s":
+            basis = _resolve_basis(term)
+        else:
             raise NotImplementedError(
-                f"Smooth type {term.smooth_type!r} is not yet supported. Only s() is implemented."
+                f"Smooth type {term.smooth_type!r} is not yet supported. "
+                "Only s() and te() are implemented."
             )
-
-        basis = _resolve_basis(term)
 
         if len(term.variables) == 1:
             x = _extract_column(data, term.variables[0])
@@ -291,14 +346,22 @@ def build_model_matrix(
         basis.fit(x)
 
         basis_mat = basis.basis_matrix(x)  # (n, k)
-        pen_mat = basis.penalty_matrix()  # (k, k)
         nsd = basis.null_space_dimension()
+
+        is_tensor = isinstance(basis, TensorProductBasis)
+
+        if is_tensor:
+            pen_mats = basis.penalty_matrices()
+        else:
+            pen_mats = [basis.penalty_matrix()]
 
         if apply_constraints:
             constraint = basis.identifiability_constraints()
             if constraint is not None:
                 basis_mat = _apply_constraint(basis_mat, constraint)
-                pen_mat = _apply_constraint_to_penalty(pen_mat, constraint)
+                pen_mats = [
+                    _apply_constraint_to_penalty(pm, constraint) for pm in pen_mats
+                ]
                 nsd = max(nsd - constraint.shape[0], 0)
 
         k_eff = basis_mat.shape[1]
@@ -310,6 +373,11 @@ def build_model_matrix(
             label = f"{term!r}[{j}]"
             col_names.append(label)
 
+        pen_start_idx = len(penalty_blocks)
+        for pm in pen_mats:
+            penalty_blocks.append((col_start, col_end, pm))
+        pen_indices = list(range(pen_start_idx, pen_start_idx + len(pen_mats)))
+
         smooth_infos.append(
             SmoothInfo(
                 term=term,
@@ -317,9 +385,9 @@ def build_model_matrix(
                 col_start=col_start,
                 col_end=col_end,
                 null_space_dim=nsd,
+                penalty_indices=pen_indices,
             )
         )
-        penalty_blocks.append((col_start, col_end, pen_mat))
 
     # --- assemble X ---------------------------------------------------------
     if not blocks:
