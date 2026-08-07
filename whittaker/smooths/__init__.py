@@ -6,6 +6,7 @@ from whittaker.smooths.base import SmoothBasis
 from whittaker.smooths.cubic import CRS
 from whittaker.smooths.cyclic import CyclicCRS, CyclicPSpline
 from whittaker.smooths.pspline import PSpline
+from whittaker.smooths.shrinkage import ShrinkageCRS, ShrinkageTPRS
 from whittaker.smooths.tensor import (
     TensorInteractionBasis,
     TensorProductBasis,
@@ -18,6 +19,8 @@ __all__ = [
     "CyclicCRS",
     "CyclicPSpline",
     "PSpline",
+    "ShrinkageCRS",
+    "ShrinkageTPRS",
     "SmoothBasis",
     "TensorInteractionBasis",
     "TensorProductBasis",
