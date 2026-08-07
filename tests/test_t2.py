@@ -167,12 +167,8 @@ class TestT2ModelMatrix:
         x2 = rng.uniform(size=n)
         y = 0.1 * rng.standard_normal(n)
 
-        mm_te = build_model_matrix(
-            parse("y ~ te(x1, x2, k=5)"), {"y": y, "x1": x1, "x2": x2}
-        )
-        mm_t2 = build_model_matrix(
-            parse("y ~ t2(x1, x2, k=5)"), {"y": y, "x1": x1, "x2": x2}
-        )
+        mm_te = build_model_matrix(parse("y ~ te(x1, x2, k=5)"), {"y": y, "x1": x1, "x2": x2})
+        mm_t2 = build_model_matrix(parse("y ~ t2(x1, x2, k=5)"), {"y": y, "x1": x1, "x2": x2})
 
         te_cols = mm_te.smooths[0].col_end - mm_te.smooths[0].col_start
         t2_cols = mm_t2.smooths[0].col_end - mm_t2.smooths[0].col_start
@@ -185,12 +181,8 @@ class TestT2ModelMatrix:
         x2 = rng.uniform(size=n)
         y = 0.1 * rng.standard_normal(n)
 
-        mm_te = build_model_matrix(
-            parse("y ~ te(x1, x2, k=5)"), {"y": y, "x1": x1, "x2": x2}
-        )
-        mm_t2 = build_model_matrix(
-            parse("y ~ t2(x1, x2, k=5)"), {"y": y, "x1": x1, "x2": x2}
-        )
+        mm_te = build_model_matrix(parse("y ~ te(x1, x2, k=5)"), {"y": y, "x1": x1, "x2": x2})
+        mm_t2 = build_model_matrix(parse("y ~ t2(x1, x2, k=5)"), {"y": y, "x1": x1, "x2": x2})
 
         assert len(mm_t2.penalties) > len(mm_te.penalties)
 
@@ -201,9 +193,7 @@ class TestT2ModelMatrix:
         x2 = rng.uniform(size=n)
         y = 0.1 * rng.standard_normal(n)
 
-        mm = build_model_matrix(
-            parse("y ~ t2(x1, x2, k=5)"), {"y": y, "x1": x1, "x2": x2}
-        )
+        mm = build_model_matrix(parse("y ~ t2(x1, x2, k=5)"), {"y": y, "x1": x1, "x2": x2})
         assert len(mm.smooths[0].penalty_indices) == 3
 
 
@@ -298,9 +288,7 @@ class TestT2GAM:
         x2 = rng.uniform(size=n)
         y = x1 * x2 + 0.1 * rng.standard_normal(n)
 
-        model = GAM("y ~ t2(x1, x2, k=5)").fit(
-            {"y": y, "x1": x1, "x2": x2}, method="REML"
-        )
+        model = GAM("y ~ t2(x1, x2, k=5)").fit({"y": y, "x1": x1, "x2": x2}, method="REML")
         assert model.is_fitted
 
     def test_t2_summary(self) -> None:
@@ -322,9 +310,7 @@ class TestT2GAM:
         mu = np.exp(0.5 + x1 * x2)
         y = rng.poisson(mu).astype(float)
 
-        model = GAM("y ~ t2(x1, x2, k=5)", family=Poisson()).fit(
-            {"y": y, "x1": x1, "x2": x2}
-        )
+        model = GAM("y ~ t2(x1, x2, k=5)", family=Poisson()).fit({"y": y, "x1": x1, "x2": x2})
         assert model.is_fitted
         assert 0.0 < model.deviance_explained < 1.0
 
@@ -335,9 +321,7 @@ class TestT2GAM:
         x2 = rng.uniform(size=n)
         y = np.sin(3 * x1) + x1 * x2 + 0.2 * rng.standard_normal(n)
 
-        model = GAM("y ~ s(x1, k=6) + t2(x1, x2, k=5)").fit(
-            {"y": y, "x1": x1, "x2": x2}
-        )
+        model = GAM("y ~ s(x1, k=6) + t2(x1, x2, k=5)").fit({"y": y, "x1": x1, "x2": x2})
         assert model.is_fitted
         assert len(model.edf) == 2
 
@@ -362,9 +346,7 @@ class TestT2GAM:
         x2 = rng.uniform(size=n)
         y = np.sin(x1) + x1 * x2 + 0.2 * rng.standard_normal(n)
 
-        model = GAM("y ~ s(x1, k=5) + t2(x1, x2, k=4)").fit(
-            {"y": y, "x1": x1, "x2": x2}
-        )
+        model = GAM("y ~ s(x1, k=5) + t2(x1, x2, k=4)").fit({"y": y, "x1": x1, "x2": x2})
         c = model.concurvity(full=True)
         assert c.worst.shape == (2,)
         assert np.all(np.isfinite(c.worst))
