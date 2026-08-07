@@ -5,6 +5,7 @@ from __future__ import annotations
 from whittaker.smooths.base import SmoothBasis
 from whittaker.smooths.cubic import CRS
 from whittaker.smooths.cyclic import CyclicCRS, CyclicPSpline
+from whittaker.smooths.factor_smooth import FactorSmoothBasis
 from whittaker.smooths.pspline import PSpline
 from whittaker.smooths.random import RandomEffectBasis
 from whittaker.smooths.shrinkage import ShrinkageCRS, ShrinkageTPRS
@@ -19,6 +20,7 @@ __all__ = [
     "CRS",
     "CyclicCRS",
     "CyclicPSpline",
+    "FactorSmoothBasis",
     "PSpline",
     "RandomEffectBasis",
     "ShrinkageCRS",
