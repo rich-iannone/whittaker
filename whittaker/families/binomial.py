@@ -35,14 +35,11 @@ class Binomial(Family):
         mu_c = np.clip(mu, _EPS, 1.0 - _EPS)
         return mu_c * (1.0 - mu_c)
 
-    def deviance(self, y: NDArray, mu: NDArray) -> float:
-        mu_c = np.clip(mu, _EPS, 1.0 - _EPS)
-        dev = np.zeros_like(y)
-        pos = y > 0
-        neg = y < 1
-        dev[pos] = y[pos] * np.log(y[pos] / mu_c[pos])
-        dev[neg] += (1.0 - y[neg]) * np.log((1.0 - y[neg]) / (1.0 - mu_c[neg]))
-        return float(2.0 * np.sum(dev))
+    def deviance(self, y: NDArray, mu: NDArray, *, weights: NDArray | None = None) -> float:
+        d = self.unit_deviance(y, mu)
+        if weights is not None:
+            d = weights * d
+        return float(np.sum(d))
 
     def unit_deviance(self, y: NDArray, mu: NDArray) -> NDArray:
         mu_c = np.clip(mu, _EPS, 1.0 - _EPS)
@@ -53,10 +50,14 @@ class Binomial(Family):
         dev[neg] += (1.0 - y[neg]) * np.log((1.0 - y[neg]) / (1.0 - mu_c[neg]))
         return 2.0 * dev
 
-    def log_likelihood(self, y: NDArray, mu: NDArray, scale: float) -> float:
+    def log_likelihood(
+        self, y: NDArray, mu: NDArray, scale: float, *, weights: NDArray | None = None
+    ) -> float:
         mu_c = np.clip(mu, _EPS, 1.0 - _EPS)
-        ll = y * np.log(mu_c) + (1.0 - y) * np.log(1.0 - mu_c)
-        return float(np.sum(ll))
+        ll_i = y * np.log(mu_c) + (1.0 - y) * np.log(1.0 - mu_c)
+        if weights is not None:
+            ll_i = weights * ll_i
+        return float(np.sum(ll_i))
 
     @property
     def scale_known(self) -> bool:
