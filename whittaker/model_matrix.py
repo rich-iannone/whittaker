@@ -32,6 +32,7 @@ from whittaker.formula.terms import (
 )
 from whittaker.smooths.base import SmoothBasis
 from whittaker.smooths.cubic import CRS
+from whittaker.smooths.cyclic import CyclicCRS, CyclicPSpline
 from whittaker.smooths.pspline import PSpline
 from whittaker.smooths.tensor import (
     TensorInteractionBasis,
@@ -43,7 +44,9 @@ from whittaker.smooths.tprs import TPRS
 _BS_REGISTRY: dict[str, type[SmoothBasis]] = {
     "tp": TPRS,
     "cr": CRS,
+    "cc": CyclicCRS,
     "ps": PSpline,
+    "cp": CyclicPSpline,
 }
 
 
@@ -60,7 +63,7 @@ def _resolve_basis(term: SmoothTerm) -> SmoothBasis:
     if term.k != -1:
         kwargs["k"] = term.k
 
-    if term.bs == "ps":
+    if term.bs in ("ps", "cp"):
         if "degree" in term.extra:
             kwargs["degree"] = term.extra["degree"]
         if "m" in term.extra:
