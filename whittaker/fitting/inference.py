@@ -160,6 +160,19 @@ def _smooth_test(
     return stat, ref_df, p_value
 
 
+def _combined_weights(fit: FitResult) -> NDArray | None:
+    """Combine IRLS working weights and prior weights."""
+    W_irls = fit.weights
+    pw = fit.prior_weights
+    if W_irls is not None and pw is not None:
+        return pw * W_irls
+    if W_irls is not None:
+        return W_irls
+    if pw is not None:
+        return pw
+    return None
+
+
 def smooth_tests(
     fit: FitResult,
     model: ModelMatrix,
@@ -184,7 +197,7 @@ def smooth_tests(
         model.penalties,
         fit.smoothing_params,
         fit.scale,
-        W=fit.weights,
+        W=_combined_weights(fit),
     )
 
     results: list[SmoothTestResult] = []
@@ -244,7 +257,7 @@ def parametric_tests(
         model.penalties,
         fit.smoothing_params,
         fit.scale,
-        W=fit.weights,
+        W=_combined_weights(fit),
     )
 
     n = X.shape[0]
