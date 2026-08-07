@@ -34,6 +34,7 @@ from whittaker.smooths.base import SmoothBasis
 from whittaker.smooths.cubic import CRS
 from whittaker.smooths.cyclic import CyclicCRS, CyclicPSpline
 from whittaker.smooths.pspline import PSpline
+from whittaker.smooths.shrinkage import ShrinkageCRS, ShrinkageTPRS
 from whittaker.smooths.tensor import (
     TensorInteractionBasis,
     TensorProductBasis,
@@ -47,6 +48,8 @@ _BS_REGISTRY: dict[str, type[SmoothBasis]] = {
     "cc": CyclicCRS,
     "ps": PSpline,
     "cp": CyclicPSpline,
+    "ts": ShrinkageTPRS,
+    "cs": ShrinkageCRS,
 }
 
 
@@ -68,7 +71,7 @@ def _resolve_basis(term: SmoothTerm) -> SmoothBasis:
             kwargs["degree"] = term.extra["degree"]
         if "m" in term.extra:
             kwargs["m"] = term.extra["m"]
-    elif term.bs == "tp":
+    elif term.bs in ("tp", "ts"):
         if "m" in term.extra:
             kwargs["m"] = term.extra["m"]
 
@@ -472,9 +475,7 @@ def build_model_matrix(
         basis_mat = basis.basis_matrix(x)  # (n, k)
         nsd = basis.null_space_dimension()
 
-        is_tensor = isinstance(basis, (TensorProductBasis, TensorInteractionBasis))
-
-        if is_tensor:
+        if hasattr(basis, "penalty_matrices"):
             pen_mats = basis.penalty_matrices()
         else:
             pen_mats = [basis.penalty_matrix()]
