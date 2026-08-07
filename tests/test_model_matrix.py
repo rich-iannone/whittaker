@@ -389,9 +389,7 @@ class TestBuildModelMatrixErrors:
 
     def test_unsupported_smooth_type_raises(self) -> None:
         formula = parse("y ~ s(x1, k=5)")
-        formula.terms[0] = SmoothTerm(
-            variables=("x1",), smooth_type="xx", bs="cr", k=5, extra={}
-        )
+        formula.terms[0] = SmoothTerm(variables=("x1",), smooth_type="xx", bs="cr", k=5, extra={})
         data = _multi_data()
         with pytest.raises(NotImplementedError, match="not yet supported"):
             build_model_matrix(formula, data)
