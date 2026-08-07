@@ -83,6 +83,7 @@ class FitResult:
     hat_matrix_trace: float
     residuals: NDArray
     weights: NDArray | None = None
+    prior_weights: NDArray | None = None
     null_deviance: float | None = None
     aic: float | None = None
     bic: float | None = None
@@ -483,6 +484,7 @@ def pirls_fit(
     method: str = "GCV",
     max_iter: int = 50,
     tol: float = 1e-7,
+    prior_weights: NDArray | None = None,
 ) -> FitResult:
     """Fit a GAM using Penalized IRLS.
 
@@ -505,6 +507,9 @@ def pirls_fit(
         Maximum number of P-IRLS iterations.
     tol:
         Convergence tolerance on relative change in deviance.
+    prior_weights:
+        Observation weights, shape `(n,)`. Must be positive. When provided, the weighted deviance
+        `sum(w_i * d_i)` is minimized and the weighted IRLS system is solved.
 
     Returns
     -------
@@ -572,20 +577,22 @@ def pirls_fit(
             n_sp=len(model.penalties),
         )
 
+    pw = prior_weights
+
     is_gaussian_identity = isinstance(family, Gaussian)
     W_final: NDArray | None = None
 
     if is_gaussian_identity:
         if not sp:
-            sp = _select_sp(y)
-        beta, hat_arr = _penalized_solve(X, y, model.penalties, sp, offset=offset)
+            sp = _select_sp(y, W=pw)
+        beta, hat_arr = _penalized_solve(X, y, model.penalties, sp, W=pw, offset=offset)
         hat_trace = float(hat_arr[0])
 
         eta = X @ beta
         if offset is not None:
             eta = eta + offset
         mu = family.link_inverse(eta)
-        dev = family.deviance(y, mu)
+        dev = family.deviance(y, mu, weights=pw)
         n_iter = 1
         converged = True
     else:
@@ -607,19 +614,27 @@ def pirls_fit(
                 n_iter += 1
 
                 dmu_deta = 1.0 / family.link_derivative(mu)
-                W = dmu_deta**2 / family.variance(mu)
+                W_irls = dmu_deta**2 / family.variance(mu)
+                W_total = pw * W_irls if pw is not None else W_irls
                 z = eta + (y - mu) / dmu_deta
 
                 if auto_select:
-                    sp = _select_sp(z, W=W)
+                    sp = _select_sp(z, W=W_total)
 
-                beta, hat_arr = _penalized_solve(X, z, model.penalties, sp, W=W, offset=offset)
+                beta, hat_arr = _penalized_solve(
+                    X,
+                    z,
+                    model.penalties,
+                    sp,
+                    W=W_total,
+                    offset=offset,
+                )
 
                 eta = X @ beta
                 if offset is not None:
                     eta = eta + offset
                 mu = family.link_inverse(eta)
-                dev = family.deviance(y, mu)
+                dev = family.deviance(y, mu, weights=pw)
 
                 if dev_old != np.inf and abs(dev - dev_old) / (abs(dev_old) + 0.1) < tol:
                     inner_converged = True
@@ -642,27 +657,34 @@ def pirls_fit(
             converged = inner_converged
 
         if is_nb:
-            dev = family.deviance(y, mu)
+            dev = family.deviance(y, mu, weights=pw)
 
         hat_trace = float(hat_arr[0])
-        W_final = W
+        W_final = W_total
 
     smooths_info = [(s.col_start, s.col_end) for s in model.smooths]
-    edf = _edf_per_smooth(X, model.penalties, sp, smooths_info)
+    W_for_edf = pw if is_gaussian_identity else W_final
+    edf = _edf_per_smooth(X, model.penalties, sp, smooths_info, W=W_for_edf)
     edf_total = sum(edf) + (1 if model.has_intercept else 0) + model.n_parametric
+
+    n_eff = float(np.sum(pw)) if pw is not None else float(n)
 
     if family.scale_known:
         scale = 1.0
     else:
-        residual_dof = n - edf_total
-        scale = dev / residual_dof if residual_dof > 0 else dev / n
+        residual_dof = n_eff - edf_total
+        scale = dev / residual_dof if residual_dof > 0 else dev / n_eff
 
     gcv = _gcv_score(dev, n, hat_trace)
 
-    mu_null = family.link_inverse(np.full_like(y, family.link(np.atleast_1d(np.mean(y)))[0]))
-    null_dev = family.deviance(y, mu_null)
+    if pw is not None:
+        y_mean = float(np.average(y, weights=pw))
+    else:
+        y_mean = float(np.mean(y))
+    mu_null = family.link_inverse(np.full_like(y, family.link(np.atleast_1d(y_mean))[0]))
+    null_dev = family.deviance(y, mu_null, weights=pw)
 
-    ll = family.log_likelihood(y, mu, scale)
+    ll = family.log_likelihood(y, mu, scale, weights=pw)
     aic = -2.0 * ll + 2.0 * edf_total
     bic = -2.0 * ll + np.log(n) * edf_total
 
@@ -681,6 +703,7 @@ def pirls_fit(
         hat_matrix_trace=hat_trace,
         residuals=y - mu,
         weights=W_final,
+        prior_weights=pw,
         null_deviance=float(null_dev),
         aic=float(aic),
         bic=float(bic),
