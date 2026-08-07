@@ -310,9 +310,7 @@ class TestShrinkageGAM:
         x2 = rng.uniform(size=n)
         y = np.sin(3 * x1) + 0.2 * rng.standard_normal(n)
 
-        model = GAM('y ~ s(x1, bs="ts") + s(x2, bs="ts")').fit(
-            {"y": y, "x1": x1, "x2": x2}
-        )
+        model = GAM('y ~ s(x1, bs="ts") + s(x2, bs="ts")').fit({"y": y, "x1": x1, "x2": x2})
         assert model.edf[1] < model.edf[0]
 
     def test_cs_shrinks_noise_variable(self) -> None:
@@ -322,9 +320,7 @@ class TestShrinkageGAM:
         x2 = rng.uniform(size=n)
         y = np.sin(3 * x1) + 0.2 * rng.standard_normal(n)
 
-        model = GAM('y ~ s(x1, bs="cs") + s(x2, bs="cs")').fit(
-            {"y": y, "x1": x1, "x2": x2}
-        )
+        model = GAM('y ~ s(x1, bs="cs") + s(x2, bs="cs")').fit({"y": y, "x1": x1, "x2": x2})
         assert model.edf[1] < model.edf[0]
 
     def test_ts_predict(self) -> None:
@@ -407,9 +403,7 @@ class TestShrinkageGAM:
         x2 = rng.uniform(size=n)
         y = np.sin(3 * x1) + x2**2 + 0.2 * rng.standard_normal(n)
 
-        model = GAM('y ~ s(x1, bs="ts") + s(x2, bs="cr")').fit(
-            {"y": y, "x1": x1, "x2": x2}
-        )
+        model = GAM('y ~ s(x1, bs="ts") + s(x2, bs="cr")').fit({"y": y, "x1": x1, "x2": x2})
         assert model.is_fitted
         assert len(model.edf) == 2
 
@@ -433,9 +427,7 @@ class TestShrinkageGAM:
         x2 = rng.uniform(size=n)
         y = x1 * x2 + 0.1 * rng.standard_normal(n)
 
-        model = GAM('y ~ te(x1, x2, bs="ts", k=5)').fit(
-            {"y": y, "x1": x1, "x2": x2}
-        )
+        model = GAM('y ~ te(x1, x2, bs="ts", k=5)').fit({"y": y, "x1": x1, "x2": x2})
         assert model.is_fitted
 
     def test_ts_concurvity(self) -> None:
