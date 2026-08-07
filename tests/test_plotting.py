@@ -171,10 +171,13 @@ def _fitted_anova() -> GAM:
     n = 300
     x1 = np.random.default_rng(99).uniform(size=n)
     x2 = np.random.default_rng(99).uniform(high=1.0, size=n)
-    y = np.sin(3 * x1) + np.cos(3 * x2) + 2 * x1 * x2 + 0.2 * np.random.default_rng(99).standard_normal(n)
-    return GAM("y ~ s(x1, k=6) + s(x2, k=6) + ti(x1, x2, k=5)").fit(
-        {"y": y, "x1": x1, "x2": x2}
+    y = (
+        np.sin(3 * x1)
+        + np.cos(3 * x2)
+        + 2 * x1 * x2
+        + 0.2 * np.random.default_rng(99).standard_normal(n)
     )
+    return GAM("y ~ s(x1, k=6) + s(x2, k=6) + ti(x1, x2, k=5)").fit({"y": y, "x1": x1, "x2": x2})
 
 
 class TestPartialEffects2D:
@@ -240,9 +243,7 @@ class TestPartialEffects2D:
         mu = np.exp(0.5 + x1 * x2)
         y = rng.poisson(mu).astype(float)
 
-        model = GAM("y ~ te(x1, x2, k=4)", family=Poisson()).fit(
-            {"y": y, "x1": x1, "x2": x2}
-        )
+        model = GAM("y ~ te(x1, x2, k=4)", family=Poisson()).fit({"y": y, "x1": x1, "x2": x2})
         chart = model.plot()
         assert chart.to_dict() is not None
 
