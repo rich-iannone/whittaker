@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import numpy as np
 from numpy.typing import NDArray
@@ -33,6 +33,28 @@ class PredictionResult:
     values: NDArray
     se: NDArray | None
     linear_predictor: NDArray
+
+
+@dataclass
+class TermsPredictionResult:
+    """Result of `GAM.predict(type="terms")`.
+
+    Each smooth term's contribution to the linear predictor is returned separately, along with an
+    optional standard error per term.
+
+    Attributes
+    ----------
+    terms:
+        Dict mapping term labels to their contributions, each shape `(n,)`.
+    se:
+        Dict mapping term labels to standard errors, each shape `(n,)`. `None` if `se=False`.
+    labels:
+        Term labels in formula order.
+    """
+
+    terms: dict[str, NDArray]
+    se: dict[str, NDArray] | None
+    labels: list[str] = field(default_factory=list)
 
 
 class GAM:
@@ -74,7 +96,7 @@ class GAM:
 
     @property
     def is_fitted(self) -> bool:
-        """``True`` after ``fit()`` has been called."""
+        """`True` after `fit()` has been called."""
         return self._fitted
 
     def fit(
@@ -95,12 +117,12 @@ class GAM:
             Fixed smoothing parameters, one per smooth term. If `None`, smoothing parameters are
             selected automatically via *method*.
         method:
-            Smoothing parameter selection: ``"GCV"`` or ``"REML"``.
+            Smoothing parameter selection: `"GCV"` or `"REML"`.
 
         Returns
         -------
         GAM
-            Returns ``self`` for method chaining.
+            Returns `self` for method chaining.
         """
         self._model_matrix = build_model_matrix(self._formula, data)
         self._fit_result = pirls_fit(
@@ -117,7 +139,8 @@ class GAM:
         new_data: dict[str, NDArray],
         *,
         se: bool = False,
-    ) -> PredictionResult:
+        type: str = "response",
+    ) -> PredictionResult | TermsPredictionResult:
         """Predict on new data.
 
         Parameters
@@ -126,25 +149,86 @@ class GAM:
             Column-oriented new data. Must contain all covariate columns referenced by the formula
             (response column is not needed).
         se:
-            If `True`, compute standard errors of the predictions on the linear predictor scale.
+            If `True`, compute standard errors on the linear predictor scale (for `type="response"`
+            and `"link"`) or per-term standard errors (for `type="terms"`).
+        type:
+            Prediction type:
+
+            - `"response"` (default): predictions on the response scale (μ = g⁻¹(η)).
+            - `"link"`: predictions on the linear predictor scale (η = Xβ).
+            - `"terms"`: individual smooth term contributions to the linear predictor.
 
         Returns
         -------
-        PredictionResult
-            Predicted values (and optionally standard errors).
+        PredictionResult | TermsPredictionResult
+            For `type="response"` or `"link"`, a `PredictionResult`. For `type="terms"`, a
+            `TermsPredictionResult` with per-smooth contributions.
         """
         self._check_fitted()
+        type_lower = type.lower()
+
+        if type_lower == "terms":
+            return self._predict_terms(new_data, se=se)
+
+        if type_lower not in ("response", "link"):
+            raise ValueError(
+                f"Unknown prediction type {type!r}. Choose from 'response', 'link', or 'terms'."
+            )
 
         X_new = predict_matrix(self._model_matrix, new_data)
         eta = X_new @ self._fit_result.coefficients
 
+        if type_lower == "link":
+            se_values = self._prediction_se(X_new) if se else None
+            return PredictionResult(values=eta, se=se_values, linear_predictor=eta)
+
         mu = self._family.link_inverse(eta)
-
-        se_values = None
-        if se:
-            se_values = self._prediction_se(X_new)
-
+        se_values = self._prediction_se(X_new) if se else None
         return PredictionResult(values=mu, se=se_values, linear_predictor=eta)
+
+    def _predict_terms(
+        self,
+        new_data: dict[str, NDArray],
+        *,
+        se: bool = False,
+    ) -> TermsPredictionResult:
+        """Compute per-smooth-term contributions to the linear predictor."""
+        X_new = predict_matrix(self._model_matrix, new_data)
+        beta = self._fit_result.coefficients
+
+        V_beta = None
+        if se:
+            from whittaker.fitting.inference import _bayesian_covariance
+
+            V_beta = _bayesian_covariance(
+                self._model_matrix.X,
+                self._model_matrix.penalties,
+                self._fit_result.smoothing_params,
+                self._fit_result.scale,
+                W=self._fit_result.weights,
+            )
+
+        terms_dict: dict[str, NDArray] = {}
+        se_dict: dict[str, NDArray] = {} if se else None
+        labels: list[str] = []
+
+        for info in self._model_matrix.smooths:
+            cs, ce = info.col_start, info.col_end
+            label = repr(info.term)
+            if info.by_level is not None:
+                label = f"{label}:{info.by_level}"
+
+            X_j = X_new[:, cs:ce]
+            beta_j = beta[cs:ce]
+            terms_dict[label] = X_j @ beta_j
+            labels.append(label)
+
+            if se:
+                V_j = V_beta[cs:ce, cs:ce]
+                var_j = np.sum(X_j * (X_j @ V_j), axis=1)
+                se_dict[label] = np.sqrt(np.maximum(var_j, 0.0))
+
+        return TermsPredictionResult(terms=terms_dict, se=se_dict, labels=labels)
 
     def _prediction_se(self, X_new: NDArray) -> NDArray:
         """Compute standard errors for predictions at X_new.
