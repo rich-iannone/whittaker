@@ -351,6 +351,38 @@ class GAM:
         self._check_fitted()
         return concurvity(self._fit_result, self._model_matrix, full=full)
 
+    def anova(self, *others: GAM) -> object:
+        """Compare this model with one or more other fitted GAMs via deviance-difference tests.
+
+        All models must use the same family and be fitted to the same data. Models are automatically
+        sorted by complexity (edf). For known-scale families (Poisson, Binomial) a chi-squared test
+        is used. For unknown-scale families (Gaussian, Gamma) an F-test is used.
+
+        Parameters
+        ----------
+        *others:
+            One or more fitted `GAM` objects to compare against this model.
+
+        Returns
+        -------
+        AnovaResult
+            Sequential deviance-comparison table.
+        """
+        from whittaker.fitting.inference import anova_gam
+
+        self._check_fitted()
+        all_gams = [self, *others]
+        for g in others:
+            if not g._fitted:
+                raise RuntimeError("All models must be fitted before calling anova().")
+            if type(g._family) is not type(self._family):
+                raise ValueError(
+                    f"All models must use the same family. Got {self._family!r} and {g._family!r}."
+                )
+
+        model_pairs = tuple((g._fit_result, g._model_matrix) for g in all_gams)
+        return anova_gam(*model_pairs, scale_known=self._family.scale_known)
+
     def summary(self) -> str:
         """Return a text summary of the fitted model."""
         self._check_fitted()

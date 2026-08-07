@@ -13,7 +13,6 @@ from whittaker.model_matrix import build_model_matrix
 from whittaker.smooths.tensor import TensorProductBasis, TensorProductBasisT2
 from whittaker.smooths.tprs import TPRS
 
-
 # ---------------------------------------------------------------------------
 # TensorProductBasisT2 unit tests
 # ---------------------------------------------------------------------------

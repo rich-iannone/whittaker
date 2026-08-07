@@ -12,7 +12,6 @@ from whittaker.gam import GAM
 from whittaker.model_matrix import build_model_matrix
 from whittaker.smooths.cyclic import CyclicCRS, CyclicPSpline
 
-
 # ---------------------------------------------------------------------------
 # CyclicCRS unit tests
 # ---------------------------------------------------------------------------

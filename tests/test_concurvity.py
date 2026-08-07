@@ -6,14 +6,13 @@ import numpy as np
 import pytest
 from numpy.testing import assert_allclose
 
+from whittaker.families.gaussian import Gaussian
 from whittaker.families.poisson import Poisson
 from whittaker.fitting.inference import ConcurvityResult, concurvity
+from whittaker.fitting.pirls import pirls_fit
+from whittaker.formula.parser import parse
 from whittaker.gam import GAM
 from whittaker.model_matrix import build_model_matrix
-from whittaker.fitting.pirls import pirls_fit
-from whittaker.families.gaussian import Gaussian
-from whittaker.formula.parser import parse
-
 
 # ---------------------------------------------------------------------------
 # Helpers

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import numpy as np
-import pytest
 from numpy.testing import assert_allclose
 
 from whittaker.families.binomial import Binomial
@@ -11,7 +10,6 @@ from whittaker.families.poisson import Poisson
 from whittaker.formula.parser import parse
 from whittaker.gam import GAM
 from whittaker.model_matrix import build_model_matrix
-
 
 # ---------------------------------------------------------------------------
 # Factor-by smooths

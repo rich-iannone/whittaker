@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 import numpy as np
 from numpy.typing import NDArray
 from scipy.stats import chi2, norm
+from scipy.stats import f as f_dist
 from scipy.stats import t as t_dist
 
 from whittaker.fitting.pirls import FitResult
@@ -452,3 +453,174 @@ def concurvity(
     return ConcurvityResult(
         worst=worst, observed=observed, estimate=estimate, labels=labels, full=False
     )
+
+
+# ---------------------------------------------------------------------------
+# ANOVA-style model comparison (deviance-difference tests)
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class AnovaModelRow:
+    """One row of an ANOVA model-comparison table.
+
+    Attributes
+    ----------
+    resid_df:
+        Residual degrees of freedom (n − edf_total).
+    resid_dev:
+        Residual deviance.
+    df:
+        Difference in residual df from the previous (simpler) model. `None` for the first model.
+    deviance:
+        Deviance difference from the previous model. `None` for the first model.
+    stat:
+        Test statistic (chi-squared or F). `None` for the first model.
+    p_value:
+        p-value from the test. `None` for the first model.
+    """
+
+    resid_df: float
+    resid_dev: float
+    df: float | None = None
+    deviance: float | None = None
+    stat: float | None = None
+    p_value: float | None = None
+
+
+@dataclass
+class AnovaResult:
+    """Result of an ANOVA-style comparison of nested GAM models.
+
+    Attributes
+    ----------
+    rows:
+        One `AnovaModelRow` per model, ordered from simplest to most complex.
+    scale:
+        Dispersion parameter used for the test. For known-scale families this is `1`. For
+        unknown-scale families it is the estimated scale from the most complex model.
+    test:
+        `"Chisq"` or `"F"`, depending on whether the family has known scale.
+    """
+
+    rows: list[AnovaModelRow]
+    scale: float
+    test: str
+
+    def __str__(self) -> str:
+        stat_label = self.test
+        lines = [
+            "Analysis of Deviance Table",
+            "",
+            f"{'Model':>7} {'Resid.Df':>10} {'Resid.Dev':>12} {'Df':>8} {'Deviance':>12}"
+            f" {stat_label:>10} {'Pr(>' + stat_label + ')':>14}",
+            f"{'-----':>7} {'-' * 10} {'-' * 12} {'-' * 8} {'-' * 12} {'-' * 10} {'-' * 14}",
+        ]
+        for i, row in enumerate(self.rows):
+            label = str(i + 1)
+            df_str = f"{row.df:8.2f}" if row.df is not None else " " * 8
+            dev_str = f"{row.deviance:12.4f}" if row.deviance is not None else " " * 12
+            stat_str = f"{row.stat:10.4f}" if row.stat is not None else " " * 10
+            p_str = f"{row.p_value:14.6g}" if row.p_value is not None else " " * 14
+            lines.append(
+                f"{label:>7} {row.resid_df:10.2f} {row.resid_dev:12.4f} "
+                f"{df_str} {dev_str} {stat_str} {p_str}"
+            )
+        return "\n".join(lines)
+
+
+def anova_gam(
+    *models: tuple[FitResult, ModelMatrix],
+    scale_known: bool,
+    scale_override: float | None = None,
+) -> AnovaResult:
+    """ANOVA-style deviance-difference tests for nested GAM models.
+
+    Compares a sequence of nested models (simplest to most complex) using sequential
+    deviance-difference tests. For known-scale families (Poisson, Binomial) a chi-squared test is
+    used. For unknown-scale families (Gaussian, Gamma) an F-test is used.
+
+    Parameters
+    ----------
+    *models:
+        Two or more `(FitResult, ModelMatrix)` tuples. Models are automatically sorted from simplest
+        (fewest edf) to most complex.
+    scale_known:
+        Whether the family has a known scale parameter.
+    scale_override:
+        If provided, use this scale instead of estimating from the largest model. Only relevant for
+        unknown-scale families.
+
+    Returns
+    -------
+    AnovaResult
+        Table of sequential deviance comparisons.
+
+    Raises
+    ------
+    ValueError
+        If fewer than 2 models are provided, or models have different numbers of observations.
+    """
+    if len(models) < 2:
+        raise ValueError("anova_gam requires at least 2 models.")
+
+    n_obs_set = {mm.n_obs for _, mm in models}
+    if len(n_obs_set) > 1:
+        raise ValueError(f"All models must be fitted to the same data (got n_obs = {n_obs_set}).")
+
+    sorted_models = sorted(models, key=lambda pair: pair[0].edf_total)
+
+    n = sorted_models[0][1].n_obs
+
+    if scale_known:
+        phi = 1.0
+        test_name = "Chisq"
+    else:
+        largest_fit = sorted_models[-1][0]
+        phi = scale_override if scale_override is not None else largest_fit.scale
+        test_name = "F"
+
+    rows: list[AnovaModelRow] = []
+
+    fit_0, mm_0 = sorted_models[0]
+    rows.append(AnovaModelRow(resid_df=n - fit_0.edf_total, resid_dev=fit_0.deviance))
+
+    for i in range(1, len(sorted_models)):
+        fit_prev, _ = sorted_models[i - 1]
+        fit_curr, _ = sorted_models[i]
+
+        delta_df = fit_curr.edf_total - fit_prev.edf_total
+        delta_dev = fit_prev.deviance - fit_curr.deviance
+
+        resid_df = n - fit_curr.edf_total
+
+        if delta_df <= 0:
+            rows.append(
+                AnovaModelRow(
+                    resid_df=resid_df,
+                    resid_dev=fit_curr.deviance,
+                    df=delta_df,
+                    deviance=delta_dev,
+                )
+            )
+            continue
+
+        if scale_known:
+            stat = delta_dev / phi
+            p_value = float(chi2.sf(stat, df=delta_df))
+        else:
+            stat = (delta_dev / delta_df) / phi
+            p_value = float(f_dist.sf(stat, dfn=delta_df, dfd=max(resid_df, 1.0)))
+
+        rows.append(
+            AnovaModelRow(
+                resid_df=resid_df,
+                resid_dev=fit_curr.deviance,
+                df=delta_df,
+                deviance=delta_dev,
+                stat=stat,
+                p_value=p_value,
+            )
+        )
+
+    return AnovaResult(rows=rows, scale=phi, test=test_name)
