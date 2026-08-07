@@ -190,9 +190,7 @@ class TestConcurvityIntegration:
         x2 = rng.uniform(size=n)
         y = np.sin(x1) + x1 * x2 + 0.2 * rng.standard_normal(n)
 
-        model = GAM("y ~ s(x1, k=5) + te(x1, x2, k=4)").fit(
-            {"y": y, "x1": x1, "x2": x2}
-        )
+        model = GAM("y ~ s(x1, k=5) + te(x1, x2, k=4)").fit({"y": y, "x1": x1, "x2": x2})
         c = model.concurvity(full=True)
         assert c.worst.shape == (2,)
         assert np.all(np.isfinite(c.worst))
@@ -236,9 +234,7 @@ class TestConcurvityIntegration:
         z = rng.standard_normal(n)
         y = np.sin(3 * x1) + 0.5 * z + 0.2 * rng.standard_normal(n)
 
-        model = GAM("y ~ z + s(x1, k=6) + s(x2, k=6)").fit(
-            {"y": y, "x1": x1, "x2": x2, "z": z}
-        )
+        model = GAM("y ~ z + s(x1, k=6) + s(x2, k=6)").fit({"y": y, "x1": x1, "x2": x2, "z": z})
         c = model.concurvity(full=True)
         assert c.worst.shape == (2,)
 
