@@ -414,9 +414,7 @@ class TestCyclicGAM:
         x2 = rng.uniform(0, 1, n)
         y = np.sin(x1) + x2**2 + 0.2 * rng.standard_normal(n)
 
-        model = GAM('y ~ s(x1, bs="cc", k=8) + s(x2, k=6)').fit(
-            {"y": y, "x1": x1, "x2": x2}
-        )
+        model = GAM('y ~ s(x1, bs="cc", k=8) + s(x2, k=6)').fit({"y": y, "x1": x1, "x2": x2})
         assert model.is_fitted
         assert len(model.edf) == 2
 
@@ -427,9 +425,7 @@ class TestCyclicGAM:
         x2 = rng.uniform(0, 1, n)
         y = np.sin(x1) * x2 + 0.1 * rng.standard_normal(n)
 
-        model = GAM('y ~ te(x1, x2, bs="cc", k=5)').fit(
-            {"y": y, "x1": x1, "x2": x2}
-        )
+        model = GAM('y ~ te(x1, x2, bs="cc", k=5)').fit({"y": y, "x1": x1, "x2": x2})
         assert model.is_fitted
 
     def test_cp_with_reml(self) -> None:
@@ -448,9 +444,7 @@ class TestCyclicGAM:
         x2 = rng.uniform(0, 1, n)
         y = np.sin(x1) + x2 + 0.2 * rng.standard_normal(n)
 
-        model = GAM('y ~ s(x1, bs="cc", k=8) + s(x2, k=6)').fit(
-            {"y": y, "x1": x1, "x2": x2}
-        )
+        model = GAM('y ~ s(x1, bs="cc", k=8) + s(x2, k=6)').fit({"y": y, "x1": x1, "x2": x2})
         c = model.concurvity(full=True)
         assert c.worst.shape == (2,)
         assert np.all(np.isfinite(c.worst))
