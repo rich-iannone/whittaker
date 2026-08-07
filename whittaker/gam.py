@@ -17,7 +17,7 @@ from whittaker.model_matrix import ModelMatrix, build_model_matrix, predict_matr
 
 @dataclass
 class PredictionResult:
-    """Result of `GAM.predict()` with optional standard errors.
+    """Result of `GAM.predict()` with optional standard errors and intervals.
 
     Attributes
     ----------
@@ -28,11 +28,17 @@ class PredictionResult:
         if `se=False`.
     linear_predictor:
         Predictions on the linear predictor scale, shape `(n,)`.
+    lower:
+        Lower bound of the interval on the response scale, or `None` if no interval requested.
+    upper:
+        Upper bound of the interval on the response scale, or `None` if no interval requested.
     """
 
     values: NDArray
     se: NDArray | None
     linear_predictor: NDArray
+    lower: NDArray | None = None
+    upper: NDArray | None = None
 
 
 @dataclass
@@ -140,6 +146,8 @@ class GAM:
         *,
         se: bool = False,
         type: str = "response",
+        interval: str | None = None,
+        level: float = 0.95,
     ) -> PredictionResult | TermsPredictionResult:
         """Predict on new data.
 
@@ -154,9 +162,17 @@ class GAM:
         type:
             Prediction type:
 
-            - `"response"` (default): predictions on the response scale (μ = g⁻¹(η)).
-            - `"link"`: predictions on the linear predictor scale (η = Xβ).
+            - `"response"` (default): predictions on the response scale (mu = g^{-1}(eta)).
+            - `"link"`: predictions on the linear predictor scale (eta = X beta).
             - `"terms"`: individual smooth term contributions to the linear predictor.
+        interval:
+            Interval type. ``None`` (default) returns no intervals. ``"confidence"`` computes
+            intervals for the mean response (uncertainty in eta only). ``"prediction"`` computes
+            intervals for a new observation (adds response-distribution variance). Intervals are
+            computed on the linear predictor scale and transformed to the response scale. Not
+            available for ``type="terms"``.
+        level:
+            Nominal coverage probability for the interval (default ``0.95``).
 
         Returns
         -------
@@ -168,6 +184,8 @@ class GAM:
         type_lower = type.lower()
 
         if type_lower == "terms":
+            if interval is not None:
+                raise ValueError("Intervals are not supported for type='terms'.")
             return self._predict_terms(new_data, se=se)
 
         if type_lower not in ("response", "link"):
@@ -175,16 +193,40 @@ class GAM:
                 f"Unknown prediction type {type!r}. Choose from 'response', 'link', or 'terms'."
             )
 
+        if interval is not None:
+            interval_lower = interval.lower()
+            if interval_lower not in ("confidence", "prediction"):
+                raise ValueError(
+                    f"Unknown interval type {interval!r}. "
+                    "Choose from 'confidence' or 'prediction'."
+                )
+        else:
+            interval_lower = None
+
         X_new = predict_matrix(self._model_matrix, new_data)
         eta = X_new @ self._fit_result.coefficients
 
+        need_se = se or interval_lower is not None
+        se_values = self._prediction_se(X_new) if need_se else None
+
+        lower = None
+        upper = None
+        if interval_lower is not None and se_values is not None:
+            lower, upper = self._compute_interval(
+                eta, se_values, X_new, interval_lower, level, type_lower,
+            )
+
         if type_lower == "link":
-            se_values = self._prediction_se(X_new) if se else None
-            return PredictionResult(values=eta, se=se_values, linear_predictor=eta)
+            return PredictionResult(
+                values=eta, se=se_values if se else None, linear_predictor=eta,
+                lower=lower, upper=upper,
+            )
 
         mu = self._family.link_inverse(eta)
-        se_values = self._prediction_se(X_new) if se else None
-        return PredictionResult(values=mu, se=se_values, linear_predictor=eta)
+        return PredictionResult(
+            values=mu, se=se_values if se else None, linear_predictor=eta,
+            lower=lower, upper=upper,
+        )
 
     def _predict_terms(
         self,
@@ -260,6 +302,42 @@ class GAM:
         var_diag = np.sum(X_new * A_inv_Xt.T, axis=1) * self._fit_result.scale
 
         return np.sqrt(np.maximum(var_diag, 0.0))
+
+    def _compute_interval(
+        self,
+        eta: NDArray,
+        se_eta: NDArray,
+        X_new: NDArray,
+        interval_type: str,
+        level: float,
+        pred_type: str,
+    ) -> tuple[NDArray, NDArray]:
+        """Compute confidence or prediction interval bounds on the response scale."""
+        from scipy.stats import norm
+        from scipy.stats import t as t_dist
+
+        n_obs = self._model_matrix.X.shape[0]
+        residual_df = n_obs - self._fit_result.edf_total
+
+        if self._family.scale_known:
+            q = norm.ppf(1.0 - (1.0 - level) / 2.0)
+        else:
+            q = t_dist.ppf(1.0 - (1.0 - level) / 2.0, df=max(residual_df, 1.0))
+
+        if interval_type == "prediction":
+            mu_for_var = self._family.link_inverse(eta)
+            response_var = self._family.variance(mu_for_var) * self._fit_result.scale
+            total_se = np.sqrt(se_eta**2 + response_var)
+        else:
+            total_se = se_eta
+
+        eta_lower = eta - q * total_se
+        eta_upper = eta + q * total_se
+
+        if pred_type == "link":
+            return eta_lower, eta_upper
+
+        return self._family.link_inverse(eta_lower), self._family.link_inverse(eta_upper)
 
     @property
     def coefficients(self) -> NDArray:
