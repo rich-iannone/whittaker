@@ -30,19 +30,23 @@ def partial_effects(
 ) -> alt.VConcatChart | alt.Chart:
     """Plot partial effects with confidence bands for each smooth term.
 
+    For univariate `s()` terms, produces a line plot with a shaded confidence band. For bivariate
+    `te()` and `ti()` terms, produces a heatmap of the partial effect with a companion SE panel.
+
     Parameters
     ----------
     model:
         A fitted GAM.
     n_points:
-        Number of evenly spaced points at which to evaluate each smooth.
+        Number of evenly spaced points at which to evaluate each smooth. For 2-D smooths, the grid
+        has approximately `sqrt(n_points)` points per side.
     level:
         Confidence level for the bands (the default is `0.95` -> ±1.96 SE).
 
     Returns
     -------
     altair.VConcatChart or altair.Chart
-        One panel per smooth term, vertically concatenated.
+        One panel per smooth term (two for 2-D smooths), vertically concatenated.
     """
     _check_altair()
     import altair as alt
@@ -67,7 +71,6 @@ def partial_effects(
     A = XtX + S_total
     A = (A + A.T) * 0.5
 
-    # Eigendecomposition-based pseudoinverse (robust to ill-conditioning)
     eigvals, eigvecs = np.linalg.eigh(A)
     tol = np.max(eigvals) * p * np.finfo(float).eps
     keep = eigvals > tol
@@ -77,109 +80,294 @@ def partial_effects(
     charts: list[alt.Chart] = []
 
     for idx, info in enumerate(mm.smooths):
-        var_name = info.term.variables[0]
+        is_2d = len(info.term.variables) >= 2
 
-        x_grid = _smooth_grid(info, n_points)
-
-        B_grid = info.basis.basis_matrix(x_grid)
-
-        has_by = info.by_var is not None
-        if not has_by:
-            constraint = info.basis.identifiability_constraints()
-            n_constrained = info.col_end - info.col_start
-            if constraint is not None and n_constrained < info.basis.n_basis:
-                from whittaker.model_matrix import _apply_constraint
-
-                B_grid = _apply_constraint(B_grid, constraint)
-
-        beta_j = beta[info.col_start : info.col_end]
-        f_j = B_grid @ beta_j
-
-        X_partial = np.zeros((n_points, X_train.shape[1]))
-        X_partial[:, info.col_start : info.col_end] = B_grid
-
-        Xp_V = X_partial @ eigvecs
-        var_diag = np.sum(Xp_V**2 * eigvals_inv[np.newaxis, :], axis=1) * scale
-        se_j = np.sqrt(np.maximum(var_diag, 0.0))
-
-        edf_j = model._fit_result.edf[idx]
-
-        if info.by_level is not None:
-            title_str = f"s({var_name}, by={info.by_var}):{info.by_level}, edf={edf_j:.1f}"
-        elif info.by_var is not None:
-            title_str = f"s({var_name}, by={info.by_var}), edf={edf_j:.1f}"
+        if is_2d:
+            chart = _partial_effect_2d(
+                info, idx, model, beta, eigvecs, eigvals_inv, scale, z_val, n_points
+            )
+            charts.append(chart)
         else:
-            title_str = f"s({var_name}, edf={edf_j:.1f})"
-
-        data_dict = {
-            var_name: x_grid.tolist(),
-            "effect": f_j.tolist(),
-            "lower": (f_j - z_val * se_j).tolist(),
-            "upper": (f_j + z_val * se_j).tolist(),
-        }
-        source = alt.Data(values=[dict(zip(data_dict, t)) for t in zip(*data_dict.values())])
-
-        band = (
-            alt.Chart(source)
-            .mark_area(opacity=0.25, color="#4682B4")
-            .encode(
-                x=alt.X(f"{var_name}:Q").title(var_name),
-                y=alt.Y("lower:Q").title(title_str),
-                y2="upper:Q",
+            chart = _partial_effect_1d(
+                info, idx, model, beta, eigvecs, eigvals_inv, scale, z_val, n_points
             )
-        )
-
-        line = (
-            alt.Chart(source)
-            .mark_line(color="#4682B4", strokeWidth=2)
-            .encode(
-                x=alt.X(f"{var_name}:Q"),
-                y=alt.Y("effect:Q"),
-            )
-        )
-
-        zero_rule = (
-            alt.Chart(alt.Data(values=[{}]))
-            .mark_rule(strokeDash=[4, 4], color="gray")
-            .encode(y=alt.datum(0))
-        )
-
-        chart = (band + line + zero_rule).properties(
-            width=450,
-            height=300,
-            title=title_str,
-        )
-        charts.append(chart)
+            charts.append(chart)
 
     if len(charts) == 1:
         return charts[0]
     return alt.vconcat(*charts)
 
 
+def _partial_effect_1d(
+    info: object,
+    idx: int,
+    model: GAM,
+    beta: np.ndarray,
+    eigvecs: np.ndarray,
+    eigvals_inv: np.ndarray,
+    scale: float,
+    z_val: float,
+    n_points: int,
+) -> object:
+    """Build a 1-D partial-effect line chart with confidence band."""
+    import altair as alt
+
+    from whittaker.model_matrix import SmoothInfo, _apply_constraint
+
+    assert isinstance(info, SmoothInfo)
+
+    var_name = info.term.variables[0]
+    x_grid = _smooth_grid(info, n_points)
+
+    B_grid = info.basis.basis_matrix(x_grid)
+
+    has_by = info.by_var is not None
+    if not has_by:
+        constraint = info.basis.identifiability_constraints()
+        n_constrained = info.col_end - info.col_start
+        if constraint is not None and n_constrained < info.basis.n_basis:
+            B_grid = _apply_constraint(B_grid, constraint)
+
+    beta_j = beta[info.col_start : info.col_end]
+    f_j = B_grid @ beta_j
+
+    p_full = len(beta)
+    X_partial = np.zeros((n_points, p_full))
+    X_partial[:, info.col_start : info.col_end] = B_grid
+
+    Xp_V = X_partial @ eigvecs
+    var_diag = np.sum(Xp_V**2 * eigvals_inv[np.newaxis, :], axis=1) * scale
+    se_j = np.sqrt(np.maximum(var_diag, 0.0))
+
+    edf_j = model._fit_result.edf[idx]
+    title_str = _smooth_title(info, edf_j)
+
+    data_dict = {
+        var_name: x_grid.tolist(),
+        "effect": f_j.tolist(),
+        "lower": (f_j - z_val * se_j).tolist(),
+        "upper": (f_j + z_val * se_j).tolist(),
+    }
+    source = alt.Data(values=[dict(zip(data_dict, t)) for t in zip(*data_dict.values())])
+
+    band = (
+        alt.Chart(source)
+        .mark_area(opacity=0.25, color="#4682B4")
+        .encode(
+            x=alt.X(f"{var_name}:Q").title(var_name),
+            y=alt.Y("lower:Q").title(title_str),
+            y2="upper:Q",
+        )
+    )
+
+    line = (
+        alt.Chart(source)
+        .mark_line(color="#4682B4", strokeWidth=2)
+        .encode(
+            x=alt.X(f"{var_name}:Q"),
+            y=alt.Y("effect:Q"),
+        )
+    )
+
+    zero_rule = (
+        alt.Chart(alt.Data(values=[{}]))
+        .mark_rule(strokeDash=[4, 4], color="gray")
+        .encode(y=alt.datum(0))
+    )
+
+    return (band + line + zero_rule).properties(width=450, height=300, title=title_str)
+
+
+def _partial_effect_2d(
+    info: object,
+    idx: int,
+    model: GAM,
+    beta: np.ndarray,
+    eigvecs: np.ndarray,
+    eigvals_inv: np.ndarray,
+    scale: float,
+    z_val: float,
+    n_points: int,
+) -> object:
+    """Build a 2-D partial-effect heatmap with an SE companion panel."""
+    import altair as alt
+
+    from whittaker.model_matrix import SmoothInfo, _apply_constraint
+
+    assert isinstance(info, SmoothInfo)
+
+    var1 = info.term.variables[0]
+    var2 = info.term.variables[1]
+
+    n_side = max(int(np.ceil(np.sqrt(n_points))), 15)
+    x1_grid, x2_grid, x_flat = _smooth_grid_2d(info, n_side)
+
+    B_grid = info.basis.basis_matrix(x_flat)
+
+    has_by = info.by_var is not None
+    if not has_by:
+        constraint = info.basis.identifiability_constraints()
+        n_constrained = info.col_end - info.col_start
+        if constraint is not None and n_constrained < info.basis.n_basis:
+            B_grid = _apply_constraint(B_grid, constraint)
+
+    beta_j = beta[info.col_start : info.col_end]
+    f_flat = B_grid @ beta_j
+
+    n_grid = len(f_flat)
+    p_full = len(beta)
+    X_partial = np.zeros((n_grid, p_full))
+    X_partial[:, info.col_start : info.col_end] = B_grid
+
+    Xp_V = X_partial @ eigvecs
+    var_diag = np.sum(Xp_V**2 * eigvals_inv[np.newaxis, :], axis=1) * scale
+    se_flat = np.sqrt(np.maximum(var_diag, 0.0))
+
+    edf_j = model._fit_result.edf[idx]
+    title_str = _smooth_title(info, edf_j)
+
+    dx1 = float(x1_grid[1] - x1_grid[0]) if len(x1_grid) > 1 else 1.0
+    dx2 = float(x2_grid[1] - x2_grid[0]) if len(x2_grid) > 1 else 1.0
+
+    records = []
+    k = 0
+    for i in range(len(x1_grid)):
+        for j in range(len(x2_grid)):
+            records.append(
+                {
+                    var1: float(x1_grid[i]),
+                    var2: float(x2_grid[j]),
+                    f"{var1}_lo": float(x1_grid[i] - dx1 / 2),
+                    f"{var1}_hi": float(x1_grid[i] + dx1 / 2),
+                    f"{var2}_lo": float(x2_grid[j] - dx2 / 2),
+                    f"{var2}_hi": float(x2_grid[j] + dx2 / 2),
+                    "effect": float(f_flat[k]),
+                    "se": float(se_flat[k]),
+                }
+            )
+            k += 1
+
+    source = alt.Data(values=records)
+
+    eff_max = float(max(abs(np.min(f_flat)), abs(np.max(f_flat))))
+    if eff_max < 1e-10:
+        eff_max = 1.0
+
+    effect_chart = (
+        alt.Chart(source)
+        .mark_rect()
+        .encode(
+            x=alt.X(f"{var1}_lo:Q", title=var1),
+            x2=f"{var1}_hi:Q",
+            y=alt.Y(f"{var2}_lo:Q", title=var2),
+            y2=f"{var2}_hi:Q",
+            color=alt.Color(
+                "effect:Q",
+                scale=alt.Scale(scheme="blueorange", domainMid=0, domain=[-eff_max, eff_max]),
+                title="Effect",
+            ),
+            tooltip=[
+                alt.Tooltip(f"{var1}:Q", format=".3f"),
+                alt.Tooltip(f"{var2}:Q", format=".3f"),
+                alt.Tooltip("effect:Q", format=".3f"),
+                alt.Tooltip("se:Q", format=".3f"),
+            ],
+        )
+        .properties(width=350, height=300, title=title_str)
+    )
+
+    se_chart = (
+        alt.Chart(source)
+        .mark_rect()
+        .encode(
+            x=alt.X(f"{var1}_lo:Q", title=var1),
+            x2=f"{var1}_hi:Q",
+            y=alt.Y(f"{var2}_lo:Q", title=var2),
+            y2=f"{var2}_hi:Q",
+            color=alt.Color(
+                "se:Q",
+                scale=alt.Scale(scheme="reds"),
+                title="SE",
+            ),
+            tooltip=[
+                alt.Tooltip(f"{var1}:Q", format=".3f"),
+                alt.Tooltip(f"{var2}:Q", format=".3f"),
+                alt.Tooltip("se:Q", format=".3f"),
+            ],
+        )
+        .properties(width=350, height=300, title=f"SE: {title_str}")
+    )
+
+    return alt.hconcat(effect_chart, se_chart).resolve_scale(color="independent")
+
+
+def _smooth_title(info: object, edf: float) -> str:
+    """Build a descriptive title string for a smooth term."""
+    from whittaker.model_matrix import SmoothInfo
+
+    assert isinstance(info, SmoothInfo)
+    term = info.term
+    var_str = ", ".join(term.variables)
+    prefix = term.smooth_type
+
+    if info.by_level is not None:
+        return f"{prefix}({var_str}, by={info.by_var}):{info.by_level}, edf={edf:.1f}"
+    if info.by_var is not None:
+        return f"{prefix}({var_str}, by={info.by_var}), edf={edf:.1f}"
+    return f"{prefix}({var_str}, edf={edf:.1f})"
+
+
+def _marginal_range(basis: object) -> tuple[float, float]:
+    """Return (min, max) of a univariate basis's training domain."""
+    if hasattr(basis, "_x_min") and hasattr(basis, "_x_max"):
+        return float(basis._x_min), float(basis._x_max)
+    if hasattr(basis, "_knots") and basis._knots is not None:
+        return float(np.min(basis._knots)), float(np.max(basis._knots))
+    if hasattr(basis, "_x_train") and basis._x_train is not None:
+        return float(np.min(basis._x_train)), float(np.max(basis._x_train))
+    return 0.0, 1.0
+
+
 def _smooth_grid(
     info: object,
     n_points: int,
 ) -> np.ndarray:
-    """Generate an evaluation grid for a smooth term from its training knot range."""
+    """Generate an evaluation grid for a univariate smooth term."""
     from whittaker.model_matrix import SmoothInfo
+
+    assert isinstance(info, SmoothInfo)
+    lo, hi = _marginal_range(info.basis)
+    return np.linspace(lo, hi, n_points)
+
+
+def _smooth_grid_2d(
+    info: object,
+    n_side: int,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Generate a 2-D meshgrid for a tensor product smooth.
+
+    Returns (x1_grid, x2_grid, x_flat) where x1_grid and x2_grid are 1-D arrays of length n_side and
+    x_flat is (n_side*n_side, 2) for basis evaluation.
+    """
+    from whittaker.model_matrix import SmoothInfo
+    from whittaker.smooths.tensor import TensorInteractionBasis, TensorProductBasis
 
     assert isinstance(info, SmoothInfo)
 
     basis = info.basis
+    if isinstance(basis, (TensorProductBasis, TensorInteractionBasis)):
+        m1, m2 = basis.marginals[0], basis.marginals[1]
+        lo1, hi1 = _marginal_range(m1)
+        lo2, hi2 = _marginal_range(m2)
+    else:
+        lo1, hi1 = 0.0, 1.0
+        lo2, hi2 = 0.0, 1.0
 
-    # PSpline stores explicit range
-    if hasattr(basis, "_x_min") and hasattr(basis, "_x_max"):
-        return np.linspace(float(basis._x_min), float(basis._x_max), n_points)
-
-    # CRS stores knots
-    if hasattr(basis, "_knots") and basis._knots is not None:
-        return np.linspace(float(np.min(basis._knots)), float(np.max(basis._knots)), n_points)
-
-    # TPRS stores training data
-    if hasattr(basis, "_x_train") and basis._x_train is not None:
-        return np.linspace(float(np.min(basis._x_train)), float(np.max(basis._x_train)), n_points)
-
-    return np.linspace(0.0, 1.0, n_points)
+    x1_grid = np.linspace(lo1, hi1, n_side)
+    x2_grid = np.linspace(lo2, hi2, n_side)
+    xx1, xx2 = np.meshgrid(x1_grid, x2_grid, indexing="ij")
+    x_flat = np.column_stack([xx1.ravel(), xx2.ravel()])
+    return x1_grid, x2_grid, x_flat
 
 
 def check(
