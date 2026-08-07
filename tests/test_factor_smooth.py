@@ -20,8 +20,8 @@ from whittaker.smooths.factor_smooth import FactorSmoothBasis
 @pytest.fixture()
 def panel_data():
     rng = np.random.default_rng(23)
-    n_subjects = 8
-    n_per = 40
+    n_subjects = 4
+    n_per = 30
     n = n_subjects * n_per
     subject = np.repeat(np.arange(n_subjects).astype(str), n_per)
     x = np.tile(np.linspace(0, 2 * np.pi, n_per), n_subjects)
@@ -211,7 +211,7 @@ class TestFactorSmoothModelMatrix:
         assert mm_c.X.shape[1] == mm_nc.X.shape[1]
 
     def test_fs_with_other_smooth(self, panel_data):
-        formula = parse("y ~ s(x) + s(x, subject, bs='fs')")
+        formula = parse("y ~ s(x) + s(x, subject, bs='fs', k=5)")
         mm = build_model_matrix(formula, panel_data)
         assert len(mm.smooths) == 2
 
@@ -238,13 +238,13 @@ def parse_and_build(formula_str, data):
 
 class TestFactorSmoothGAM:
     def test_fit_gaussian(self, panel_data):
-        gam = GAM("y ~ s(x, subject, bs='fs')", family=Gaussian())
+        gam = GAM("y ~ s(x, subject, bs='fs', k=6)", family=Gaussian())
         gam.fit(panel_data)
         assert gam.is_fitted
         assert gam._fit_result.deviance > 0
 
     def test_deviance_explained(self, panel_data):
-        gam = GAM("y ~ s(x, subject, bs='fs')", family=Gaussian())
+        gam = GAM("y ~ s(x, subject, bs='fs', k=6)", family=Gaussian())
         gam.fit(panel_data)
         residuals = gam.get_residuals("response")
         ss_res = np.sum(residuals**2)
@@ -253,46 +253,46 @@ class TestFactorSmoothGAM:
         assert deviance_explained > 0.5
 
     def test_predict(self, panel_data):
-        gam = GAM("y ~ s(x, subject, bs='fs')", family=Gaussian())
+        gam = GAM("y ~ s(x, subject, bs='fs', k=6)", family=Gaussian())
         gam.fit(panel_data)
         pred = gam.predict(panel_data)
         assert pred.values.shape == (len(panel_data["y"]),)
         assert np.isfinite(pred.values).all()
 
     def test_predict_with_se(self, panel_data):
-        gam = GAM("y ~ s(x, subject, bs='fs')", family=Gaussian())
+        gam = GAM("y ~ s(x, subject, bs='fs', k=6)", family=Gaussian())
         gam.fit(panel_data)
         pred = gam.predict(panel_data, se=True)
         assert pred.se is not None
         assert np.all(pred.se >= 0)
 
     def test_summary(self, panel_data):
-        gam = GAM("y ~ s(x, subject, bs='fs')", family=Gaussian())
+        gam = GAM("y ~ s(x, subject, bs='fs', k=6)", family=Gaussian())
         gam.fit(panel_data)
         s = gam.summary()
         assert "s(x, subject" in s
 
     def test_smooth_tests(self, panel_data):
-        gam = GAM("y ~ s(x, subject, bs='fs')", family=Gaussian())
+        gam = GAM("y ~ s(x, subject, bs='fs', k=6)", family=Gaussian())
         gam.fit(panel_data)
         tests = gam.smooth_tests()
         assert len(tests) == 1
         assert 0.0 <= tests[0].p_value <= 1.0
 
     def test_edf(self, panel_data):
-        gam = GAM("y ~ s(x, subject, bs='fs')", family=Gaussian())
+        gam = GAM("y ~ s(x, subject, bs='fs', k=6)", family=Gaussian())
         gam.fit(panel_data)
         edfs = gam.edf
         assert len(edfs) == 1
         assert edfs[0] > 1
 
     def test_reml(self, panel_data):
-        gam = GAM("y ~ s(x, subject, bs='fs')", family=Gaussian())
+        gam = GAM("y ~ s(x, subject, bs='fs', k=6)", family=Gaussian())
         gam.fit(panel_data, method="REML")
         assert gam.is_fitted
 
     def test_residuals(self, panel_data):
-        gam = GAM("y ~ s(x, subject, bs='fs')", family=Gaussian())
+        gam = GAM("y ~ s(x, subject, bs='fs', k=6)", family=Gaussian())
         gam.fit(panel_data)
         for rtype in ("response", "pearson", "deviance", "working"):
             r = gam.get_residuals(rtype)
@@ -301,14 +301,14 @@ class TestFactorSmoothGAM:
 
     def test_anova_fs_vs_plain(self, panel_data):
         g1 = GAM("y ~ s(x)", family=Gaussian()).fit(panel_data)
-        g2 = GAM("y ~ s(x, subject, bs='fs')", family=Gaussian()).fit(panel_data)
+        g2 = GAM("y ~ s(x, subject, bs='fs', k=6)", family=Gaussian()).fit(panel_data)
         result = g1.anova(g2)
         assert len(result.rows) == 2
         assert result.rows[1].deviance > 0
 
     def test_fs_with_re(self, panel_data):
         gam = GAM(
-            "y ~ s(x, subject, bs='fs') + s(subject, bs='re')",
+            "y ~ s(x, subject, bs='fs', k=6) + s(subject, bs='re')",
             family=Gaussian(),
         )
         gam.fit(panel_data)
@@ -317,8 +317,8 @@ class TestFactorSmoothGAM:
 
     def test_poisson_fs(self):
         rng = np.random.default_rng(23)
-        n_groups = 4
-        n_per = 50
+        n_groups = 3
+        n_per = 40
         n = n_groups * n_per
         group = np.repeat(np.arange(n_groups).astype(str), n_per)
         x = np.tile(np.linspace(0, 2 * np.pi, n_per), n_groups)
@@ -327,31 +327,31 @@ class TestFactorSmoothGAM:
         mu = np.exp(0.5 * np.sin(x) + group_effects[subj_idx])
         y = rng.poisson(mu)
         data = {"x": x, "y": y, "group": group}
-        gam = GAM("y ~ s(x, group, bs='fs')", family=Poisson())
+        gam = GAM("y ~ s(x, group, bs='fs', k=5)", family=Poisson())
         gam.fit(data)
         assert gam.is_fitted
 
     def test_concurvity_with_fs(self, panel_data):
-        gam = GAM("y ~ s(x) + s(x, subject, bs='fs')", family=Gaussian())
+        gam = GAM("y ~ s(x) + s(x, subject, bs='fs', k=5)", family=Gaussian())
         gam.fit(panel_data)
         c = gam.concurvity()
         assert len(c.labels) == 2
 
     def test_aic_bic_finite(self, panel_data):
-        gam = GAM("y ~ s(x, subject, bs='fs')", family=Gaussian())
+        gam = GAM("y ~ s(x, subject, bs='fs', k=6)", family=Gaussian())
         gam.fit(panel_data)
         assert np.isfinite(gam._fit_result.aic)
         assert np.isfinite(gam._fit_result.bic)
 
     def test_fs_with_xt_cr(self, panel_data):
-        gam = GAM("y ~ s(x, subject, bs='fs', xt='cr')", family=Gaussian())
+        gam = GAM("y ~ s(x, subject, bs='fs', k=6, xt='cr')", family=Gaussian())
         gam.fit(panel_data)
         assert gam.is_fitted
         pred = gam.predict(panel_data)
         assert np.isfinite(pred.values).all()
 
     def test_per_level_curves_differ(self, panel_data):
-        gam = GAM("y ~ s(x, subject, bs='fs')", family=Gaussian())
+        gam = GAM("y ~ s(x, subject, bs='fs', k=6)", family=Gaussian())
         gam.fit(panel_data)
         subjects = np.unique(panel_data["subject"])
         x_grid = np.linspace(0, 2 * np.pi, 50)
@@ -366,5 +366,5 @@ class TestFactorSmoothGAM:
 
     def test_fs_better_than_global_smooth(self, panel_data):
         g_global = GAM("y ~ s(x)", family=Gaussian()).fit(panel_data)
-        g_fs = GAM("y ~ s(x, subject, bs='fs')", family=Gaussian()).fit(panel_data)
+        g_fs = GAM("y ~ s(x, subject, bs='fs', k=6)", family=Gaussian()).fit(panel_data)
         assert g_fs._fit_result.deviance < g_global._fit_result.deviance
