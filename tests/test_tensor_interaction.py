@@ -4,15 +4,13 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
-from numpy.testing import assert_allclose
 
 from whittaker.families.poisson import Poisson
 from whittaker.formula.parser import parse
 from whittaker.gam import GAM
 from whittaker.model_matrix import build_model_matrix
-from whittaker.smooths.tensor import TensorInteractionBasis, TensorProductBasis, _row_tensor_product
+from whittaker.smooths.tensor import TensorInteractionBasis, TensorProductBasis
 from whittaker.smooths.tprs import TPRS
-
 
 # ---------------------------------------------------------------------------
 # TensorInteractionBasis unit tests

@@ -14,7 +14,6 @@ from whittaker.smooths.cubic import CRS
 from whittaker.smooths.shrinkage import ShrinkageCRS, ShrinkageTPRS, _null_space_penalty
 from whittaker.smooths.tprs import TPRS
 
-
 # ---------------------------------------------------------------------------
 # ShrinkageTPRS unit tests
 # ---------------------------------------------------------------------------

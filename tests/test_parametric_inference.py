@@ -3,14 +3,12 @@
 from __future__ import annotations
 
 import numpy as np
-import pytest
 from numpy.testing import assert_allclose
 
 from whittaker.families.binomial import Binomial
 from whittaker.families.gamma import Gamma
 from whittaker.families.poisson import Poisson
 from whittaker.gam import GAM
-
 
 # ---------------------------------------------------------------------------
 # Parametric coefficient tests

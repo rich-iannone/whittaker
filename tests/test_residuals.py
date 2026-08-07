@@ -12,7 +12,6 @@ from whittaker.families.gaussian import Gaussian
 from whittaker.families.poisson import Poisson
 from whittaker.gam import GAM
 
-
 # ---------------------------------------------------------------------------
 # Response residuals
 # ---------------------------------------------------------------------------
