@@ -5,7 +5,11 @@ from __future__ import annotations
 from whittaker.smooths.base import SmoothBasis
 from whittaker.smooths.cubic import CRS
 from whittaker.smooths.pspline import PSpline
-from whittaker.smooths.tensor import TensorInteractionBasis, TensorProductBasis
+from whittaker.smooths.tensor import (
+    TensorInteractionBasis,
+    TensorProductBasis,
+    TensorProductBasisT2,
+)
 from whittaker.smooths.tprs import TPRS
 
 __all__ = [
@@ -14,5 +18,6 @@ __all__ = [
     "SmoothBasis",
     "TensorInteractionBasis",
     "TensorProductBasis",
+    "TensorProductBasisT2",
     "TPRS",
 ]

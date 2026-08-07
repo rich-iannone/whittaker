@@ -1,4 +1,4 @@
-"""Tensor product smooth bases (te / ti)."""
+"""Tensor product smooth bases (te / ti / t2)."""
 
 from __future__ import annotations
 
@@ -139,6 +139,42 @@ class TensorProductBasis(SmoothBasis):
     @property
     def marginals(self) -> list[SmoothBasis]:
         return self._marginals
+
+
+class TensorProductBasisT2(TensorProductBasis):
+    """Tensor product basis with full penalty decomposition (t2).
+
+    Uses the same row-wise Kronecker product basis as `te()`, but generates a richer penalty
+    structure: one penalty for every non-empty subset of marginals. For *d* marginals this gives
+    `2^d - 1` penalties (compared to *d* for `te()`), each with its own smoothing parameter.
+
+    For 2 marginals with penalties S_1, S_2 and dimensions k_1, k_2::
+
+        `te()` penalties:  S_1 ⊗ I,  I ⊗ S_2                       (2 penalties)
+        `t2()` penalties:  S_1 ⊗ I,  I ⊗ S_2,  S_1 ⊗ S_2           (3 penalties)
+
+    This gives each interaction order its own smoothing parameter, which can improve estimation when
+    the interaction and main-effect smoothness differ substantially.
+    """
+
+    def penalty_matrices(self) -> list[NDArray]:
+        """Return one penalty per non-empty subset of marginal directions."""
+        self._check_fitted()
+        d = len(self._marginals)
+        dims = [m.n_basis for m in self._marginals]
+        marginal_penalties = [m.penalty_matrix() for m in self._marginals]
+
+        penalties = []
+        for mask in range(1, 1 << d):
+            P = None
+            for j in range(d):
+                if mask & (1 << j):
+                    M_j = marginal_penalties[j]
+                else:
+                    M_j = np.eye(dims[j])
+                P = M_j if P is None else np.kron(P, M_j)
+            penalties.append(P)
+        return penalties
 
 
 class TensorInteractionBasis(SmoothBasis):

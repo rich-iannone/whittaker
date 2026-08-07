@@ -33,7 +33,11 @@ from whittaker.formula.terms import (
 from whittaker.smooths.base import SmoothBasis
 from whittaker.smooths.cubic import CRS
 from whittaker.smooths.pspline import PSpline
-from whittaker.smooths.tensor import TensorInteractionBasis, TensorProductBasis
+from whittaker.smooths.tensor import (
+    TensorInteractionBasis,
+    TensorProductBasis,
+    TensorProductBasisT2,
+)
 from whittaker.smooths.tprs import TPRS
 
 _BS_REGISTRY: dict[str, type[SmoothBasis]] = {
@@ -158,6 +162,52 @@ def _resolve_tensor_interaction_basis(term: SmoothTerm) -> TensorInteractionBasi
         marginals.append(_resolve_basis(marginal_term))
 
     return TensorInteractionBasis(marginals)
+
+
+def _resolve_t2_basis(term: SmoothTerm) -> TensorProductBasisT2:
+    """Instantiate a `TensorProductBasisT2` from a `t2()` term."""
+    d = len(term.variables)
+    if d < 2:
+        raise ValueError(f"t2() requires at least 2 variables, got {d}.")
+
+    k_list = term.extra.get("k")
+    if k_list is None:
+        k_per = [term.k] * d if term.k != -1 else [-1] * d
+    elif isinstance(k_list, list):
+        if len(k_list) != d:
+            raise ValueError(
+                f"t2() got k={k_list} but has {d} variables. "
+                f"Length of k must match the number of variables."
+            )
+        k_per = k_list
+    else:
+        k_per = [int(k_list)] * d
+
+    bs_spec = term.extra.get("bs")
+    if bs_spec is None:
+        bs_per = [term.bs] * d
+    elif isinstance(bs_spec, list):
+        if len(bs_spec) != d:
+            raise ValueError(
+                f"t2() got bs={bs_spec} but has {d} variables. "
+                f"Length of bs must match the number of variables."
+            )
+        bs_per = bs_spec
+    else:
+        bs_per = [str(bs_spec)] * d
+
+    marginals: list[SmoothBasis] = []
+    for j in range(d):
+        marginal_term = SmoothTerm(
+            variables=(term.variables[j],),
+            smooth_type="s",
+            bs=bs_per[j],
+            k=k_per[j],
+            extra={k: v for k, v in term.extra.items() if k not in ("k", "bs")},
+        )
+        marginals.append(_resolve_basis(marginal_term))
+
+    return TensorProductBasisT2(marginals)
 
 
 def _is_factor(arr: NDArray) -> bool:
@@ -399,12 +449,14 @@ def build_model_matrix(
             basis = _resolve_tensor_basis(term)
         elif term.smooth_type == "ti":
             basis = _resolve_tensor_interaction_basis(term)
+        elif term.smooth_type == "t2":
+            basis = _resolve_t2_basis(term)
         elif term.smooth_type == "s":
             basis = _resolve_basis(term)
         else:
             raise NotImplementedError(
                 f"Smooth type {term.smooth_type!r} is not yet supported. "
-                "Only s(), te(), and ti() are implemented."
+                "Only s(), te(), ti(), and t2() are implemented."
             )
 
         if len(term.variables) == 1:
