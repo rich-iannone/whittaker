@@ -31,12 +31,19 @@ class Gaussian(Family):
     def variance(self, mu: NDArray) -> NDArray:
         return np.ones_like(mu)
 
-    def deviance(self, y: NDArray, mu: NDArray) -> float:
-        return float(np.sum((y - mu) ** 2))
+    def deviance(self, y: NDArray, mu: NDArray, *, weights: NDArray | None = None) -> float:
+        d = (y - mu) ** 2
+        if weights is not None:
+            d = weights * d
+        return float(np.sum(d))
 
-    def log_likelihood(self, y: NDArray, mu: NDArray, scale: float) -> float:
-        n = len(y)
-        return float(-0.5 * n * np.log(2 * np.pi * scale) - 0.5 * np.sum((y - mu) ** 2) / scale)
+    def log_likelihood(
+        self, y: NDArray, mu: NDArray, scale: float, *, weights: NDArray | None = None
+    ) -> float:
+        ll_i = -0.5 * np.log(2 * np.pi * scale) - 0.5 * (y - mu) ** 2 / scale
+        if weights is not None:
+            ll_i = weights * ll_i
+        return float(np.sum(ll_i))
 
     def initialize(self, y: NDArray) -> NDArray:
         return y.copy()

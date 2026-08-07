@@ -32,14 +32,11 @@ class Poisson(Family):
     def variance(self, mu: NDArray) -> NDArray:
         return np.maximum(mu, _EPS)
 
-    def deviance(self, y: NDArray, mu: NDArray) -> float:
-        mu_c = np.maximum(mu, _EPS)
-        dev = np.empty_like(y)
-        pos = y > 0
-        dev[pos] = y[pos] * np.log(y[pos] / mu_c[pos])
-        dev[~pos] = 0.0
-        dev -= y - mu_c
-        return float(2.0 * np.sum(dev))
+    def deviance(self, y: NDArray, mu: NDArray, *, weights: NDArray | None = None) -> float:
+        d = self.unit_deviance(y, mu)
+        if weights is not None:
+            d = weights * d
+        return float(np.sum(d))
 
     def unit_deviance(self, y: NDArray, mu: NDArray) -> NDArray:
         mu_c = np.maximum(mu, _EPS)
@@ -50,12 +47,16 @@ class Poisson(Family):
         dev -= y - mu_c
         return 2.0 * dev
 
-    def log_likelihood(self, y: NDArray, mu: NDArray, scale: float) -> float:
+    def log_likelihood(
+        self, y: NDArray, mu: NDArray, scale: float, *, weights: NDArray | None = None
+    ) -> float:
         from scipy.special import gammaln
 
         mu_c = np.maximum(mu, _EPS)
-        ll = y * np.log(mu_c) - mu_c - gammaln(y + 1.0)
-        return float(np.sum(ll))
+        ll_i = y * np.log(mu_c) - mu_c - gammaln(y + 1.0)
+        if weights is not None:
+            ll_i = weights * ll_i
+        return float(np.sum(ll_i))
 
     @property
     def scale_known(self) -> bool:

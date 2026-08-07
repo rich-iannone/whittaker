@@ -32,30 +32,35 @@ class Gamma(Family):
     def variance(self, mu: NDArray) -> NDArray:
         return np.maximum(mu, _EPS) ** 2
 
-    def deviance(self, y: NDArray, mu: NDArray) -> float:
-        mu_c = np.maximum(mu, _EPS)
-        y_c = np.maximum(y, _EPS)
-        return float(2.0 * np.sum(-np.log(y_c / mu_c) + (y - mu_c) / mu_c))
+    def deviance(self, y: NDArray, mu: NDArray, *, weights: NDArray | None = None) -> float:
+        d = self.unit_deviance(y, mu)
+        if weights is not None:
+            d = weights * d
+        return float(np.sum(d))
 
     def unit_deviance(self, y: NDArray, mu: NDArray) -> NDArray:
         mu_c = np.maximum(mu, _EPS)
         y_c = np.maximum(y, _EPS)
         return 2.0 * (-np.log(y_c / mu_c) + (y - mu_c) / mu_c)
 
-    def log_likelihood(self, y: NDArray, mu: NDArray, scale: float) -> float:
+    def log_likelihood(
+        self, y: NDArray, mu: NDArray, scale: float, *, weights: NDArray | None = None
+    ) -> float:
         from scipy.special import gammaln
 
         mu_c = np.maximum(mu, _EPS)
         y_c = np.maximum(y, _EPS)
         alpha = 1.0 / scale
-        ll = (
+        ll_i = (
             alpha * np.log(alpha)
             + (alpha - 1.0) * np.log(y_c)
             - alpha * y_c / mu_c
             - alpha * np.log(mu_c)
             - gammaln(alpha)
         )
-        return float(np.sum(ll))
+        if weights is not None:
+            ll_i = weights * ll_i
+        return float(np.sum(ll_i))
 
     @property
     def scale_known(self) -> bool:

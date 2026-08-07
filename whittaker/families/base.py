@@ -45,8 +45,11 @@ class Family(ABC):
         ...
 
     @abstractmethod
-    def deviance(self, y: NDArray, mu: NDArray) -> float:
-        """Total (unscaled) deviance: 2 * Σ [ℓ(y; y) − ℓ(y; μ)]."""
+    def deviance(self, y: NDArray, mu: NDArray, *, weights: NDArray | None = None) -> float:
+        """Total (unscaled) deviance: 2 * Σ [ℓ(y; y) − ℓ(y; μ)].
+
+        When *weights* is given the deviance is Σ w_i d_i.
+        """
         ...
 
     def unit_deviance(self, y: NDArray, mu: NDArray) -> NDArray:
@@ -57,8 +60,13 @@ class Family(ABC):
         return (y - mu) ** 2
 
     @abstractmethod
-    def log_likelihood(self, y: NDArray, mu: NDArray, scale: float) -> float:
-        """Log-likelihood ℓ(y; μ, φ) evaluated at the given scale parameter φ."""
+    def log_likelihood(
+        self, y: NDArray, mu: NDArray, scale: float, *, weights: NDArray | None = None
+    ) -> float:
+        """Log-likelihood ℓ(y; μ, φ) evaluated at the given scale parameter φ.
+
+        When *weights* is given the log-likelihood is Σ w_i ℓ_i.
+        """
         ...
 
     @property
