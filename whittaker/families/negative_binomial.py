@@ -57,8 +57,11 @@ class NegativeBinomial(Family):
         mu_c = np.maximum(mu, _EPS)
         return mu_c + mu_c**2 / self._theta
 
-    def deviance(self, y: NDArray, mu: NDArray) -> float:
-        return float(np.sum(self.unit_deviance(y, mu)))
+    def deviance(self, y: NDArray, mu: NDArray, *, weights: NDArray | None = None) -> float:
+        d = self.unit_deviance(y, mu)
+        if weights is not None:
+            d = weights * d
+        return float(np.sum(d))
 
     def unit_deviance(self, y: NDArray, mu: NDArray) -> NDArray:
         mu_c = np.maximum(mu, _EPS)
@@ -70,19 +73,23 @@ class NegativeBinomial(Family):
         dev -= (y + theta) * np.log((y + theta) / (mu_c + theta))
         return 2.0 * dev
 
-    def log_likelihood(self, y: NDArray, mu: NDArray, scale: float) -> float:
+    def log_likelihood(
+        self, y: NDArray, mu: NDArray, scale: float, *, weights: NDArray | None = None
+    ) -> float:
         from scipy.special import gammaln
 
         mu_c = np.maximum(mu, _EPS)
         theta = self._theta
-        ll = (
+        ll_i = (
             gammaln(y + theta)
             - gammaln(theta)
             - gammaln(y + 1.0)
             + theta * np.log(theta / (mu_c + theta))
             + y * np.log(mu_c / (mu_c + theta))
         )
-        return float(np.sum(ll))
+        if weights is not None:
+            ll_i = weights * ll_i
+        return float(np.sum(ll_i))
 
     @property
     def scale_known(self) -> bool:
