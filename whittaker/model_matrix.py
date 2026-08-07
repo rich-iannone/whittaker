@@ -34,6 +34,7 @@ from whittaker.smooths.base import SmoothBasis
 from whittaker.smooths.cubic import CRS
 from whittaker.smooths.cyclic import CyclicCRS, CyclicPSpline
 from whittaker.smooths.pspline import PSpline
+from whittaker.smooths.random import RandomEffectBasis
 from whittaker.smooths.shrinkage import ShrinkageCRS, ShrinkageTPRS
 from whittaker.smooths.tensor import (
     TensorInteractionBasis,
@@ -50,6 +51,7 @@ _BS_REGISTRY: dict[str, type[SmoothBasis]] = {
     "cp": CyclicPSpline,
     "ts": ShrinkageTPRS,
     "cs": ShrinkageCRS,
+    "re": RandomEffectBasis,
 }
 
 
@@ -465,7 +467,9 @@ def build_model_matrix(
                 "Only s(), te(), ti(), and t2() are implemented."
             )
 
-        if len(term.variables) == 1:
+        if isinstance(basis, RandomEffectBasis):
+            x = _extract_by_column(data, term.variables[0])
+        elif len(term.variables) == 1:
             x = _extract_column(data, term.variables[0])
         else:
             x = np.column_stack([_extract_column(data, v) for v in term.variables])
@@ -653,7 +657,9 @@ def predict_matrix(
 
     for info in model.smooths:
         term = info.term
-        if len(term.variables) == 1:
+        if isinstance(info.basis, RandomEffectBasis):
+            x = _extract_by_column(new_data, term.variables[0])
+        elif len(term.variables) == 1:
             x = _extract_column(new_data, term.variables[0])
         else:
             x = np.column_stack([_extract_column(new_data, v) for v in term.variables])
