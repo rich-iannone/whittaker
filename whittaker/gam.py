@@ -111,6 +111,7 @@ class GAM:
         *,
         smoothing_params: list[float] | None = None,
         method: str = "GCV",
+        weights: NDArray | None = None,
     ) -> GAM:
         """Fit the GAM to data.
 
@@ -124,6 +125,9 @@ class GAM:
             selected automatically via *method*.
         method:
             Smoothing parameter selection: `"GCV"` or `"REML"`.
+        weights:
+            Observation (prior) weights, shape `(n,)`. Must be positive. When provided, the model
+            minimizes the weighted deviance `sum(w_i * d_i)` and uses weighted IRLS.
 
         Returns
         -------
@@ -131,11 +135,24 @@ class GAM:
             Returns `self` for method chaining.
         """
         self._model_matrix = build_model_matrix(self._formula, data)
+
+        pw = None
+        if weights is not None:
+            pw = np.asarray(weights, dtype=float)
+            if pw.ndim != 1 or len(pw) != self._model_matrix.n_obs:
+                raise ValueError(
+                    f"weights must be a 1-D array of length {self._model_matrix.n_obs}, "
+                    f"got shape {pw.shape}."
+                )
+            if np.any(pw <= 0):
+                raise ValueError("All weights must be positive.")
+
         self._fit_result = pirls_fit(
             self._model_matrix,
             self._family,
             smoothing_params=smoothing_params,
             method=method,
+            prior_weights=pw,
         )
         self._fitted = True
         return self
@@ -197,8 +214,7 @@ class GAM:
             interval_lower = interval.lower()
             if interval_lower not in ("confidence", "prediction"):
                 raise ValueError(
-                    f"Unknown interval type {interval!r}. "
-                    "Choose from 'confidence' or 'prediction'."
+                    f"Unknown interval type {interval!r}. Choose from 'confidence' or 'prediction'."
                 )
         else:
             interval_lower = None
@@ -213,19 +229,30 @@ class GAM:
         upper = None
         if interval_lower is not None and se_values is not None:
             lower, upper = self._compute_interval(
-                eta, se_values, X_new, interval_lower, level, type_lower,
+                eta,
+                se_values,
+                X_new,
+                interval_lower,
+                level,
+                type_lower,
             )
 
         if type_lower == "link":
             return PredictionResult(
-                values=eta, se=se_values if se else None, linear_predictor=eta,
-                lower=lower, upper=upper,
+                values=eta,
+                se=se_values if se else None,
+                linear_predictor=eta,
+                lower=lower,
+                upper=upper,
             )
 
         mu = self._family.link_inverse(eta)
         return PredictionResult(
-            values=mu, se=se_values if se else None, linear_predictor=eta,
-            lower=lower, upper=upper,
+            values=mu,
+            se=se_values if se else None,
+            linear_predictor=eta,
+            lower=lower,
+            upper=upper,
         )
 
     def _predict_terms(
@@ -247,7 +274,7 @@ class GAM:
                 self._model_matrix.penalties,
                 self._fit_result.smoothing_params,
                 self._fit_result.scale,
-                W=self._fit_result.weights,
+                W=self._combined_weights(),
             )
 
         terms_dict: dict[str, NDArray] = {}
@@ -277,31 +304,33 @@ class GAM:
 
         SE = sqrt(diag(X_new @ V_β @ X_new.T))
 
-        where V_β = φ (X'X + Σλ_j S_j)⁻¹ is the Bayesian posterior covariance of the coefficients.
+        where V_β = φ (X'WX + Σλ_j S_j)⁻¹ is the Bayesian posterior covariance of the coefficients
+        and W combines IRLS working weights and prior weights.
         """
-        from scipy.linalg import cho_factor, cho_solve
+        from whittaker.fitting.inference import _bayesian_covariance
 
-        X = self._model_matrix.X
-        sp = self._fit_result.smoothing_params
-        penalties = self._model_matrix.penalties
-
-        XtX = X.T @ X
-        S_total = np.zeros_like(XtX)
-        for lam, pen in zip(sp, penalties):
-            S_total += lam * pen
-
-        A = XtX + S_total
-        A = (A + A.T) * 0.5
-
-        cho, lower = cho_factor(A)
-
-        # V_β = scale * A⁻¹
-        # SE² = scale * diag(X_new @ A⁻¹ @ X_new.T)
-        #      = scale * rowSums((X_new @ A⁻¹) * X_new)
-        A_inv_Xt = cho_solve((cho, lower), X_new.T)  # (p, n_new)
-        var_diag = np.sum(X_new * A_inv_Xt.T, axis=1) * self._fit_result.scale
-
+        W = self._combined_weights()
+        V_beta = _bayesian_covariance(
+            self._model_matrix.X,
+            self._model_matrix.penalties,
+            self._fit_result.smoothing_params,
+            self._fit_result.scale,
+            W=W,
+        )
+        var_diag = np.sum(X_new * (X_new @ V_beta), axis=1)
         return np.sqrt(np.maximum(var_diag, 0.0))
+
+    def _combined_weights(self) -> NDArray | None:
+        """Combine IRLS working weights and prior weights into a single weight vector."""
+        W_irls = self._fit_result.weights
+        pw = self._fit_result.prior_weights
+        if W_irls is not None and pw is not None:
+            return pw * W_irls
+        if W_irls is not None:
+            return W_irls
+        if pw is not None:
+            return pw
+        return None
 
     def _compute_interval(
         self,
