@@ -149,3 +149,126 @@ class TestCheck:
         model = _fitted_multi()
         chart = model.check()
         assert chart.to_dict() is not None
+
+
+# ---------------------------------------------------------------------------
+# 2-D partial effects (te / ti)
+# ---------------------------------------------------------------------------
+
+
+RNG2 = np.random.default_rng(42)
+
+
+def _fitted_te() -> GAM:
+    n = 200
+    x1 = RNG2.uniform(size=n)
+    x2 = RNG2.uniform(size=n)
+    y = np.sin(3 * x1) * np.cos(3 * x2) + 0.2 * RNG2.standard_normal(n)
+    return GAM("y ~ te(x1, x2, k=5)").fit({"y": y, "x1": x1, "x2": x2})
+
+
+def _fitted_anova() -> GAM:
+    n = 300
+    x1 = np.random.default_rng(99).uniform(size=n)
+    x2 = np.random.default_rng(99).uniform(high=1.0, size=n)
+    y = np.sin(3 * x1) + np.cos(3 * x2) + 2 * x1 * x2 + 0.2 * np.random.default_rng(99).standard_normal(n)
+    return GAM("y ~ s(x1, k=6) + s(x2, k=6) + ti(x1, x2, k=5)").fit(
+        {"y": y, "x1": x1, "x2": x2}
+    )
+
+
+class TestPartialEffects2D:
+    def test_te_returns_hconcat(self) -> None:
+        model = _fitted_te()
+        chart = model.plot()
+        assert isinstance(chart, alt.HConcatChart)
+
+    def test_te_spec_has_two_panels(self) -> None:
+        model = _fitted_te()
+        spec = model.plot().to_dict()
+        assert len(spec.get("hconcat", [])) == 2
+
+    def test_te_spec_valid(self) -> None:
+        model = _fitted_te()
+        spec = model.plot().to_dict()
+        assert spec is not None
+
+    def test_anova_mixed_1d_2d(self) -> None:
+        model = _fitted_anova()
+        chart = model.plot()
+        assert isinstance(chart, alt.VConcatChart)
+        spec = chart.to_dict()
+        panels = spec.get("vconcat", [])
+        assert len(panels) == 3
+
+    def test_anova_1d_panels_are_layer(self) -> None:
+        model = _fitted_anova()
+        spec = model.plot().to_dict()
+        panels = spec["vconcat"]
+        assert "layer" in panels[0]
+        assert "layer" in panels[1]
+
+    def test_anova_2d_panel_is_hconcat(self) -> None:
+        model = _fitted_anova()
+        spec = model.plot().to_dict()
+        panels = spec["vconcat"]
+        assert "hconcat" in panels[2]
+
+    def test_te_custom_n_points(self) -> None:
+        model = _fitted_te()
+        chart = model.plot(n_points=100)
+        spec = chart.to_dict()
+        assert spec is not None
+
+    def test_te_custom_level(self) -> None:
+        model = _fitted_te()
+        chart = model.plot(level=0.99)
+        assert chart.to_dict() is not None
+
+    def test_te_heatmap_has_color(self) -> None:
+        model = _fitted_te()
+        spec = model.plot().to_dict()
+        effect_spec = spec["hconcat"][0]
+        encoding = effect_spec.get("encoding", {})
+        assert "color" in encoding
+
+    def test_te_poisson(self) -> None:
+        rng = np.random.default_rng(42)
+        n = 200
+        x1 = rng.uniform(size=n)
+        x2 = rng.uniform(size=n)
+        mu = np.exp(0.5 + x1 * x2)
+        y = rng.poisson(mu).astype(float)
+
+        model = GAM("y ~ te(x1, x2, k=4)", family=Poisson()).fit(
+            {"y": y, "x1": x1, "x2": x2}
+        )
+        chart = model.plot()
+        assert chart.to_dict() is not None
+
+    def test_ti_only(self) -> None:
+        rng = np.random.default_rng(42)
+        n = 200
+        x1 = rng.uniform(size=n)
+        x2 = rng.uniform(size=n)
+        y = x1 * x2 + 0.1 * rng.standard_normal(n)
+
+        model = GAM("y ~ ti(x1, x2, k=5)").fit({"y": y, "x1": x1, "x2": x2})
+        chart = model.plot()
+        assert isinstance(chart, alt.HConcatChart)
+
+    def test_se_panel_has_reds_scheme(self) -> None:
+        model = _fitted_te()
+        spec = model.plot().to_dict()
+        se_spec = spec["hconcat"][1]
+        color_enc = se_spec.get("encoding", {}).get("color", {})
+        scale = color_enc.get("scale", {})
+        assert scale.get("scheme") == "reds"
+
+    def test_effect_panel_diverging_scale(self) -> None:
+        model = _fitted_te()
+        spec = model.plot().to_dict()
+        effect_spec = spec["hconcat"][0]
+        color_enc = effect_spec.get("encoding", {}).get("color", {})
+        scale = color_enc.get("scale", {})
+        assert scale.get("domainMid") == 0
