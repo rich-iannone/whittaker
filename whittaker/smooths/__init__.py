@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from whittaker.smooths.base import SmoothBasis
 from whittaker.smooths.cubic import CRS
+from whittaker.smooths.cyclic import CyclicCRS, CyclicPSpline
 from whittaker.smooths.pspline import PSpline
 from whittaker.smooths.tensor import (
     TensorInteractionBasis,
@@ -14,6 +15,8 @@ from whittaker.smooths.tprs import TPRS
 
 __all__ = [
     "CRS",
+    "CyclicCRS",
+    "CyclicPSpline",
     "PSpline",
     "SmoothBasis",
     "TensorInteractionBasis",
