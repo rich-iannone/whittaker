@@ -33,6 +33,7 @@ from whittaker.formula.terms import (
 from whittaker.smooths.base import SmoothBasis
 from whittaker.smooths.cubic import CRS
 from whittaker.smooths.cyclic import CyclicCRS, CyclicPSpline
+from whittaker.smooths.factor_smooth import FactorSmoothBasis
 from whittaker.smooths.pspline import PSpline
 from whittaker.smooths.random import RandomEffectBasis
 from whittaker.smooths.shrinkage import ShrinkageCRS, ShrinkageTPRS
@@ -57,9 +58,12 @@ _BS_REGISTRY: dict[str, type[SmoothBasis]] = {
 
 def _resolve_basis(term: SmoothTerm) -> SmoothBasis:
     """Instantiate a `SmoothBasis` from a parsed `SmoothTerm`."""
+    if term.bs == "fs":
+        return _resolve_fs_basis(term)
+
     cls = _BS_REGISTRY.get(term.bs)
     if cls is None:
-        supported = ", ".join(sorted(_BS_REGISTRY))
+        supported = ", ".join(sorted(_BS_REGISTRY) + ["fs"])
         raise ValueError(
             f"Unknown basis type bs={term.bs!r} in {term!r}. Supported types: {supported}."
         )
@@ -78,6 +82,27 @@ def _resolve_basis(term: SmoothTerm) -> SmoothBasis:
             kwargs["m"] = term.extra["m"]
 
     return cls(**kwargs)
+
+
+def _resolve_fs_basis(term: SmoothTerm) -> FactorSmoothBasis:
+    """Instantiate a `FactorSmoothBasis` from a parsed `SmoothTerm`."""
+    if len(term.variables) < 2:
+        raise ValueError(
+            f"bs='fs' requires at least 2 variables (numeric + factor), "
+            f"got {len(term.variables)} in {term!r}."
+        )
+
+    kwargs: dict[str, Any] = {}
+    if term.k != -1:
+        kwargs["k"] = term.k
+
+    xt = term.extra.get("xt", "tp")
+    kwargs["xt"] = xt
+
+    if "m" in term.extra:
+        kwargs["m"] = term.extra["m"]
+
+    return FactorSmoothBasis(**kwargs)
 
 
 def _resolve_tensor_basis(term: SmoothTerm) -> TensorProductBasis:
@@ -467,17 +492,25 @@ def build_model_matrix(
                 "Only s(), te(), ti(), and t2() are implemented."
             )
 
-        if isinstance(basis, RandomEffectBasis):
+        if isinstance(basis, FactorSmoothBasis):
+            x_numeric = _extract_column(data, term.variables[0])
+            x_factor = _extract_by_column(data, term.variables[1])
+            basis.fit(x_numeric, x_factor)
+            basis_mat = basis.basis_matrix(x_numeric, x_factor)
+            nsd = basis.null_space_dimension()
+        elif isinstance(basis, RandomEffectBasis):
             x = _extract_by_column(data, term.variables[0])
-        elif len(term.variables) == 1:
-            x = _extract_column(data, term.variables[0])
+            basis.fit(x)
+            basis_mat = basis.basis_matrix(x)
+            nsd = basis.null_space_dimension()
         else:
-            x = np.column_stack([_extract_column(data, v) for v in term.variables])
-
-        basis.fit(x)
-
-        basis_mat = basis.basis_matrix(x)  # (n, k)
-        nsd = basis.null_space_dimension()
+            if len(term.variables) == 1:
+                x = _extract_column(data, term.variables[0])
+            else:
+                x = np.column_stack([_extract_column(data, v) for v in term.variables])
+            basis.fit(x)
+            basis_mat = basis.basis_matrix(x)
+            nsd = basis.null_space_dimension()
 
         if hasattr(basis, "penalty_matrices"):
             pen_mats = basis.penalty_matrices()
@@ -657,14 +690,19 @@ def predict_matrix(
 
     for info in model.smooths:
         term = info.term
-        if isinstance(info.basis, RandomEffectBasis):
+        if isinstance(info.basis, FactorSmoothBasis):
+            x_numeric = _extract_column(new_data, term.variables[0])
+            x_factor = _extract_by_column(new_data, term.variables[1])
+            basis_mat = info.basis.basis_matrix(x_numeric, x_factor)
+        elif isinstance(info.basis, RandomEffectBasis):
             x = _extract_by_column(new_data, term.variables[0])
+            basis_mat = info.basis.basis_matrix(x)
         elif len(term.variables) == 1:
             x = _extract_column(new_data, term.variables[0])
+            basis_mat = info.basis.basis_matrix(x)
         else:
             x = np.column_stack([_extract_column(new_data, v) for v in term.variables])
-
-        basis_mat = info.basis.basis_matrix(x)
+            basis_mat = info.basis.basis_matrix(x)
 
         has_by = info.by_var is not None
         if not has_by:
