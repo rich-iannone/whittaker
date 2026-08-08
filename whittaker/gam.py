@@ -12,7 +12,7 @@ from whittaker.families.gaussian import Gaussian
 from whittaker.fitting.pirls import FitResult, pirls_fit
 from whittaker.formula.parser import parse
 from whittaker.formula.terms import Formula
-from whittaker.model_matrix import ModelMatrix, build_model_matrix, predict_matrix
+from whittaker.model_matrix import ModelMatrix, build_model_matrix, predict_matrix, predict_offset
 
 
 @dataclass
@@ -221,6 +221,10 @@ class GAM:
 
         X_new = predict_matrix(self._model_matrix, new_data)
         eta = X_new @ self._fit_result.coefficients
+
+        new_offset = predict_offset(self._model_matrix, new_data)
+        if new_offset is not None:
+            eta = eta + new_offset
 
         need_se = se or interval_lower is not None
         se_values = self._prediction_se(X_new) if need_se else None
