@@ -112,6 +112,7 @@ class GAM:
         smoothing_params: list[float] | None = None,
         method: str = "GCV",
         weights: NDArray | None = None,
+        select: bool = False,
     ) -> GAM:
         """Fit the GAM to data.
 
@@ -128,13 +129,18 @@ class GAM:
         weights:
             Observation (prior) weights, shape `(n,)`. Must be positive. When provided, the model
             minimizes the weighted deviance `sum(w_i * d_i)` and uses weighted IRLS.
+        select:
+            If `True`, add an extra penalty on each smooth's null space so that terms can be
+            penalized to zero entirely (double penalty approach). This enables automatic smooth
+            selection: irrelevant smooths are shrunk out of the model. Recommended with
+            `method="REML"`.
 
         Returns
         -------
         GAM
             Returns `self` for method chaining.
         """
-        self._model_matrix = build_model_matrix(self._formula, data)
+        self._model_matrix = build_model_matrix(self._formula, data, select=select)
 
         pw = None
         if weights is not None:
