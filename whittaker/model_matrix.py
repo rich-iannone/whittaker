@@ -362,6 +362,7 @@ class ModelMatrix:
     has_intercept: bool = True
     n_parametric: int = 0
     offset: NDArray | None = None
+    offset_expressions: list[str] = field(default_factory=list)
     response: NDArray = field(default_factory=lambda: np.empty(0))
 
     @property
@@ -439,6 +440,7 @@ def build_model_matrix(
     # --- parametric terms ---------------------------------------------------
     n_parametric = 0
     offset: NDArray | None = None
+    offset_expressions: list[str] = []
 
     for term in formula.terms:
         if isinstance(term, LinearTerm):
@@ -465,6 +467,7 @@ def build_model_matrix(
 
         elif isinstance(term, OffsetTerm):
             offset_col = _extract_column(data, term.expression)
+            offset_expressions.append(term.expression)
             if offset is None:
                 offset = offset_col.copy()
             else:
@@ -636,6 +639,7 @@ def build_model_matrix(
         has_intercept=formula.intercept,
         n_parametric=n_parametric,
         offset=offset,
+        offset_expressions=offset_expressions,
         response=response,
     )
 
@@ -721,6 +725,37 @@ def predict_matrix(
         blocks.append(basis_mat)
 
     return np.column_stack(blocks)
+
+
+def predict_offset(
+    model: ModelMatrix,
+    new_data: dict[str, NDArray],
+) -> NDArray | None:
+    """Extract the offset vector for new data.
+
+    Parameters
+    ----------
+    model:
+        A `ModelMatrix` previously returned by `build_model_matrix()`.
+    new_data:
+        Column-oriented new data.
+
+    Returns
+    -------
+    NDArray | None
+        Offset vector of shape `(n_new,)`, or `None` if the model has no offset terms.
+    """
+    if not model.offset_expressions:
+        return None
+
+    offset: NDArray | None = None
+    for expr in model.offset_expressions:
+        col = _extract_column(new_data, expr)
+        if offset is None:
+            offset = col.copy()
+        else:
+            offset = offset + col
+    return offset
 
 
 def _reconstruct_formula(model: ModelMatrix) -> Formula:
