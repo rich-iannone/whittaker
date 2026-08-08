@@ -95,6 +95,12 @@ class NegativeBinomial(Family):
     def scale_known(self) -> bool:
         return True
 
+    def simulate(self, mu: NDArray, scale: float, rng: object) -> NDArray:
+        mu_c = np.maximum(mu, _EPS)
+        theta = self._theta
+        p = theta / (mu_c + theta)
+        return rng.negative_binomial(theta, p).astype(float)
+
     def initialize(self, y: NDArray) -> NDArray:
         return np.maximum(y, 0.1) + 0.1
 

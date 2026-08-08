@@ -63,6 +63,10 @@ class Binomial(Family):
     def scale_known(self) -> bool:
         return True
 
+    def simulate(self, mu: NDArray, scale: float, rng: object) -> NDArray:
+        p = np.clip(mu, _EPS, 1.0 - _EPS)
+        return rng.binomial(1, p).astype(float)
+
     def initialize(self, y: NDArray) -> NDArray:
         return np.full_like(y, fill_value=(np.mean(y) + 0.5) / 2.0)
 
