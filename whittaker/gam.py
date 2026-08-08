@@ -140,6 +140,7 @@ class GAM:
         GAM
             Returns `self` for method chaining.
         """
+        self._data = data
         self._model_matrix = build_model_matrix(self._formula, data, select=select)
 
         pw = None
@@ -529,6 +530,30 @@ class GAM:
 
         self._check_fitted()
         return smooth_tests(self._fit_result, self._model_matrix)
+
+    def k_check(self, *, n_sim: int = 400) -> list:
+        """Check basis dimension adequacy for each smooth term.
+
+        For each smooth, computes a k-index based on the ratio of a neighbor-differencing variance
+        estimate of the residuals (ordered by covariate) to the overall residual variance. A k-index
+        well below 1 suggests that the basis dimension `k` may be too small. A simulation-based
+        p-value is computed: low p-values indicate potential under-smoothing.
+
+        Parameters
+        ----------
+        n_sim:
+            Number of random permutations for the p-value simulation (default `400`).
+
+        Returns
+        -------
+        list[KCheckResult]
+            One result per smooth term.
+        """
+        from whittaker.fitting.inference import k_check
+
+        self._check_fitted()
+        resid = self.get_residuals("deviance")
+        return k_check(self._fit_result, self._model_matrix, self._data, resid, n_sim=n_sim)
 
     def concurvity(self, *, full: bool = True) -> object:
         """Compute concurvity diagnostics for all smooth terms.

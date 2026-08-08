@@ -637,3 +637,136 @@ def anova_gam(
         )
 
     return AnovaResult(rows=rows, scale=phi, test=test_name)
+
+
+# ---------------------------------------------------------------------------
+# Basis dimension adequacy check (k-index test)
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class KCheckResult:
+    """Result of basis dimension adequacy check for a single smooth.
+
+    Attributes
+    ----------
+    term_label:
+        Human-readable label for the smooth term.
+    k_prime:
+        Basis dimension after identifiability constraints (upper bound on EDF).
+    edf:
+        Effective degrees of freedom for the smooth.
+    k_index:
+        Ratio of neighbor-differencing variance estimate to overall residual variance. Values well
+        below 1 suggest `k` may be too small.
+    p_value:
+        Simulation-based p-value. Low values indicate the basis dimension may be inadequate.
+    """
+
+    term_label: str
+    k_prime: int
+    edf: float
+    k_index: float
+    p_value: float
+
+
+def _k_index_1d(residuals: NDArray, covariate: NDArray) -> float:
+    """Compute the k-index for a single smooth by neighbor-differencing."""
+    order = np.argsort(covariate)
+    r_sorted = residuals[order]
+    diffs = np.diff(r_sorted)
+    neighbor_var = np.mean(diffs**2) / 2.0
+    resid_var = np.var(residuals, ddof=1)
+    if resid_var < 1e-15:
+        return 1.0
+    return neighbor_var / resid_var
+
+
+def _k_index_nd(residuals: NDArray, covariates: list[NDArray]) -> float:
+    """Compute the k-index for a multi-dimensional smooth.
+
+    Orders observations by their distance to a random reference point (the observation nearest the
+    median of each covariate), then applies the neighbor-differencing estimator.
+    """
+    coords = np.column_stack(covariates)
+    center = np.median(coords, axis=0)
+    dists = np.linalg.norm(coords - center, axis=1)
+    order = np.argsort(dists)
+    r_sorted = residuals[order]
+    diffs = np.diff(r_sorted)
+    neighbor_var = np.mean(diffs**2) / 2.0
+    resid_var = np.var(residuals, ddof=1)
+    if resid_var < 1e-15:
+        return 1.0
+    return neighbor_var / resid_var
+
+
+def k_check(
+    fit: FitResult,
+    mm: ModelMatrix,
+    data: dict[str, NDArray],
+    residuals: NDArray,
+    *,
+    n_sim: int = 400,
+) -> list[KCheckResult]:
+    """Check basis dimension adequacy for all smooths.
+
+    Parameters
+    ----------
+    fit:
+        Fitted model result.
+    mm:
+        Model matrix with smooth metadata.
+    data:
+        Original data dict used during fitting.
+    residuals:
+        Deviance residuals from the fitted model.
+    n_sim:
+        Number of permutations for the p-value simulation.
+
+    Returns
+    -------
+    list[KCheckResult]
+        One result per smooth term.
+    """
+    rng = np.random.default_rng()
+    results: list[KCheckResult] = []
+
+    for i, info in enumerate(mm.smooths):
+        variables = info.term.variables
+        k_prime = info.col_end - info.col_start
+
+        if len(variables) == 1:
+            cov = np.asarray(data[variables[0]], dtype=float)
+            k_obs = _k_index_1d(residuals, cov)
+        else:
+            covs = [np.asarray(data[v], dtype=float) for v in variables]
+            k_obs = _k_index_nd(residuals, covs)
+
+        count_le = 0
+        for _ in range(n_sim):
+            perm_resid = rng.permutation(residuals)
+            if len(variables) == 1:
+                k_sim = _k_index_1d(perm_resid, cov)
+            else:
+                k_sim = _k_index_nd(perm_resid, covs)
+            if k_sim <= k_obs:
+                count_le += 1
+
+        p_value = count_le / n_sim
+
+        label = repr(info.term)
+        if info.by_level is not None:
+            label += f":{info.by_level}"
+
+        results.append(
+            KCheckResult(
+                term_label=label,
+                k_prime=k_prime,
+                edf=fit.edf[i],
+                k_index=k_obs,
+                p_value=p_value,
+            )
+        )
+
+    return results
