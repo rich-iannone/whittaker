@@ -66,6 +66,12 @@ class Gamma(Family):
     def scale_known(self) -> bool:
         return False
 
+    def simulate(self, mu: NDArray, scale: float, rng: object) -> NDArray:
+        mu_c = np.maximum(mu, _EPS)
+        shape = 1.0 / scale
+        sim_scale = mu_c * scale
+        return rng.gamma(shape, sim_scale)
+
     def initialize(self, y: NDArray) -> NDArray:
         return np.maximum(y, _EPS) + 0.1
 

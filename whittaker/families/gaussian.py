@@ -45,6 +45,9 @@ class Gaussian(Family):
             ll_i = weights * ll_i
         return float(np.sum(ll_i))
 
+    def simulate(self, mu: NDArray, scale: float, rng: object) -> NDArray:
+        return rng.normal(mu, np.sqrt(scale))
+
     def initialize(self, y: NDArray) -> NDArray:
         return y.copy()
 

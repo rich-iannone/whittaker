@@ -74,6 +74,26 @@ class Family(ABC):
         """Whether the scale parameter is fixed (True for Binomial, Poisson)."""
         return False
 
+    @abstractmethod
+    def simulate(self, mu: NDArray, scale: float, rng: object) -> NDArray:
+        """Simulate response values from the distribution.
+
+        Parameters
+        ----------
+        mu:
+            Mean (fitted values), shape `(n,)`.
+        scale:
+            Estimated scale parameter φ.
+        rng:
+            A `numpy.random.Generator` instance.
+
+        Returns
+        -------
+        NDArray
+            Simulated response values, shape `(n,)`.
+        """
+        ...
+
     def initialize(self, y: NDArray) -> NDArray:
         """Starting values for μ given the response *y*.
 

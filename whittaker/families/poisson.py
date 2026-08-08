@@ -62,6 +62,9 @@ class Poisson(Family):
     def scale_known(self) -> bool:
         return True
 
+    def simulate(self, mu: NDArray, scale: float, rng: object) -> NDArray:
+        return rng.poisson(np.maximum(mu, _EPS)).astype(float)
+
     def initialize(self, y: NDArray) -> NDArray:
         return np.maximum(y, 0.1) + 0.1
 
