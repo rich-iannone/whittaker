@@ -125,7 +125,7 @@ class GAM:
             Fixed smoothing parameters, one per smooth term. If `None`, smoothing parameters are
             selected automatically via *method*.
         method:
-            Smoothing parameter selection: `"GCV"` or `"REML"`.
+            Smoothing parameter selection: `"GCV"`, `"REML"`, or `"ML"`.
         weights:
             Observation (prior) weights, shape `(n,)`. Must be positive. When provided, the model
             minimizes the weighted deviance `sum(w_i * d_i)` and uses weighted IRLS.
