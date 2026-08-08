@@ -387,11 +387,22 @@ class ModelMatrix:
         return sum(self.penalties)  # type: ignore[return-value]
 
 
+def _null_space_penalty(S: NDArray) -> NDArray:
+    """Construct a penalty that penalizes the null space of *S*."""
+    eigvals, eigvecs = np.linalg.eigh(S)
+    threshold = 1e-10 * max(eigvals.max(), 1.0)
+    null_mask = eigvals < threshold
+    U_null = eigvecs[:, null_mask]
+    S_null = U_null @ U_null.T
+    return (S_null + S_null.T) * 0.5
+
+
 def build_model_matrix(
     formula: Formula,
     data: dict[str, NDArray],
     *,
     apply_constraints: bool = True,
+    select: bool = False,
 ) -> ModelMatrix:
     """Assemble the full design matrix and penalty structure from a formula.
 
@@ -405,6 +416,11 @@ def build_model_matrix(
     apply_constraints:
         If `True` (the default), apply sum-to-zero identifiability constraints to each smooth term
         so the intercept is identifiable.
+    select:
+        If `True`, add an extra penalty on each smooth's null space so that terms can be penalized
+        to zero entirely (double penalty approach, Marra & Wood 2011). This enables automatic smooth
+        selection via GCV or REML. Smooths that already have `null_space_dim == 0` (e.g. `bs="ts"`,
+        `bs="cs"`, `bs="re"`, `bs="fs"`) are unaffected.
 
     Returns
     -------
@@ -528,6 +544,11 @@ def build_model_matrix(
                 basis_mat = _apply_constraint(basis_mat, constraint)
                 pen_mats = [_apply_constraint_to_penalty(pm, constraint) for pm in pen_mats]
                 nsd = max(nsd - constraint.shape[0], 0)
+
+        if select and nsd > 0:
+            S_null = _null_space_penalty(pen_mats[0])
+            pen_mats.append(S_null)
+            nsd = 0
 
         if has_by:
             by_col = _extract_by_column(data, term.by)
