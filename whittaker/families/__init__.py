@@ -8,6 +8,7 @@ from whittaker.families.gamma import Gamma
 from whittaker.families.gaussian import Gaussian
 from whittaker.families.negative_binomial import NegativeBinomial
 from whittaker.families.poisson import Poisson
+from whittaker.families.tweedie import Tweedie
 
 __all__ = [
     "Binomial",
@@ -16,4 +17,5 @@ __all__ = [
     "Gaussian",
     "NegativeBinomial",
     "Poisson",
+    "Tweedie",
 ]
