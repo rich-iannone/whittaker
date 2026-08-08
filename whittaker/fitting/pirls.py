@@ -312,23 +312,26 @@ def _reml_objective(
     scale: float = 1.0,
     W: NDArray | None = None,
     offset: NDArray | None = None,
+    ml: bool = False,
 ) -> tuple[float, NDArray]:
-    """Evaluate the negative REML log-likelihood and its gradient.
+    """Evaluate the negative REML (or ML) log-likelihood and its gradient.
 
     Parameters
     ----------
     log_sp:
-        Log smoothing parameters ρ = log(λ), shape ``(n_sp,)``.
+        Log smoothing parameters ρ = log(λ), shape `(n_sp,)`.
     n_unpenalized:
-        Number of totally unpenalized parameters (intercept + parametric terms +
-        penalty null-space dimensions).
+        Number of totally unpenalized parameters (intercept + parametric terms + penalty null-space
+        dimensions).
     scale_known:
-        If True, use fixed *scale*; otherwise profile out φ (Gaussian).
+        If `True`, use fixed *scale*; otherwise profile out φ (Gaussian).
+    ml:
+        If `True`, compute ML instead of REML by adding `0.5 * log|X'WX|`.
 
     Returns
     -------
     (value, gradient)
-        Negative REML and its gradient w.r.t. ρ.
+        Negative REML (or ML) and its gradient w.r.t. ρ.
     """
     n, p = X.shape
     sp = np.exp(log_sp)
@@ -379,6 +382,17 @@ def _reml_objective(
     else:
         d_pen = max(d_pen, 1e-30)
         val = 0.5 * (n - M) * np.log(d_pen) + 0.5 * log_det_A - 0.5 * log_det_S
+
+    if ml:
+        XtX_ml = (XtX + XtX.T) * 0.5
+        ridge_ml = np.finfo(float).eps * max(np.trace(XtX_ml) / p, 1.0)
+        XtX_ml[np.diag_indices_from(XtX_ml)] += ridge_ml
+        try:
+            cho_xtx = cho_factor(XtX_ml)[0]
+            log_det_XtX = 2.0 * float(np.sum(np.log(np.diag(cho_xtx))))
+        except np.linalg.LinAlgError:
+            log_det_XtX = 0.0
+        val -= 0.5 * log_det_XtX
 
     # Gradient w.r.t. ρ_j
     grad = np.zeros_like(log_sp)
@@ -431,6 +445,53 @@ def _select_smoothing_params_reml(
             scale,
             W=W,
             offset=offset,
+        )
+
+    result = minimize(
+        objective,
+        rho_init,
+        method="L-BFGS-B",
+        jac=True,
+        bounds=[(-20, 20)] * n_sp,
+    )
+
+    return [float(np.exp(r)) for r in result.x]
+
+
+def _select_smoothing_params_ml(
+    X: NDArray,
+    z: NDArray,
+    penalties: list[NDArray],
+    penalty_ranks: list[int],
+    n_unpenalized: int,
+    scale_known: bool,
+    scale: float = 1.0,
+    W: NDArray | None = None,
+    offset: NDArray | None = None,
+    n_sp: int = 1,
+) -> list[float]:
+    """Select smoothing parameters by maximizing ML (marginal likelihood).
+
+    Uses L-BFGS-B on ρ = log(λ) with analytic gradients.
+    """
+    if n_sp == 0:
+        return []
+
+    rho_init = np.zeros(n_sp)
+
+    def objective(rho: NDArray) -> tuple[float, NDArray]:
+        return _reml_objective(
+            rho,
+            X,
+            z,
+            penalties,
+            penalty_ranks,
+            n_unpenalized,
+            scale_known,
+            scale,
+            W=W,
+            offset=offset,
+            ml=True,
         )
 
     result = minimize(
@@ -521,10 +582,11 @@ def pirls_fit(
         family = Gaussian()
 
     method_upper = method.upper()
-    if method_upper not in ("GCV", "REML"):
-        raise ValueError(f"method must be 'GCV' or 'REML', got {method!r}.")
+    if method_upper not in ("GCV", "REML", "ML"):
+        raise ValueError(f"method must be 'GCV', 'REML', or 'ML', got {method!r}.")
 
     use_reml = method_upper == "REML"
+    use_ml = method_upper == "ML"
 
     X = model.X
     y = model.response
@@ -542,10 +604,10 @@ def pirls_fit(
     else:
         sp = []
 
-    # Precompute REML-specific quantities
+    # Precompute REML/ML-specific quantities
     pen_ranks: list[int] = []
     n_unpenalized = 0
-    if use_reml and auto_select and model.penalties:
+    if (use_reml or use_ml) and auto_select and model.penalties:
         pen_ranks = _penalty_ranks(model.penalties)
         n_unpenalized = (1 if model.has_intercept else 0) + model.n_parametric
         for s_info in model.smooths:
@@ -555,9 +617,21 @@ def pirls_fit(
         z: NDArray,
         W: NDArray | None = None,
     ) -> list[float]:
-        """Dispatch to GCV or REML selection."""
+        """Dispatch to GCV, REML, or ML selection."""
         if use_reml:
             return _select_smoothing_params_reml(
+                X,
+                z,
+                model.penalties,
+                pen_ranks,
+                n_unpenalized,
+                scale_known=family.scale_known,
+                W=W,
+                offset=offset,
+                n_sp=len(model.penalties),
+            )
+        if use_ml:
+            return _select_smoothing_params_ml(
                 X,
                 z,
                 model.penalties,
