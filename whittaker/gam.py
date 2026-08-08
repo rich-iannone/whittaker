@@ -555,6 +555,88 @@ class GAM:
         resid = self.get_residuals("deviance")
         return k_check(self._fit_result, self._model_matrix, self._data, resid, n_sim=n_sim)
 
+    def simulate(
+        self,
+        new_data: dict[str, NDArray] | None = None,
+        *,
+        n_sim: int = 1000,
+        seed: int | None = None,
+        unconditional: bool = False,
+    ) -> NDArray:
+        """Draw from the posterior distribution of the fitted model.
+
+        Generates posterior simulations of the response by:
+
+        1. Drawing coefficient vectors β* ~ MVN(β̂, V_β) from the Bayesian posterior.
+        2. Computing η* = X @ β* (+ offset if present) for each draw.
+        3. Transforming to the response scale: μ* = g⁻¹(η*).
+
+        When ``unconditional=True``, response noise is added by sampling from the family distribution
+        at each μ*.
+
+        Parameters
+        ----------
+        new_data:
+            Column-oriented data for prediction. If `None`, uses the training data.
+        n_sim:
+            Number of posterior draws (default `1000`).
+        seed:
+            Random seed for reproducibility.
+        unconditional:
+            If `True`, add response-distribution noise on top of posterior uncertainty in the mean.
+            This produces simulations of new observations rather than of the conditional mean.
+
+        Returns
+        -------
+        NDArray
+            Simulated values on the response scale, shape `(n, n_sim)` where `n` is the number of
+            observations in the prediction data.
+        """
+        self._check_fitted()
+        from whittaker.fitting.inference import _bayesian_covariance
+
+        rng = np.random.default_rng(seed)
+
+        if new_data is None:
+            X_new = self._model_matrix.X
+            offset = self._model_matrix.offset
+        else:
+            X_new = predict_matrix(self._model_matrix, new_data)
+            offset = predict_offset(self._model_matrix, new_data)
+
+        W = self._combined_weights()
+        V_beta = _bayesian_covariance(
+            self._model_matrix.X,
+            self._model_matrix.penalties,
+            self._fit_result.smoothing_params,
+            self._fit_result.scale,
+            W=W,
+        )
+
+        beta_hat = self._fit_result.coefficients
+        V_beta = (V_beta + V_beta.T) * 0.5
+
+        eigvals, eigvecs = np.linalg.eigh(V_beta)
+        eigvals = np.maximum(eigvals, 0.0)
+        L = eigvecs * np.sqrt(eigvals)[np.newaxis, :]
+
+        z = rng.standard_normal((len(beta_hat), n_sim))
+        beta_draws = beta_hat[:, np.newaxis] + L @ z
+
+        eta = X_new @ beta_draws
+        if offset is not None:
+            eta += offset[:, np.newaxis]
+
+        mu = self._family.link_inverse(eta)
+
+        if unconditional:
+            result = np.empty_like(mu)
+            for j in range(n_sim):
+                result[:, j] = self._family.simulate(mu[:, j], self._fit_result.scale, rng)
+            return result
+
+        return mu
+
     def concurvity(self, *, full: bool = True) -> object:
         """Compute concurvity diagnostics for all smooth terms.
 
