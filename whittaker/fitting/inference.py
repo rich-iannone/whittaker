@@ -98,6 +98,160 @@ def _bayesian_covariance(
     return scale * V_beta
 
 
+def _unconditional_covariance(
+    X: NDArray,
+    penalties: list[NDArray],
+    sp: list[float],
+    scale: float,
+    beta: NDArray,
+    method: str,
+    W: NDArray | None = None,
+    penalty_ranks: list[int] | None = None,
+    n_unpenalized: int = 0,
+    y: NDArray | None = None,
+    offset: NDArray | None = None,
+) -> NDArray:
+    """Compute the unconditional covariance V_c (Marra & Wood 2012).
+
+    V_c = V_p + M V_ρ M'
+
+    where V_p is the Bayesian posterior covariance conditional on ρ,
+    V_ρ is the covariance of ρ = log(λ) from the inverse Hessian of the
+    REML/ML objective, and M = dβ̂/dρ_j = -A⁻¹ λ_j S_j β̂.
+
+    This accounts for the additional uncertainty from estimating the
+    smoothing parameters, producing wider (more honest) intervals.
+
+    Parameters
+    ----------
+    X:
+        Model matrix, shape `(n, p)`.
+    penalties:
+        Penalty matrices, each shape `(p, p)`.
+    sp:
+        Smoothing parameters λ_j.
+    scale:
+        Estimated scale parameter φ.
+    beta:
+        Estimated coefficients β̂, shape `(p,)`.
+    method:
+        Smoothing parameter selection method (`"REML"` or `"ML"`).
+    W:
+        Combined weights (IRLS × prior), shape `(n,)`, or `None`.
+    penalty_ranks:
+        Ranks of each penalty matrix.
+    n_unpenalized:
+        Number of unpenalized parameters.
+    y:
+        Response vector (or pseudo-data for non-Gaussian), shape `(n,)`.
+    offset:
+        Offset vector, shape `(n,)`, or `None`.
+
+    Returns
+    -------
+    NDArray
+        Unconditional covariance matrix V_c, shape `(p, p)`.
+    """
+    from whittaker.fitting.pirls import _reml_objective
+
+    V_p = _bayesian_covariance(X, penalties, sp, scale, W=W)
+
+    n_sp = len(sp)
+    if n_sp == 0:
+        return V_p
+
+    log_sp = np.log(np.array(sp))
+
+    if penalty_ranks is None:
+        from whittaker.fitting.pirls import _penalty_ranks
+
+        penalty_ranks = _penalty_ranks(penalties)
+
+    scale_known = scale == 1.0
+
+    if W is not None:
+        sqrtW = np.sqrt(W)
+        Xw = X * sqrtW[:, np.newaxis]
+    else:
+        Xw = X
+    XtWX = Xw.T @ Xw
+    S_total = np.zeros_like(XtWX)
+    for lam, pen in zip(sp, penalties):
+        S_total += lam * pen
+    A = XtWX + S_total
+    A = (A + A.T) * 0.5
+
+    eigvals, eigvecs = np.linalg.eigh(A)
+    p = A.shape[0]
+    tol = np.max(eigvals) * p * np.finfo(float).eps
+    eigvals_inv = np.zeros_like(eigvals)
+    keep = eigvals > tol
+    eigvals_inv[keep] = 1.0 / eigvals[keep]
+    A_inv = (eigvecs * eigvals_inv[np.newaxis, :]) @ eigvecs.T
+
+    M = np.zeros((p, n_sp))
+    for j, (lam_j, pen_j) in enumerate(zip(sp, penalties)):
+        M[:, j] = -A_inv @ (lam_j * pen_j @ beta)
+
+    ml = method.upper() == "ML"
+
+    if y is None:
+        y = X @ beta
+
+    eps = 1e-4
+    H = np.zeros((n_sp, n_sp))
+    for j in range(n_sp):
+        rho_plus = log_sp.copy()
+        rho_plus[j] += eps
+        rho_minus = log_sp.copy()
+        rho_minus[j] -= eps
+
+        _, grad_plus = _reml_objective(
+            rho_plus,
+            X,
+            y,
+            penalties,
+            penalty_ranks,
+            n_unpenalized,
+            scale_known,
+            scale,
+            W=W,
+            offset=offset,
+            ml=ml,
+        )
+        _, grad_minus = _reml_objective(
+            rho_minus,
+            X,
+            y,
+            penalties,
+            penalty_ranks,
+            n_unpenalized,
+            scale_known,
+            scale,
+            W=W,
+            offset=offset,
+            ml=ml,
+        )
+        H[j, :] = (grad_plus - grad_minus) / (2.0 * eps)
+
+    H = (H + H.T) * 0.5
+
+    try:
+        eigvals_h, eigvecs_h = np.linalg.eigh(H)
+        tol_h = np.max(np.abs(eigvals_h)) * n_sp * np.finfo(float).eps
+        eigvals_h_inv = np.zeros_like(eigvals_h)
+        keep_h = eigvals_h > tol_h
+        eigvals_h_inv[keep_h] = 1.0 / eigvals_h[keep_h]
+        V_rho = (eigvecs_h * eigvals_h_inv[np.newaxis, :]) @ eigvecs_h.T
+    except np.linalg.LinAlgError:
+        return V_p
+
+    V_c = V_p + M @ V_rho @ M.T
+    V_c = (V_c + V_c.T) * 0.5
+
+    return V_c
+
+
 def _smooth_test(
     beta_j: NDArray,
     V_j: NDArray,
