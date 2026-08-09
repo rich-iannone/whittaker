@@ -84,10 +84,17 @@ class TestPolynomialNullSpace:
         T = _polynomial_null_space(x, m=2)
         assert_allclose(T[:, 1:], x)
 
-    def test_unsupported_m_raises(self) -> None:
-        x = np.ones((10, 1))
-        with pytest.raises(NotImplementedError):
-            _polynomial_null_space(x, m=3)
+    def test_m3_quadratic_terms(self) -> None:
+        x = RNG.standard_normal((20, 2))
+        T = _polynomial_null_space(x, m=3)
+        # M = C(2+2, 2) = 6: [1, x1, x2, x1², x1·x2, x2²]
+        assert T.shape == (20, 6)
+        assert_allclose(T[:, 0], np.ones(20))
+        assert_allclose(T[:, 1], x[:, 0])
+        assert_allclose(T[:, 2], x[:, 1])
+        assert_allclose(T[:, 3], x[:, 0] ** 2)
+        assert_allclose(T[:, 4], x[:, 0] * x[:, 1])
+        assert_allclose(T[:, 5], x[:, 1] ** 2)
 
 
 # ---------------------------------------------------------------------------
@@ -140,9 +147,13 @@ class TestTPRSConstructor:
         basis = TPRS(k=15)
         assert basis.k == 15
 
-    def test_unsupported_m_raises(self) -> None:
-        with pytest.raises(NotImplementedError):
-            TPRS(m=3)
+    def test_m3_supported(self) -> None:
+        basis = TPRS(k=20, m=3)
+        assert basis.m == 3
+
+    def test_m_too_small_raises(self) -> None:
+        with pytest.raises(ValueError):
+            TPRS(m=1)
 
     def test_k_too_small_raises(self) -> None:
         with pytest.raises(ValueError):
