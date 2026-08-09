@@ -27,7 +27,7 @@ def _radial_basis(r: NDArray, d: int, m: int) -> NDArray:
     d:
         Covariate dimension.
     m:
-        Spline order. Only m=2 is supported.
+        Spline order. Must satisfy ``2m > d``.
 
     Returns
     -------
@@ -71,31 +71,47 @@ def _kernel_matrix(x1: NDArray, x2: NDArray, d: int, m: int) -> NDArray:
     return _radial_basis(r, d=d, m=m)
 
 
+def _null_space_dimension(d: int, m: int) -> int:
+    """Number of monomials of total degree ≤ m-1 in d variables: C(m-1+d, d)."""
+    from math import comb
+
+    return comb(m - 1 + d, d)
+
+
 def _polynomial_null_space(x: NDArray, m: int) -> NDArray:
     """Build the n x M polynomial null-space matrix T for order m.
 
-    For m=2 (supported only), T = [1, x_1, …, x_d].
+    The null space of the m-th order thin plate spline penalty consists of all polynomials of total
+    degree ≤ m-1 in d variables. The number of such monomials is M = C(m-1+d, d).
 
     Parameters
     ----------
     x:
         Shape `(n, d)`.
     m:
-        Spline order (must be 2).
+        Spline order (≥ 2).
 
     Returns
     -------
     NDArray
-        Shape `(n, M)` where M = d + 1 for m = 2.
+        Shape `(n, M)` where `M = C(m-1+d, d)`.
     """
-    if m != 2:
-        raise NotImplementedError(
-            f"Polynomial null space for m={m} is not yet implemented. "
-            "Only m=2 is currently supported."
-        )
     n, d = x.shape
-    # T = [1, x1, x2, ..., xd]
-    return np.column_stack([np.ones(n), x])
+    max_deg = m - 1
+
+    if max_deg == 1:
+        return np.column_stack([np.ones(n), x])
+
+    from itertools import combinations_with_replacement
+
+    cols: list[NDArray] = [np.ones(n)]
+    for deg in range(1, max_deg + 1):
+        for idx in combinations_with_replacement(range(d), deg):
+            col = np.ones(n)
+            for j in idx:
+                col = col * x[:, j]
+            cols.append(col)
+    return np.column_stack(cols)
 
 
 # ---------------------------------------------------------------------------
@@ -111,8 +127,8 @@ class TPRS(SmoothBasis):
 
     The basis has two parts:
 
-    * **Polynomial null space** (first M = d + 1 columns): unpenalised affine functions
-    `[1, x_1, …, x_d]`.
+    * **Polynomial null space** (first M = C(m-1+d, d) columns): unpenalised polynomials of total
+    degree ≤ m-1.
     * **Spline part** (remaining k - M columns): penalised, constructed from the leading
     eigenvectors of the projected TPS kernel.
 
@@ -124,10 +140,11 @@ class TPRS(SmoothBasis):
     ----------
     k:
         Total number of basis functions (including the M null-space columns). Must satisfy
-        `k > d + 1`. The default is `10`.
+        `k > M`. The default is `10`.
     m:
-        Spline order. Controls the order of derivative penalised. Only `m=2` (penalise squared
-        second derivatives / curvature) is supported. The default is `2`.
+        Spline order. Controls the order of derivative penalised. Must satisfy `2m > d` where
+        `d` is the covariate dimension. Common choices: `m=2` for d ≤ 3 (the default), `m=3` for
+        d ∈ {4, 5}. The default is `2`.
 
     Notes
     -----
@@ -150,10 +167,8 @@ class TPRS(SmoothBasis):
     """
 
     def __init__(self, k: int = 10, m: int = 2) -> None:
-        if m != 2:
-            raise NotImplementedError(
-                f"TPRS with m={m} is not yet supported. Only m=2 is implemented."
-            )
+        if m < 2:
+            raise ValueError(f"Spline order m must be at least 2, got {m}.")
         if k < 2:
             raise ValueError(f"k must be at least 2, got {k}.")
         self.k = k
@@ -193,7 +208,7 @@ class TPRS(SmoothBasis):
         x2d = self._as_2d(x)
         n, d = x2d.shape
 
-        M = d + 1  # null-space dimension for m=2
+        M = _null_space_dimension(d, self.m)
         r = self.k - M  # number of spline basis functions
 
         if r < 1:
@@ -238,9 +253,10 @@ class TPRS(SmoothBasis):
         eigenvalues = eigenvalues[idx]
         eigenvectors = eigenvectors[:, idx]
 
-        # 6. Truncate to the r leading eigenvectors.
+        # 6. Truncate to the r leading eigenvectors and clamp eigenvalues
+        #    (small negatives are numerical artifacts of the projection).
         U_r = eigenvectors[:, :r]  # (n-M, r)
-        D_r = eigenvalues[:r]  # (r,)
+        D_r = np.maximum(eigenvalues[:r], 0.0)  # (r,)
 
         # 7. Spline weight matrix for prediction.
         #    ψ_l(x*) = Σ_j QU[j, l] * η(||x* - x_j||)
@@ -302,7 +318,7 @@ class TPRS(SmoothBasis):
         return S
 
     def null_space_dimension(self) -> int:
-        """Return M = d + 1, the dimension of the polynomial null space."""
+        """Return M = C(m-1+d, d), the dimension of the polynomial null space."""
         self._check_fitted()
         return self._M
 

@@ -50,7 +50,7 @@ class ShrinkageTPRS(TPRS):
     k:
         Total number of basis functions. The default is `10`.
     m:
-        Spline order (only `m=2` is supported). The default is `2`.
+        Spline order. Must satisfy `2m > d`. The default is `2`.
     """
 
     def penalty_matrices(self) -> list[NDArray]:
