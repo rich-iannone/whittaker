@@ -30,6 +30,7 @@ from whittaker.formula.terms import (
     OffsetTerm,
     SmoothTerm,
 )
+from whittaker.smooths.adaptive import AdaptiveTPRS
 from whittaker.smooths.base import SmoothBasis
 from whittaker.smooths.cubic import CRS
 from whittaker.smooths.cyclic import CyclicCRS, CyclicPSpline
@@ -53,6 +54,7 @@ _BS_REGISTRY: dict[str, type[SmoothBasis]] = {
     "ts": ShrinkageTPRS,
     "cs": ShrinkageCRS,
     "re": RandomEffectBasis,
+    "ad": AdaptiveTPRS,
 }
 
 
@@ -80,6 +82,11 @@ def _resolve_basis(term: SmoothTerm) -> SmoothBasis:
     elif term.bs in ("tp", "ts"):
         if "m" in term.extra:
             kwargs["m"] = term.extra["m"]
+    elif term.bs == "ad":
+        if "m" in term.extra:
+            kwargs["m"] = term.extra["m"]
+        if "n_penalties" in term.extra:
+            kwargs["n_penalties"] = term.extra["n_penalties"]
 
     return cls(**kwargs)
 
@@ -372,7 +379,7 @@ class ModelMatrix:
 
     @property
     def n_coefs(self) -> int:
-        """Total number of model coefficients (columns of ``X``)."""
+        """Total number of model coefficients (columns of `X`)."""
         return self.X.shape[1]
 
     @property
