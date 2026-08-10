@@ -690,10 +690,14 @@ def pirls_fit(
             for iteration in range(max_iter):
                 n_iter += 1
 
-                dmu_deta = 1.0 / family.link_derivative(mu)
-                W_irls = dmu_deta**2 / family.variance(mu)
+                custom = family.irls_update(y, mu, eta)
+                if custom is not None:
+                    z, W_irls = custom
+                else:
+                    dmu_deta = 1.0 / family.link_derivative(mu)
+                    W_irls = dmu_deta**2 / family.variance(mu)
+                    z = eta + (y - mu) / dmu_deta
                 W_total = pw * W_irls if pw is not None else W_irls
-                z = eta + (y - mu) / dmu_deta
 
                 if auto_select:
                     sp = _select_sp(z, W=W_total)
