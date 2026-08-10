@@ -1,4 +1,4 @@
-"""Model matrix construction: formula + data → design matrix + penalties.
+"""Model matrix construction: formula + data -> design matrix + penalties.
 
 This module bridges the parsed formula and smooth basis implementations into the full design matrix
 and combined penalty structure required by the GAM fitting engine.
@@ -35,10 +35,12 @@ from whittaker.smooths.base import SmoothBasis
 from whittaker.smooths.cubic import CRS
 from whittaker.smooths.cyclic import CyclicCRS, CyclicPSpline
 from whittaker.smooths.factor_smooth import FactorSmoothBasis
+from whittaker.smooths.gp import GaussianProcess
 from whittaker.smooths.monotone import ConvexPSpline, MonotonePSpline
 from whittaker.smooths.pspline import PSpline
 from whittaker.smooths.random import RandomEffectBasis
 from whittaker.smooths.shrinkage import ShrinkageCRS, ShrinkageTPRS
+from whittaker.smooths.soap_film import SoapFilm
 from whittaker.smooths.tensor import (
     TensorInteractionBasis,
     TensorProductBasis,
@@ -56,6 +58,8 @@ _BS_REGISTRY: dict[str, type[SmoothBasis]] = {
     "cs": ShrinkageCRS,
     "re": RandomEffectBasis,
     "ad": AdaptiveTPRS,
+    "so": SoapFilm,
+    "gp": GaussianProcess,
     "mpi": MonotonePSpline,
     "mpd": lambda **kw: MonotonePSpline(decreasing=True, **kw),
     "cx": ConvexPSpline,
@@ -92,6 +96,17 @@ def _resolve_basis(term: SmoothTerm) -> SmoothBasis:
             kwargs["m"] = term.extra["m"]
         if "n_penalties" in term.extra:
             kwargs["n_penalties"] = term.extra["n_penalties"]
+    elif term.bs == "so":
+        xt = term.extra.get("xt", {})
+        if isinstance(xt, dict):
+            if "boundary" in xt:
+                kwargs["boundary"] = xt["boundary"]
+            if "knots" in xt:
+                kwargs["knots"] = xt["knots"]
+    elif term.bs == "gp":
+        xt = term.extra.get("xt", None)
+        if isinstance(xt, str):
+            kwargs["cov"] = xt
 
     return cls(**kwargs)
 

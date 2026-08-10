@@ -20,6 +20,15 @@ try:
 except ImportError:
     _HAS_SKLEARN = False
 
+    class BaseEstimator:  # type: ignore[no-redef]
+        pass
+
+    class RegressorMixin:  # type: ignore[no-redef]
+        pass
+
+    class ClassifierMixin:  # type: ignore[no-redef]
+        pass
+
 
 def _check_sklearn() -> None:
     if not _HAS_SKLEARN:
