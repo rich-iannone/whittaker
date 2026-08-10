@@ -94,6 +94,15 @@ class Family(ABC):
         """
         ...
 
+    def irls_update(self, y: NDArray, mu: NDArray, eta: NDArray) -> tuple[NDArray, NDArray] | None:
+        """Custom IRLS pseudo-response and working weights.
+
+        Override in families whose loss is not a standard GLM deviance (e.g. quantile regression).
+        Return `(z, W)` where *z* is the pseudo-response and *W* is the diagonal working-weight
+        vector. Return `None` to use the default GLM formula.
+        """
+        return None
+
     def initialize(self, y: NDArray) -> NDArray:
         """Starting values for μ given the response *y*.
 
