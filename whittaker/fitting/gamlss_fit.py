@@ -19,6 +19,7 @@ from whittaker.fitting.pirls import (
 from whittaker.model_matrix import ModelMatrix
 
 _W_FLOOR = 1e-10
+_Z_CLIP = 1e6
 
 
 @dataclass
@@ -48,6 +49,14 @@ class GAMLSSFitResult:
     response: NDArray = field(repr=False)
 
 
+def _sanitize(z: NDArray, W: NDArray) -> tuple[NDArray, NDArray]:
+    z = np.where(np.isfinite(z), z, 0.0)
+    z = np.clip(z, -_Z_CLIP, _Z_CLIP)
+    W = np.where(np.isfinite(W), W, _W_FLOOR)
+    W = np.maximum(W, _W_FLOOR)
+    return z, W
+
+
 def _select_sp_for_param(
     X: NDArray,
     z: NDArray,
@@ -63,17 +72,52 @@ def _select_sp_for_param(
         return []
     if method == "REML":
         return _select_smoothing_params_reml(
-            X, z, penalties, pen_ranks, n_unpenalized,
-            scale_known=True, W=W, offset=offset, n_sp=n_sp,
+            X,
+            z,
+            penalties,
+            pen_ranks,
+            n_unpenalized,
+            scale_known=True,
+            W=W,
+            offset=offset,
+            n_sp=n_sp,
         )
     if method == "ML":
         return _select_smoothing_params_ml(
-            X, z, penalties, pen_ranks, n_unpenalized,
-            scale_known=True, W=W, offset=offset, n_sp=n_sp,
+            X,
+            z,
+            penalties,
+            pen_ranks,
+            n_unpenalized,
+            scale_known=True,
+            W=W,
+            offset=offset,
+            n_sp=n_sp,
         )
     return _select_smoothing_params_gcv(
-        X, z, penalties, W=W, offset=offset, n_sp=n_sp,
+        X,
+        z,
+        penalties,
+        W=W,
+        offset=offset,
+        n_sp=n_sp,
     )
+
+
+def _compute_zw(
+    family: GAMLSSFamily,
+    name: str,
+    y: NDArray,
+    params: dict[str, NDArray],
+    eta: NDArray,
+) -> tuple[NDArray, NDArray]:
+    dl = family.dl_dtheta(name, y, params)
+    d2l = np.maximum(family.d2l_dtheta2(name, y, params), _W_FLOOR)
+    g_prime = family.link_derivative(name, params[name])
+    dtheta_deta = 1.0 / g_prime
+    W_irls = d2l * dtheta_deta**2
+    z = eta + dl * g_prime / d2l
+    return _sanitize(z, W_irls)
 
 
 def gamlss_fit(
@@ -131,28 +175,19 @@ def gamlss_fit(
             X = model.X
             offset = model.offset
 
-            dl = family.dl_dtheta(name, y, params)
-            d2l = np.maximum(family.d2l_dtheta2(name, y, params), _W_FLOOR)
-
-            g_prime = family.link_derivative(name, params[name])
-            dtheta_deta = 1.0 / g_prime
-
-            W_irls = np.maximum(d2l * dtheta_deta**2, _W_FLOOR)
-            z = etas[name] + dl / (d2l * g_prime)
-
-            if not sp_dict[name] and model.penalties:
-                sp_dict[name] = _select_sp_for_param(
-                    X, z, model.penalties, method_upper,
-                    pen_ranks_dict[name], n_unpen_dict[name],
-                    W=W_irls, offset=offset,
-                )
+            z, W_irls = _compute_zw(family, name, y, params, etas[name])
 
             for _inner in range(max_inner):
                 if model.penalties:
                     sp_dict[name] = _select_sp_for_param(
-                        X, z, model.penalties, method_upper,
-                        pen_ranks_dict[name], n_unpen_dict[name],
-                        W=W_irls, offset=offset,
+                        X,
+                        z,
+                        model.penalties,
+                        method_upper,
+                        pen_ranks_dict[name],
+                        n_unpen_dict[name],
+                        W=W_irls,
+                        offset=offset,
                     )
 
                 sp = sp_dict[name] if sp_dict[name] else [1.0] * len(model.penalties)
@@ -166,12 +201,7 @@ def gamlss_fit(
                 params_trial = dict(params)
                 params_trial[name] = theta_new
 
-                dl_new = family.dl_dtheta(name, y, params_trial)
-                d2l_new = np.maximum(family.d2l_dtheta2(name, y, params_trial), _W_FLOOR)
-                g_prime_new = family.link_derivative(name, theta_new)
-                dtheta_deta_new = 1.0 / g_prime_new
-                W_new = np.maximum(d2l_new * dtheta_deta_new**2, _W_FLOOR)
-                z_new = eta_new + dl_new / (d2l_new * g_prime_new)
+                z_new, W_new = _compute_zw(family, name, y, params_trial, eta_new)
 
                 rel_change = np.max(np.abs(beta - betas[name])) / (np.max(np.abs(beta)) + 1e-8)
                 betas[name] = beta
@@ -184,7 +214,7 @@ def gamlss_fit(
                     break
 
         ll_new = family.log_likelihood(y, params)
-        if abs(ll_new - ll_old) / (abs(ll_old) + 0.1) < tol:
+        if np.isfinite(ll_new) and abs(ll_new - ll_old) / (abs(ll_old) + 0.1) < tol:
             converged = True
             break
         ll_old = ll_new
@@ -200,10 +230,7 @@ def gamlss_fit(
         sp = sp_dict[name] if sp_dict[name] else [1.0] * len(model.penalties)
         smooths_info = [(s.col_start, s.col_end) for s in model.smooths]
 
-        dl = family.dl_dtheta(name, y, params)
-        d2l = np.maximum(family.d2l_dtheta2(name, y, params), _W_FLOOR)
-        g_prime = family.link_derivative(name, params[name])
-        W_irls = np.maximum(d2l * (1.0 / g_prime) ** 2, _W_FLOOR)
+        _, W_irls = _compute_zw(family, name, y, params, etas[name])
 
         edf = _edf_per_smooth(X, model.penalties, sp, smooths_info, W=W_irls)
         edf_total = sum(edf) + (1 if model.has_intercept else 0) + model.n_parametric
