@@ -34,6 +34,7 @@ from whittaker.smooths.adaptive import AdaptiveTPRS
 from whittaker.smooths.base import SmoothBasis
 from whittaker.smooths.cubic import CRS
 from whittaker.smooths.cyclic import CyclicCRS, CyclicPSpline
+from whittaker.smooths.duchon import DuchonSpline
 from whittaker.smooths.factor_smooth import FactorSmoothBasis
 from whittaker.smooths.gp import GaussianProcess
 from whittaker.smooths.monotone import ConvexPSpline, MonotonePSpline
@@ -60,6 +61,7 @@ _BS_REGISTRY: dict[str, type[SmoothBasis]] = {
     "ad": AdaptiveTPRS,
     "so": SoapFilm,
     "gp": GaussianProcess,
+    "ds": DuchonSpline,
     "mpi": MonotonePSpline,
     "mpd": lambda **kw: MonotonePSpline(decreasing=True, **kw),
     "cx": ConvexPSpline,
@@ -88,7 +90,7 @@ def _resolve_basis(term: SmoothTerm) -> SmoothBasis:
             kwargs["degree"] = term.extra["degree"]
         if "m" in term.extra:
             kwargs["m"] = term.extra["m"]
-    elif term.bs in ("tp", "ts"):
+    elif term.bs in ("tp", "ts", "ds"):
         if "m" in term.extra:
             kwargs["m"] = term.extra["m"]
     elif term.bs == "ad":
