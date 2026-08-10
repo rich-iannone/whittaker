@@ -5,7 +5,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from whittaker.families import GaussianLS
+from whittaker.families import BetaLS, GammaLS, GaussianLS
 from whittaker.gamlss import GAMLSS, GAMLSSPrediction
 
 # ---------------------------------------------------------------------------
@@ -152,6 +152,48 @@ class TestGAMLSSPrediction:
         model.fit(heteroscedastic_data, method="REML")
         pred = model.predict(heteroscedastic_data)
         assert np.all(pred.values["sigma"] > 0)
+
+    def test_predict_se_returns_all_params(self, heteroscedastic_data):
+        model = GAMLSS(
+            formulas={"mu": "y ~ s(x)", "sigma": "y ~ s(x)"},
+            family=GaussianLS(),
+        )
+        model.fit(heteroscedastic_data, method="REML")
+        pred = model.predict(heteroscedastic_data, se=True)
+        assert pred.se is not None
+        assert "mu" in pred.se
+        assert "sigma" in pred.se
+
+    def test_predict_se_positive_finite(self, heteroscedastic_data):
+        model = GAMLSS(
+            formulas={"mu": "y ~ s(x)", "sigma": "y ~ s(x)"},
+            family=GaussianLS(),
+        )
+        model.fit(heteroscedastic_data, method="REML")
+        pred = model.predict(heteroscedastic_data, se=True)
+        for name in ("mu", "sigma"):
+            assert np.all(pred.se[name] > 0)
+            assert np.all(np.isfinite(pred.se[name]))
+
+    def test_predict_se_correct_shape(self, heteroscedastic_data):
+        model = GAMLSS(
+            formulas={"mu": "y ~ s(x)", "sigma": "y ~ s(x)"},
+            family=GaussianLS(),
+        )
+        model.fit(heteroscedastic_data, method="REML")
+        new = {"x": np.linspace(0, 2 * np.pi, 20)}
+        pred = model.predict(new, se=True)
+        assert pred.se["mu"].shape == (20,)
+        assert pred.se["sigma"].shape == (20,)
+
+    def test_predict_se_none_when_false(self, heteroscedastic_data):
+        model = GAMLSS(
+            formulas={"mu": "y ~ s(x)", "sigma": "y ~ s(x)"},
+            family=GaussianLS(),
+        )
+        model.fit(heteroscedastic_data, method="REML")
+        pred = model.predict(heteroscedastic_data)
+        assert pred.se is None
 
 
 # ---------------------------------------------------------------------------
@@ -332,3 +374,197 @@ class TestGAMLSSvsGAM:
         pred_gamlss = gamlss.predict(homoscedastic_data, parameter="mu")
 
         np.testing.assert_allclose(pred_gam, pred_gamlss, atol=0.3)
+
+
+# ---------------------------------------------------------------------------
+# GammaLS integration
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture()
+def gamma_data():
+    rng = np.random.default_rng(23)
+    n = 400
+    x = np.linspace(0, 4, n)
+    mu_true = np.exp(1.5 - 0.3 * x)
+    sigma_true = np.full(n, 0.3)
+    shape = 1.0 / sigma_true**2
+    scale = mu_true * sigma_true**2
+    y = rng.gamma(shape=shape, scale=scale, size=n)
+    return {"x": x, "y": y, "mu_true": mu_true, "sigma_true": sigma_true}
+
+
+class TestGammaLSFitting:
+    def test_converges(self, gamma_data):
+        model = GAMLSS(
+            formulas={"mu": "y ~ s(x)", "sigma": "y ~ 1"},
+            family=GammaLS(),
+        )
+        model.fit(gamma_data, method="GCV")
+        assert model.converged
+
+    def test_mu_recovery(self, gamma_data):
+        model = GAMLSS(
+            formulas={"mu": "y ~ s(x)", "sigma": "y ~ 1"},
+            family=GammaLS(),
+        )
+        model.fit(gamma_data, method="GCV")
+        pred = model.predict(gamma_data)
+        np.testing.assert_allclose(pred.values["mu"], gamma_data["mu_true"], rtol=0.15)
+
+    def test_sigma_recovery(self, gamma_data):
+        model = GAMLSS(
+            formulas={"mu": "y ~ s(x)", "sigma": "y ~ 1"},
+            family=GammaLS(),
+        )
+        model.fit(gamma_data, method="GCV")
+        pred = model.predict(gamma_data)
+        sigma_hat = pred.values["sigma"].mean()
+        np.testing.assert_allclose(sigma_hat, 0.3, atol=0.1)
+
+    def test_mu_positive(self, gamma_data):
+        model = GAMLSS(
+            formulas={"mu": "y ~ s(x)", "sigma": "y ~ 1"},
+            family=GammaLS(),
+        )
+        model.fit(gamma_data, method="GCV")
+        pred = model.predict(gamma_data)
+        assert np.all(pred.values["mu"] > 0)
+        assert np.all(pred.values["sigma"] > 0)
+
+    def test_fit_reml(self, gamma_data):
+        model = GAMLSS(
+            formulas={"mu": "y ~ s(x)", "sigma": "y ~ 1"},
+            family=GammaLS(),
+        )
+        model.fit(gamma_data, method="REML")
+        assert model.is_fitted
+
+    def test_sigma_smooth(self):
+        rng = np.random.default_rng(23)
+        n = 400
+        x = np.linspace(0, 4, n)
+        mu_true = np.full(n, 3.0)
+        sigma_true = 0.2 + 0.3 * x / 4
+        shape = 1.0 / sigma_true**2
+        scale = mu_true * sigma_true**2
+        y = rng.gamma(shape=shape, scale=scale, size=n)
+        data = {"x": x, "y": y}
+        model = GAMLSS(
+            formulas={"mu": "y ~ 1", "sigma": "y ~ s(x)"},
+            family=GammaLS(),
+        )
+        model.fit(data, method="GCV")
+        pred = model.predict(data)
+        sigma_low = pred.values["sigma"][:50].mean()
+        sigma_high = pred.values["sigma"][-50:].mean()
+        assert sigma_high > sigma_low * 1.3
+
+    def test_simulate(self, gamma_data):
+        model = GAMLSS(
+            formulas={"mu": "y ~ s(x)", "sigma": "y ~ 1"},
+            family=GammaLS(),
+        )
+        model.fit(gamma_data, method="GCV")
+        sims = model.simulate(n_sim=5, seed=23)
+        assert sims.shape == (len(gamma_data["y"]), 5)
+        assert np.all(sims > 0)
+
+    def test_summary(self, gamma_data):
+        model = GAMLSS(
+            formulas={"mu": "y ~ s(x)", "sigma": "y ~ 1"},
+            family=GammaLS(),
+        )
+        model.fit(gamma_data, method="GCV")
+        s = model.summary()
+        assert "GammaLS" in s
+        assert "mu" in s
+        assert "sigma" in s
+
+
+# ---------------------------------------------------------------------------
+# BetaLS integration
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture()
+def beta_data():
+    rng = np.random.default_rng(23)
+    n = 400
+    x = np.linspace(-2, 2, n)
+    from scipy.special import expit
+
+    mu_true = expit(0.5 + 0.8 * x)
+    phi_true = np.full(n, 20.0)
+    a = mu_true * phi_true
+    b = (1 - mu_true) * phi_true
+    y = rng.beta(a, b)
+    return {"x": x, "y": y, "mu_true": mu_true, "phi_true": phi_true}
+
+
+class TestBetaLSFitting:
+    def test_converges(self, beta_data):
+        model = GAMLSS(
+            formulas={"mu": "y ~ s(x)", "phi": "y ~ 1"},
+            family=BetaLS(),
+        )
+        model.fit(beta_data, method="GCV")
+        assert model.converged
+
+    def test_mu_recovery(self, beta_data):
+        model = GAMLSS(
+            formulas={"mu": "y ~ s(x)", "phi": "y ~ 1"},
+            family=BetaLS(),
+        )
+        model.fit(beta_data, method="GCV")
+        pred = model.predict(beta_data)
+        np.testing.assert_allclose(pred.values["mu"], beta_data["mu_true"], atol=0.1)
+
+    def test_phi_recovery(self, beta_data):
+        model = GAMLSS(
+            formulas={"mu": "y ~ s(x)", "phi": "y ~ 1"},
+            family=BetaLS(),
+        )
+        model.fit(beta_data, method="GCV")
+        pred = model.predict(beta_data)
+        phi_hat = pred.values["phi"].mean()
+        np.testing.assert_allclose(phi_hat, 20.0, rtol=0.3)
+
+    def test_mu_in_unit_interval(self, beta_data):
+        model = GAMLSS(
+            formulas={"mu": "y ~ s(x)", "phi": "y ~ 1"},
+            family=BetaLS(),
+        )
+        model.fit(beta_data, method="GCV")
+        pred = model.predict(beta_data)
+        assert np.all((pred.values["mu"] > 0) & (pred.values["mu"] < 1))
+        assert np.all(pred.values["phi"] > 0)
+
+    def test_fit_reml(self, beta_data):
+        model = GAMLSS(
+            formulas={"mu": "y ~ s(x)", "phi": "y ~ 1"},
+            family=BetaLS(),
+        )
+        model.fit(beta_data, method="REML")
+        assert model.is_fitted
+
+    def test_simulate(self, beta_data):
+        model = GAMLSS(
+            formulas={"mu": "y ~ s(x)", "phi": "y ~ 1"},
+            family=BetaLS(),
+        )
+        model.fit(beta_data, method="GCV")
+        sims = model.simulate(n_sim=5, seed=23)
+        assert sims.shape == (len(beta_data["y"]), 5)
+        assert np.all((sims > 0) & (sims < 1))
+
+    def test_summary(self, beta_data):
+        model = GAMLSS(
+            formulas={"mu": "y ~ s(x)", "phi": "y ~ 1"},
+            family=BetaLS(),
+        )
+        model.fit(beta_data, method="GCV")
+        s = model.summary()
+        assert "BetaLS" in s
+        assert "mu" in s
+        assert "phi" in s
