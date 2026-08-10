@@ -9,7 +9,7 @@ from numpy.typing import NDArray
 
 from whittaker.families.gamlss_base import GAMLSSFamily
 from whittaker.families.gaussian_ls import GaussianLS
-from whittaker.fitting.gamlss_fit import GAMLSSFitResult, gamlss_fit
+from whittaker.fitting.gamlss_fit import GAMLSSFitResult, _compute_zw, gamlss_fit
 from whittaker.formula.parser import parse
 from whittaker.formula.terms import Formula
 from whittaker.model_matrix import ModelMatrix, build_model_matrix, predict_matrix
@@ -25,10 +25,14 @@ class GAMLSSPrediction:
         Dict mapping parameter names to predicted values on the response scale.
     linear_predictors:
         Dict mapping parameter names to predicted linear predictors.
+    se:
+        Dict mapping parameter names to standard errors on the linear predictor scale, or `None` if
+        `se=False`.
     """
 
     values: dict[str, NDArray]
     linear_predictors: dict[str, NDArray]
+    se: dict[str, NDArray] | None = None
 
 
 class GAMLSS:
@@ -204,6 +208,7 @@ class GAMLSS:
         new_data: dict[str, NDArray],
         *,
         parameter: str | None = None,
+        se: bool = False,
     ) -> GAMLSSPrediction | NDArray:
         """Predict distributional parameters for new data.
 
@@ -214,6 +219,8 @@ class GAMLSS:
         parameter:
             If given, return only this parameter's predicted values as an array. Otherwise return a
             `GAMLSSPrediction` with all parameters.
+        se:
+            If `True`, compute standard errors on the linear predictor scale for each parameter.
 
         Returns
         -------
@@ -223,6 +230,7 @@ class GAMLSS:
 
         values: dict[str, NDArray] = {}
         linear_predictors: dict[str, NDArray] = {}
+        se_dict: dict[str, NDArray] = {} if se else {}
 
         for name in self._family.parameter_names:
             model = self._models[name]
@@ -236,10 +244,38 @@ class GAMLSS:
             values[name] = theta
             linear_predictors[name] = eta
 
+            if se:
+                se_dict[name] = self._prediction_se(name, X_new)
+
         if parameter is not None:
             return values[parameter]
 
-        return GAMLSSPrediction(values=values, linear_predictors=linear_predictors)
+        return GAMLSSPrediction(
+            values=values,
+            linear_predictors=linear_predictors,
+            se=se_dict if se else None,
+        )
+
+    def _prediction_se(self, param: str, X_new: NDArray) -> NDArray:
+        from whittaker.fitting.inference import _bayesian_covariance
+
+        fr = self._fit_result
+        pr = fr.params[param]
+        model = self._models[param]
+        y = fr.response
+
+        _, W_irls = _compute_zw(
+            self._family,
+            param,
+            y,
+            {name: r.fitted_values for name, r in fr.params.items()},
+            pr.linear_predictor,
+        )
+
+        sp = pr.smoothing_params if pr.smoothing_params else [1.0] * len(model.penalties)
+        V_beta = _bayesian_covariance(model.X, model.penalties, sp, scale=1.0, W=W_irls)
+        var_diag = np.sum(X_new * (X_new @ V_beta), axis=1)
+        return np.sqrt(np.maximum(var_diag, 0.0))
 
     def simulate(self, n_sim: int = 1, *, seed: int | None = None) -> NDArray:
         """Simulate responses from the fitted model.
