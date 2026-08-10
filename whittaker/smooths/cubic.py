@@ -311,7 +311,7 @@ class CRS(SmoothBasis):
         Returns
         -------
         NDArray
-            Design matrix of shape `(n, k)``.
+            Design matrix of shape `(n, k)`.
         """
         self._check_fitted()
         x1d = self._as_1d(x)
@@ -326,7 +326,7 @@ class CRS(SmoothBasis):
         Returns
         -------
         NDArray
-            Shape `(k, k)``.
+            Shape `(k, k)`.
         """
         self._check_fitted()
         return self._S.copy()

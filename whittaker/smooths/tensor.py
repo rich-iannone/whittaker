@@ -70,7 +70,7 @@ class TensorProductBasis(SmoothBasis):
     def penalty_matrix(self) -> NDArray:
         """Sum of all marginal penalty matrices (for compatibility).
 
-        For proper per-marginal penalization, use ``penalty_matrices()`` instead.
+        For proper per-marginal penalization, use `penalty_matrices()` instead.
         """
         pens = self.penalty_matrices()
         return sum(pens)

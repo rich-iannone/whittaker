@@ -163,7 +163,7 @@ class PSpline(SmoothBasis):
     # ------------------------------------------------------------------
 
     def fit(self, x: NDArray) -> PSpline:
-        """Fit the P-spline to training data ``x``.
+        """Fit the P-spline to training data `x`.
 
         Determines the knot vector from the data range and pre-computes the penalty matrix.
         No per-observation computation is stored as the B-spline design matrix is always evaluated

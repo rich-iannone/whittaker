@@ -27,7 +27,7 @@ def _radial_basis(r: NDArray, d: int, m: int) -> NDArray:
     d:
         Covariate dimension.
     m:
-        Spline order. Must satisfy ``2m > d``.
+        Spline order. Must satisfy `2m > d`.
 
     Returns
     -------
