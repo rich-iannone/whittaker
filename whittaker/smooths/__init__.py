@@ -6,6 +6,7 @@ from whittaker.smooths.adaptive import AdaptiveTPRS
 from whittaker.smooths.base import SmoothBasis
 from whittaker.smooths.cubic import CRS
 from whittaker.smooths.cyclic import CyclicCRS, CyclicPSpline
+from whittaker.smooths.duchon import DuchonSpline
 from whittaker.smooths.factor_smooth import FactorSmoothBasis
 from whittaker.smooths.gp import GaussianProcess
 from whittaker.smooths.monotone import ConvexPSpline, MonotonePSpline
@@ -26,6 +27,7 @@ __all__ = [
     "CRS",
     "CyclicCRS",
     "CyclicPSpline",
+    "DuchonSpline",
     "FactorSmoothBasis",
     "GaussianProcess",
     "MonotonePSpline",
