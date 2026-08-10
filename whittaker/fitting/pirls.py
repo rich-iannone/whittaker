@@ -87,6 +87,8 @@ class FitResult:
     null_deviance: float | None = None
     aic: float | None = None
     bic: float | None = None
+    method: str = "GCV"
+    pseudo_data: NDArray | None = None
 
 
 def _penalized_solve(
@@ -655,6 +657,7 @@ def pirls_fit(
 
     is_gaussian_identity = isinstance(family, Gaussian)
     W_final: NDArray | None = None
+    z_final: NDArray = y
 
     if is_gaussian_identity:
         if not sp:
@@ -735,6 +738,7 @@ def pirls_fit(
 
         hat_trace = float(hat_arr[0])
         W_final = W_total
+        z_final = z
 
     smooths_info = [(s.col_start, s.col_end) for s in model.smooths]
     W_for_edf = pw if is_gaussian_identity else W_final
@@ -781,4 +785,6 @@ def pirls_fit(
         null_deviance=float(null_dev),
         aic=float(aic),
         bic=float(bic),
+        method=method_upper,
+        pseudo_data=z_final,
     )

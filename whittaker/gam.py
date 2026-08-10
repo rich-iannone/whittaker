@@ -172,6 +172,7 @@ class GAM:
         type: str = "response",
         interval: str | None = None,
         level: float = 0.95,
+        unconditional: bool = False,
     ) -> PredictionResult | TermsPredictionResult:
         """Predict on new data.
 
@@ -186,7 +187,7 @@ class GAM:
         type:
             Prediction type:
 
-            - `"response"` (default): predictions on the response scale (mu = g^{-1}(eta)).
+            - `"response"`` (default): predictions on the response scale (mu = g^{-1}(eta)).
             - `"link"`: predictions on the linear predictor scale (eta = X beta).
             - `"terms"`: individual smooth term contributions to the linear predictor.
         interval:
@@ -197,6 +198,11 @@ class GAM:
             available for ``type="terms"``.
         level:
             Nominal coverage probability for the interval (default ``0.95``).
+        unconditional:
+            If ``True``, include smoothing parameter uncertainty in standard errors and intervals
+            (Marra & Wood 2012). This uses the unconditional covariance matrix V_c instead of the
+            conditional V_p, producing wider and more honest intervals. Requires that the model was
+            fitted with ``method="REML"`` or ``method="ML"``.
 
         Returns
         -------
@@ -210,11 +216,17 @@ class GAM:
         if type_lower == "terms":
             if interval is not None:
                 raise ValueError("Intervals are not supported for type='terms'.")
-            return self._predict_terms(new_data, se=se)
+            return self._predict_terms(new_data, se=se, unconditional=unconditional)
 
         if type_lower not in ("response", "link"):
             raise ValueError(
                 f"Unknown prediction type {type!r}. Choose from 'response', 'link', or 'terms'."
+            )
+
+        if unconditional and self._fit_result.method not in ("REML", "ML"):
+            raise ValueError(
+                "unconditional=True requires method='REML' or method='ML', "
+                f"but model was fitted with method='{self._fit_result.method}'."
             )
 
         if interval is not None:
@@ -234,7 +246,7 @@ class GAM:
             eta = eta + new_offset
 
         need_se = se or interval_lower is not None
-        se_values = self._prediction_se(X_new) if need_se else None
+        se_values = self._prediction_se(X_new, unconditional=unconditional) if need_se else None
 
         lower = None
         upper = None
@@ -271,6 +283,7 @@ class GAM:
         new_data: dict[str, NDArray],
         *,
         se: bool = False,
+        unconditional: bool = False,
     ) -> TermsPredictionResult:
         """Compute per-smooth-term contributions to the linear predictor."""
         X_new = predict_matrix(self._model_matrix, new_data)
@@ -278,15 +291,7 @@ class GAM:
 
         V_beta = None
         if se:
-            from whittaker.fitting.inference import _bayesian_covariance
-
-            V_beta = _bayesian_covariance(
-                self._model_matrix.X,
-                self._model_matrix.penalties,
-                self._fit_result.smoothing_params,
-                self._fit_result.scale,
-                W=self._combined_weights(),
-            )
+            V_beta = self._covariance_matrix(unconditional=unconditional)
 
         terms_dict: dict[str, NDArray] = {}
         se_dict: dict[str, NDArray] = {} if se else None
@@ -310,26 +315,64 @@ class GAM:
 
         return TermsPredictionResult(terms=terms_dict, se=se_dict, labels=labels)
 
-    def _prediction_se(self, X_new: NDArray) -> NDArray:
+    def _prediction_se(
+        self, X_new: NDArray, *, unconditional: bool = False
+    ) -> NDArray:
         """Compute standard errors for predictions at X_new.
 
         SE = sqrt(diag(X_new @ V_β @ X_new.T))
 
-        where V_β = φ (X'WX + Σλ_j S_j)⁻¹ is the Bayesian posterior covariance of the coefficients
-        and W combines IRLS working weights and prior weights.
+        where V_β is the Bayesian posterior covariance (conditional) or the unconditional covariance
+        that includes smoothing parameter uncertainty (Marra & Wood 2012).
+        """
+        W = self._combined_weights()
+        V_beta = self._covariance_matrix(unconditional=unconditional, W=W)
+        var_diag = np.sum(X_new * (X_new @ V_beta), axis=1)
+        return np.sqrt(np.maximum(var_diag, 0.0))
+
+    def _covariance_matrix(
+        self, *, unconditional: bool = False, W: NDArray | None = None
+    ) -> NDArray:
+        """Return the coefficient covariance matrix V_β.
+
+        When ``unconditional=True``, returns V_c (Marra & Wood 2012) which accounts for smoothing
+        parameter uncertainty. Otherwise returns the conditional Bayesian covariance V_p.
         """
         from whittaker.fitting.inference import _bayesian_covariance
 
-        W = self._combined_weights()
-        V_beta = _bayesian_covariance(
+        if W is None:
+            W = self._combined_weights()
+
+        if unconditional and self._fit_result.method in ("REML", "ML"):
+            from whittaker.fitting.inference import _unconditional_covariance
+
+            n_unpenalized = (
+                (1 if self._model_matrix.has_intercept else 0)
+                + self._model_matrix.n_parametric
+            )
+            for s_info in self._model_matrix.smooths:
+                n_unpenalized += s_info.null_space_dim
+
+            return _unconditional_covariance(
+                self._model_matrix.X,
+                self._model_matrix.penalties,
+                self._fit_result.smoothing_params,
+                self._fit_result.scale,
+                self._fit_result.coefficients,
+                self._fit_result.method,
+                W=W,
+                n_unpenalized=n_unpenalized,
+                y=self._fit_result.pseudo_data,
+                offset=self._model_matrix.offset,
+            )
+
+        return _bayesian_covariance(
             self._model_matrix.X,
             self._model_matrix.penalties,
             self._fit_result.smoothing_params,
             self._fit_result.scale,
             W=W,
         )
-        var_diag = np.sum(X_new * (X_new @ V_beta), axis=1)
-        return np.sqrt(np.maximum(var_diag, 0.0))
 
     def _combined_weights(self) -> NDArray | None:
         """Combine IRLS working weights and prior weights into a single weight vector."""
