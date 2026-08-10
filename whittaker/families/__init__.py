@@ -17,6 +17,7 @@ from whittaker.families.ordered_categorical import OrderedCategorical
 from whittaker.families.poisson import Poisson
 from whittaker.families.quantile import QuantileFamily
 from whittaker.families.tweedie import Tweedie
+from whittaker.families.tweedie_estimated import TweedieEstimated, tw
 from whittaker.families.zero_inflated import ZeroInflatedNegativeBinomial, ZeroInflatedPoisson
 
 __all__ = [
@@ -35,6 +36,8 @@ __all__ = [
     "Poisson",
     "QuantileFamily",
     "Tweedie",
+    "TweedieEstimated",
+    "tw",
     "ZeroInflatedNegativeBinomial",
     "ZeroInflatedPoisson",
 ]
