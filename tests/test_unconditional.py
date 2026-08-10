@@ -170,7 +170,7 @@ class TestUnconditionalMultipleSmooths:
 
 class TestUnconditionalNonGaussian:
     def test_poisson(self):
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 200
         x = rng.uniform(0, 2 * np.pi, n)
         y = rng.poisson(np.exp(0.5 * np.sin(x)))
@@ -184,7 +184,7 @@ class TestUnconditionalNonGaussian:
         assert ratio > 1.01
 
     def test_gamma(self):
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 200
         x = rng.uniform(0, 2 * np.pi, n)
         mu = np.exp(np.sin(x) + 1)
@@ -243,7 +243,7 @@ class TestUnconditionalCombinations:
         assert np.isfinite(res.se).all()
 
     def test_with_offset(self):
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 200
         x = rng.uniform(0, 2 * np.pi, n)
         log_exposure = rng.uniform(0, 1, n)

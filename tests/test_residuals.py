@@ -19,7 +19,7 @@ from whittaker.gam import GAM
 
 class TestResponseResiduals:
     def test_matches_property(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 100
         x = np.linspace(0, 2 * np.pi, n)
         y = np.sin(x) + rng.normal(0, 0.3, n)
@@ -28,7 +28,7 @@ class TestResponseResiduals:
         assert_allclose(model.get_residuals("response"), model.residuals)
 
     def test_sums_near_zero_gaussian(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 200
         x = np.linspace(0, 1, n)
         y = x + rng.normal(0, 0.1, n)
@@ -38,7 +38,7 @@ class TestResponseResiduals:
         assert abs(np.mean(r)) < 0.05
 
     def test_equals_y_minus_mu(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 100
         x = np.linspace(0, 1, n)
         y = x + rng.normal(0, 0.1, n)
@@ -55,7 +55,7 @@ class TestResponseResiduals:
 
 class TestPearsonResiduals:
     def test_gaussian_same_as_response(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 100
         x = np.linspace(0, 1, n)
         y = x + rng.normal(0, 0.1, n)
@@ -67,7 +67,7 @@ class TestPearsonResiduals:
         )
 
     def test_poisson_different_from_response(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 200
         x = np.linspace(0, 2, n)
         mu = np.exp(1.0 + x)
@@ -79,7 +79,7 @@ class TestPearsonResiduals:
         assert not np.allclose(pearson, response)
 
     def test_poisson_formula(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 200
         x = np.linspace(0, 2, n)
         mu = np.exp(0.5 * x)
@@ -92,7 +92,7 @@ class TestPearsonResiduals:
         assert_allclose(pearson, expected, rtol=1e-10)
 
     def test_binomial_formula(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 200
         x = np.linspace(-2, 2, n)
         p = 1.0 / (1.0 + np.exp(-x))
@@ -105,7 +105,7 @@ class TestPearsonResiduals:
         assert_allclose(pearson, expected, rtol=1e-10)
 
     def test_gamma_scales_by_mu(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 200
         x = np.linspace(0.1, 2, n)
         mu_true = np.exp(0.5 * x)
@@ -118,7 +118,7 @@ class TestPearsonResiduals:
         assert_allclose(pearson, expected, rtol=1e-10)
 
     def test_variance_near_scale_for_poisson(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 500
         x = np.linspace(0, 2, n)
         mu = np.exp(1.0 + 0.5 * x)
@@ -137,7 +137,7 @@ class TestPearsonResiduals:
 
 class TestDevianceResiduals:
     def test_gaussian_matches_response(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 100
         x = np.linspace(0, 1, n)
         y = x + rng.normal(0, 0.1, n)
@@ -148,7 +148,7 @@ class TestDevianceResiduals:
         assert_allclose(dev_r, resp_r)
 
     def test_sign_matches_response(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 200
         x = np.linspace(0, 2, n)
         mu = np.exp(0.5 * x)
@@ -161,7 +161,7 @@ class TestDevianceResiduals:
         assert np.all(np.sign(dev_r[nonzero]) == np.sign(resp_r[nonzero]))
 
     def test_squared_sum_equals_deviance(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 200
         x = np.linspace(0, 2, n)
         mu = np.exp(0.5 * x)
@@ -172,7 +172,7 @@ class TestDevianceResiduals:
         assert_allclose(np.sum(dev_r**2), model.deviance, rtol=1e-10)
 
     def test_binomial_deviance_residuals(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 200
         x = np.linspace(-2, 2, n)
         p = 1.0 / (1.0 + np.exp(-x))
@@ -184,7 +184,7 @@ class TestDevianceResiduals:
         assert_allclose(np.sum(dev_r**2), model.deviance, rtol=1e-10)
 
     def test_gamma_deviance_residuals(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 200
         x = np.linspace(0.1, 2, n)
         mu_true = np.exp(0.5 * x)
@@ -196,7 +196,7 @@ class TestDevianceResiduals:
         assert_allclose(np.sum(dev_r**2), model.deviance, rtol=1e-10)
 
     def test_default_type_is_deviance(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 100
         x = np.linspace(0, 1, n)
         y = x + rng.normal(0, 0.1, n)
@@ -212,7 +212,7 @@ class TestDevianceResiduals:
 
 class TestWorkingResiduals:
     def test_gaussian_same_as_response(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 100
         x = np.linspace(0, 1, n)
         y = x + rng.normal(0, 0.1, n)
@@ -224,7 +224,7 @@ class TestWorkingResiduals:
         )
 
     def test_poisson_formula(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 200
         x = np.linspace(0, 2, n)
         mu = np.exp(0.5 * x)
@@ -237,7 +237,7 @@ class TestWorkingResiduals:
         assert_allclose(working, expected, rtol=1e-10)
 
     def test_binomial_working_residuals(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 200
         x = np.linspace(-2, 2, n)
         p = 1.0 / (1.0 + np.exp(-x))
@@ -305,7 +305,7 @@ class TestUnitDeviance:
 
 class TestResidualErrors:
     def test_unknown_type_raises(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 50
         x = np.linspace(0, 1, n)
         y = x + rng.normal(0, 0.1, n)
@@ -320,7 +320,7 @@ class TestResidualErrors:
             model.get_residuals("deviance")
 
     def test_case_insensitive(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 50
         x = np.linspace(0, 1, n)
         y = x + rng.normal(0, 0.1, n)

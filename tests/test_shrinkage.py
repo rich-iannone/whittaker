@@ -24,7 +24,7 @@ class TestShrinkageTPRS:
         assert issubclass(ShrinkageTPRS, TPRS)
 
     def test_same_basis_as_tprs(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         x = rng.uniform(size=50)
 
         tp = TPRS(k=8).fit(x)
@@ -33,14 +33,14 @@ class TestShrinkageTPRS:
         assert_allclose(tp.basis_matrix(x), ts.basis_matrix(x))
 
     def test_two_penalties(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         x = rng.uniform(size=50)
         ts = ShrinkageTPRS(k=8).fit(x)
         pens = ts.penalty_matrices()
         assert len(pens) == 2
 
     def test_first_penalty_matches_tprs(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         x = rng.uniform(size=50)
 
         tp = TPRS(k=8).fit(x)
@@ -49,7 +49,7 @@ class TestShrinkageTPRS:
         assert_allclose(ts.penalty_matrices()[0], tp.penalty_matrix())
 
     def test_null_space_penalty_structure(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         x = rng.uniform(size=50)
         ts = ShrinkageTPRS(k=8).fit(x)
 
@@ -60,13 +60,13 @@ class TestShrinkageTPRS:
         assert_allclose(S_null[:, M:], 0.0, atol=1e-14)
 
     def test_null_space_dimension_is_zero(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         x = rng.uniform(size=50)
         ts = ShrinkageTPRS(k=8).fit(x)
         assert ts.null_space_dimension() == 0
 
     def test_penalties_psd(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         x = rng.uniform(size=50)
         ts = ShrinkageTPRS(k=8).fit(x)
         for P in ts.penalty_matrices():
@@ -74,14 +74,14 @@ class TestShrinkageTPRS:
             assert np.all(eigvals >= -1e-10)
 
     def test_penalties_symmetric(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         x = rng.uniform(size=50)
         ts = ShrinkageTPRS(k=8).fit(x)
         for P in ts.penalty_matrices():
             assert_allclose(P, P.T, atol=1e-14)
 
     def test_combined_penalties_full_rank(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         x = rng.uniform(size=50)
         ts = ShrinkageTPRS(k=8).fit(x)
         pens = ts.penalty_matrices()
@@ -90,7 +90,7 @@ class TestShrinkageTPRS:
         assert np.all(eigvals > 1e-12)
 
     def test_penalty_matrix_shape(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         x = rng.uniform(size=50)
         ts = ShrinkageTPRS(k=8).fit(x)
         for P in ts.penalty_matrices():
@@ -107,7 +107,7 @@ class TestShrinkageCRS:
         assert issubclass(ShrinkageCRS, CRS)
 
     def test_same_basis_as_crs(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         x = rng.uniform(size=50)
 
         cr = CRS(k=8).fit(x)
@@ -116,14 +116,14 @@ class TestShrinkageCRS:
         assert_allclose(cr.basis_matrix(x), cs.basis_matrix(x))
 
     def test_two_penalties(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         x = rng.uniform(size=50)
         cs = ShrinkageCRS(k=8).fit(x)
         pens = cs.penalty_matrices()
         assert len(pens) == 2
 
     def test_first_penalty_matches_crs(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         x = rng.uniform(size=50)
 
         cr = CRS(k=8).fit(x)
@@ -132,7 +132,7 @@ class TestShrinkageCRS:
         assert_allclose(cs.penalty_matrices()[0], cr.penalty_matrix())
 
     def test_null_space_penalty_rank(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         x = rng.uniform(size=50)
         cs = ShrinkageCRS(k=8).fit(x)
 
@@ -142,13 +142,13 @@ class TestShrinkageCRS:
         assert n_positive == 2  # constant + linear null space
 
     def test_null_space_dimension_is_zero(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         x = rng.uniform(size=50)
         cs = ShrinkageCRS(k=8).fit(x)
         assert cs.null_space_dimension() == 0
 
     def test_penalties_psd(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         x = rng.uniform(size=50)
         cs = ShrinkageCRS(k=8).fit(x)
         for P in cs.penalty_matrices():
@@ -156,14 +156,14 @@ class TestShrinkageCRS:
             assert np.all(eigvals >= -1e-10)
 
     def test_penalties_symmetric(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         x = rng.uniform(size=50)
         cs = ShrinkageCRS(k=8).fit(x)
         for P in cs.penalty_matrices():
             assert_allclose(P, P.T, atol=1e-14)
 
     def test_combined_penalties_full_rank(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         x = rng.uniform(size=50)
         cs = ShrinkageCRS(k=8).fit(x)
         pens = cs.penalty_matrices()
@@ -172,7 +172,7 @@ class TestShrinkageCRS:
         assert np.all(eigvals > 1e-12)
 
     def test_null_space_penalty_orthogonal_to_range(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         x = rng.uniform(size=50)
         cs = ShrinkageCRS(k=8).fit(x)
         S_wiggle, S_null = cs.penalty_matrices()
@@ -192,7 +192,7 @@ class TestNullSpacePenalty:
         assert_allclose(S_null, expected, atol=1e-14)
 
     def test_idempotent(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         x = rng.uniform(size=50)
         cr = CRS(k=8).fit(x)
         S_null = _null_space_penalty(cr.penalty_matrix())
@@ -206,7 +206,7 @@ class TestNullSpacePenalty:
 
 class TestShrinkageModelMatrix:
     def test_ts_builds_model_matrix(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 100
         x = rng.uniform(size=n)
         y = np.sin(x) + 0.1 * rng.standard_normal(n)
@@ -218,7 +218,7 @@ class TestShrinkageModelMatrix:
         assert len(mm.penalties) == 2
 
     def test_cs_builds_model_matrix(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 100
         x = rng.uniform(size=n)
         y = np.sin(x) + 0.1 * rng.standard_normal(n)
@@ -229,7 +229,7 @@ class TestShrinkageModelMatrix:
         assert len(mm.penalties) == 2
 
     def test_ts_same_basis_cols_as_tp(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 100
         x = rng.uniform(size=n)
         y = 0.1 * rng.standard_normal(n)
@@ -242,7 +242,7 @@ class TestShrinkageModelMatrix:
         assert ts_cols == tp_cols
 
     def test_ts_penalty_indices(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 100
         x = rng.uniform(size=n)
         y = 0.1 * rng.standard_normal(n)
@@ -258,7 +258,7 @@ class TestShrinkageModelMatrix:
 
 class TestShrinkageGAM:
     def test_ts_fit_converges(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 200
         x = rng.uniform(size=n)
         y = np.sin(3 * x) + 0.2 * rng.standard_normal(n)
@@ -267,7 +267,7 @@ class TestShrinkageGAM:
         assert model.is_fitted
 
     def test_cs_fit_converges(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 200
         x = rng.uniform(size=n)
         y = np.sin(3 * x) + 0.2 * rng.standard_normal(n)
@@ -276,7 +276,7 @@ class TestShrinkageGAM:
         assert model.is_fitted
 
     def test_ts_two_smoothing_params_per_smooth(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 200
         x = rng.uniform(size=n)
         y = np.sin(3 * x) + 0.2 * rng.standard_normal(n)
@@ -285,7 +285,7 @@ class TestShrinkageGAM:
         assert len(model.smoothing_params) == 2
 
     def test_ts_deviance_explained(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 300
         x = rng.uniform(size=n)
         y = np.sin(3 * x) + 0.2 * rng.standard_normal(n)
@@ -294,7 +294,7 @@ class TestShrinkageGAM:
         assert model.deviance_explained > 0.5
 
     def test_cs_deviance_explained(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 300
         x = rng.uniform(size=n)
         y = np.sin(3 * x) + 0.2 * rng.standard_normal(n)
@@ -303,7 +303,7 @@ class TestShrinkageGAM:
         assert model.deviance_explained > 0.5
 
     def test_ts_shrinks_noise_variable(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 300
         x1 = rng.uniform(size=n)
         x2 = rng.uniform(size=n)
@@ -313,7 +313,7 @@ class TestShrinkageGAM:
         assert model.edf[1] < model.edf[0]
 
     def test_cs_shrinks_noise_variable(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 300
         x1 = rng.uniform(size=n)
         x2 = rng.uniform(size=n)
@@ -323,7 +323,7 @@ class TestShrinkageGAM:
         assert model.edf[1] < model.edf[0]
 
     def test_ts_predict(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 200
         x = rng.uniform(size=n)
         y = np.sin(3 * x) + 0.2 * rng.standard_normal(n)
@@ -335,7 +335,7 @@ class TestShrinkageGAM:
         assert np.all(pred.se > 0)
 
     def test_ts_aic_bic_finite(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 200
         x = rng.uniform(size=n)
         y = np.sin(3 * x) + 0.2 * rng.standard_normal(n)
@@ -345,7 +345,7 @@ class TestShrinkageGAM:
         assert np.isfinite(model.bic)
 
     def test_ts_smooth_tests(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 300
         x = rng.uniform(size=n)
         y = 3 * np.sin(3 * x) + 0.2 * rng.standard_normal(n)
@@ -356,7 +356,7 @@ class TestShrinkageGAM:
         assert tests[0].p_value < 0.05
 
     def test_ts_residuals(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 200
         x = rng.uniform(size=n)
         y = np.sin(3 * x) + 0.2 * rng.standard_normal(n)
@@ -367,7 +367,7 @@ class TestShrinkageGAM:
             assert np.all(np.isfinite(r))
 
     def test_ts_with_reml(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 200
         x = rng.uniform(size=n)
         y = np.sin(3 * x) + 0.2 * rng.standard_normal(n)
@@ -376,7 +376,7 @@ class TestShrinkageGAM:
         assert model.is_fitted
 
     def test_ts_summary(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 200
         x = rng.uniform(size=n)
         y = np.sin(3 * x) + 0.2 * rng.standard_normal(n)
@@ -386,7 +386,7 @@ class TestShrinkageGAM:
         assert "s(x" in text
 
     def test_ts_poisson(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 300
         x = rng.uniform(size=n)
         mu = np.exp(0.5 + np.sin(3 * x))
@@ -396,7 +396,7 @@ class TestShrinkageGAM:
         assert model.is_fitted
 
     def test_ts_with_other_smooths(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 300
         x1 = rng.uniform(size=n)
         x2 = rng.uniform(size=n)
@@ -407,7 +407,7 @@ class TestShrinkageGAM:
         assert len(model.edf) == 2
 
     def test_ts_comparable_fit_to_tp(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 300
         x = rng.uniform(size=n)
         y = np.sin(3 * x) + 0.3 * rng.standard_normal(n)
@@ -420,7 +420,7 @@ class TestShrinkageGAM:
         assert abs(rmse_tp - rmse_ts) / max(rmse_tp, 1e-10) < 0.3
 
     def test_ts_in_tensor_product(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 200
         x1 = rng.uniform(size=n)
         x2 = rng.uniform(size=n)
@@ -430,7 +430,7 @@ class TestShrinkageGAM:
         assert model.is_fitted
 
     def test_ts_concurvity(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 200
         x1 = rng.uniform(size=n)
         x2 = rng.uniform(size=n)
@@ -446,7 +446,7 @@ class TestShrinkageGAM:
     def test_ts_plot(self) -> None:
         pytest.importorskip("altair")
 
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 200
         x = rng.uniform(size=n)
         y = np.sin(3 * x) + 0.2 * rng.standard_normal(n)
@@ -458,7 +458,7 @@ class TestShrinkageGAM:
     def test_cs_plot(self) -> None:
         pytest.importorskip("altair")
 
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 200
         x = rng.uniform(size=n)
         y = np.sin(3 * x) + 0.2 * rng.standard_normal(n)

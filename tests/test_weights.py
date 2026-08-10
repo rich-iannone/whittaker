@@ -8,7 +8,6 @@ import pytest
 from whittaker.families import Gamma, Gaussian, Poisson
 from whittaker.gam import GAM
 
-
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
@@ -43,9 +42,7 @@ class TestWeightedGaussian:
         gam_uw = GAM("y ~ s(x)", family=Gaussian()).fit(gaussian_data)
         w = np.ones(len(gaussian_data["y"]))
         gam_w = GAM("y ~ s(x)", family=Gaussian()).fit(gaussian_data, weights=w)
-        np.testing.assert_allclose(
-            gam_w.coefficients, gam_uw.coefficients, atol=1e-10
-        )
+        np.testing.assert_allclose(gam_w.coefficients, gam_uw.coefficients, atol=1e-10)
 
     def test_fit_with_uniform_weights_same_scale(self, gaussian_data):
         gam_uw = GAM("y ~ s(x)", family=Gaussian()).fit(gaussian_data)
@@ -61,7 +58,7 @@ class TestWeightedGaussian:
 
     def test_higher_weight_pulls_fit(self, gaussian_data):
         n = len(gaussian_data["y"])
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         idx = rng.choice(n, size=n // 4, replace=False)
         w = np.ones(n)
         w[idx] = 10.0
@@ -70,9 +67,12 @@ class TestWeightedGaussian:
         y = gaussian_data["y"]
         weighted_resid = w * (y - pred.values) ** 2
         unweighted_resid = (y - pred.values) ** 2
-        assert np.mean(weighted_resid[idx]) / np.mean(unweighted_resid[idx]) < np.mean(
-            weighted_resid[~np.isin(np.arange(n), idx)]
-        ) / np.mean(unweighted_resid[~np.isin(np.arange(n), idx)]) or True
+        assert (
+            np.mean(weighted_resid[idx]) / np.mean(unweighted_resid[idx])
+            < np.mean(weighted_resid[~np.isin(np.arange(n), idx)])
+            / np.mean(unweighted_resid[~np.isin(np.arange(n), idx)])
+            or True
+        )
         assert gam_w.is_fitted
 
     def test_predict_works_after_weighted_fit(self, gaussian_data):
@@ -120,9 +120,7 @@ class TestWeightedPoisson:
         gam_uw = GAM("y ~ s(x)", family=Poisson()).fit(poisson_data)
         w = np.ones(len(poisson_data["y"]))
         gam_w = GAM("y ~ s(x)", family=Poisson()).fit(poisson_data, weights=w)
-        np.testing.assert_allclose(
-            gam_w.coefficients, gam_uw.coefficients, atol=1e-8
-        )
+        np.testing.assert_allclose(gam_w.coefficients, gam_uw.coefficients, atol=1e-8)
 
     def test_fit_with_uniform_weights_same_deviance(self, poisson_data):
         gam_uw = GAM("y ~ s(x)", family=Poisson()).fit(poisson_data)
@@ -178,7 +176,9 @@ class TestFrequencyWeights:
         data_single = {"x": x, "y": y}
         w = np.full(n, 2.0)
         gam_w = GAM("y ~ s(x)", family=Gaussian()).fit(
-            data_single, weights=w, smoothing_params=sp,
+            data_single,
+            weights=w,
+            smoothing_params=sp,
         )
 
         grid = {"x": np.linspace(0, 2 * np.pi, 50)}
@@ -199,7 +199,9 @@ class TestFrequencyWeights:
         data_single = {"x": x, "y": y}
         w = np.full(n, 2.0)
         gam_w = GAM("y ~ s(x)", family=Gaussian()).fit(
-            data_single, weights=w, smoothing_params=sp,
+            data_single,
+            weights=w,
+            smoothing_params=sp,
         )
 
         np.testing.assert_allclose(gam_w.deviance, gam_dup.deviance, rtol=1e-6)
@@ -222,9 +224,7 @@ class TestWeightedGamma:
         gam_uw = GAM("y ~ s(x)", family=Gamma()).fit(data)
         w = np.ones(n)
         gam_w = GAM("y ~ s(x)", family=Gamma()).fit(data, weights=w)
-        np.testing.assert_allclose(
-            gam_w.coefficients, gam_uw.coefficients, atol=1e-8
-        )
+        np.testing.assert_allclose(gam_w.coefficients, gam_uw.coefficients, atol=1e-8)
 
     def test_gamma_with_varying_weights(self):
         rng = np.random.default_rng(23)

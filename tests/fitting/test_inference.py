@@ -22,7 +22,7 @@ from whittaker.model_matrix import build_model_matrix
 
 class TestBayesianCovariance:
     def test_shape(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 100
         x = np.linspace(0, 2 * np.pi, n)
         y = np.sin(x) + rng.normal(0, 0.2, n)
@@ -41,7 +41,7 @@ class TestBayesianCovariance:
         assert V.shape == (p, p)
 
     def test_symmetric(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 100
         x = np.linspace(0, 1, n)
         y = x + rng.normal(0, 0.2, n)
@@ -59,7 +59,7 @@ class TestBayesianCovariance:
         assert_allclose(V, V.T, atol=1e-12)
 
     def test_positive_semidefinite(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 100
         x = np.linspace(0, 1, n)
         y = x + rng.normal(0, 0.2, n)
@@ -78,7 +78,7 @@ class TestBayesianCovariance:
         assert np.all(eigvals >= -1e-10)
 
     def test_with_weights(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 200
         x = np.linspace(-2, 2, n)
         p_true = 1.0 / (1.0 + np.exp(-x))
@@ -101,7 +101,7 @@ class TestBayesianCovariance:
 
 class TestSmoothTest:
     def test_significant_smooth_small_pvalue(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 300
         x = np.linspace(0, 2 * np.pi, n)
         y = np.sin(x) + rng.normal(0, 0.2, n)
@@ -130,7 +130,7 @@ class TestSmoothTest:
         assert pval < 1e-10
 
     def test_noise_smooth_large_pvalue(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 300
         x = np.linspace(0, 2 * np.pi, n)
         y = rng.normal(0, 1, n)
@@ -157,7 +157,7 @@ class TestSmoothTest:
         assert pval > 0.05
 
     def test_ref_df_positive(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 200
         x = np.linspace(0, 1, n)
         y = x + rng.normal(0, 0.1, n)
@@ -186,7 +186,7 @@ class TestSmoothTest:
 
 class TestSmoothTests:
     def test_returns_list_of_results(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 200
         x = np.linspace(0, 2 * np.pi, n)
         y = np.sin(x) + rng.normal(0, 0.2, n)
@@ -200,7 +200,7 @@ class TestSmoothTests:
         assert isinstance(tests[0], SmoothTestResult)
 
     def test_multi_smooth(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 300
         x1 = np.linspace(0, 2 * np.pi, n)
         x2 = rng.uniform(0, 1, n)
@@ -216,7 +216,7 @@ class TestSmoothTests:
         assert tests[1].p_value > 0.05
 
     def test_binomial(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 400
         x = np.linspace(-3, 3, n)
         p_true = 1.0 / (1.0 + np.exp(-np.sin(x)))
@@ -231,7 +231,7 @@ class TestSmoothTests:
         assert tests[0].p_value < 0.001
 
     def test_poisson(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 300
         x = np.linspace(0, 2 * np.pi, n)
         mu = np.exp(0.5 + 0.5 * np.sin(x))
@@ -246,7 +246,7 @@ class TestSmoothTests:
         assert tests[0].p_value < 0.001
 
     def test_tensor_product(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 300
         x1 = rng.uniform(0, 2 * np.pi, n)
         x2 = rng.uniform(0, 2 * np.pi, n)
@@ -263,7 +263,7 @@ class TestSmoothTests:
 
 class TestGAMSmoothTests:
     def test_gam_smooth_tests_method(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 200
         x = np.linspace(0, 2 * np.pi, n)
         y = np.sin(x) + rng.normal(0, 0.2, n)
@@ -274,7 +274,7 @@ class TestGAMSmoothTests:
         assert tests[0].p_value < 1e-10
 
     def test_summary_contains_pvalues(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 200
         x = np.linspace(0, 2 * np.pi, n)
         y = np.sin(x) + rng.normal(0, 0.2, n)
@@ -290,7 +290,7 @@ class TestGAMSmoothTests:
             model.smooth_tests()
 
     def test_pvalue_in_zero_one(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 200
         x = np.linspace(0, 1, n)
         y = rng.normal(0, 1, n)
@@ -301,7 +301,7 @@ class TestGAMSmoothTests:
             assert 0 <= t.p_value <= 1
 
     def test_reml_pvalues(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 300
         x = np.linspace(0, 2 * np.pi, n)
         y = np.sin(x) + rng.normal(0, 0.2, n)

@@ -313,7 +313,7 @@ class TestBasisTypes:
 
 class TestBinomialGAM:
     def test_binomial_fit_and_predict(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 400
         x = np.linspace(-3, 3, n)
         eta_true = np.sin(x)
@@ -329,7 +329,7 @@ class TestBinomialGAM:
         assert np.all(pred.values < 1)
 
     def test_binomial_recovery(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 500
         x = np.linspace(-3, 3, n)
         eta_true = np.sin(x)
@@ -341,7 +341,7 @@ class TestBinomialGAM:
         assert rmse < 0.1
 
     def test_binomial_predict_with_se(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 300
         x = np.linspace(-2, 2, n)
         y = rng.binomial(1, 0.5 * np.ones(n), n).astype(float)
@@ -352,7 +352,7 @@ class TestBinomialGAM:
         assert np.all(pred.se > 0)
 
     def test_binomial_summary_shows_family(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 200
         x = np.linspace(-2, 2, n)
         y = rng.binomial(1, 0.5 * np.ones(n), n).astype(float)
@@ -362,7 +362,7 @@ class TestBinomialGAM:
         assert "Binomial" in text
 
     def test_binomial_two_smooths(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 500
         x1 = np.linspace(-3, 3, n)
         x2 = np.linspace(-2, 2, n)
@@ -384,7 +384,7 @@ class TestBinomialGAM:
 
 class TestPoissonGAM:
     def test_poisson_fit_and_predict(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 400
         x = np.linspace(0, 2 * np.pi, n)
         mu_true = np.exp(0.5 + 0.8 * np.sin(x))
@@ -398,7 +398,7 @@ class TestPoissonGAM:
         assert np.all(pred.values > 0)
 
     def test_poisson_recovery(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 500
         x = np.linspace(0, 2 * np.pi, n)
         mu_true = np.exp(0.5 + 0.8 * np.sin(x))
@@ -409,7 +409,7 @@ class TestPoissonGAM:
         assert rmse < 0.5
 
     def test_poisson_predict_with_se(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 300
         x = np.linspace(0, 2 * np.pi, n)
         mu_true = np.exp(0.5 + 0.5 * np.sin(x))
@@ -421,7 +421,7 @@ class TestPoissonGAM:
         assert np.all(pred.se > 0)
 
     def test_poisson_summary_shows_family(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 200
         x = np.linspace(0, 1, n)
         y = rng.poisson(3.0, n).astype(float)
@@ -431,7 +431,7 @@ class TestPoissonGAM:
         assert "Poisson" in text
 
     def test_poisson_two_smooths(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 500
         x1 = np.linspace(0, 2 * np.pi, n)
         x2 = np.linspace(0, 1, n)
@@ -472,7 +472,7 @@ class TestREMLGAM:
         assert np.all(pred.se > 0)
 
     def test_reml_binomial(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 400
         x = np.linspace(-3, 3, n)
         p_true = 1.0 / (1.0 + np.exp(-np.sin(x)))
@@ -484,7 +484,7 @@ class TestREMLGAM:
         assert np.all(model.fitted_values < 1)
 
     def test_reml_poisson(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 300
         x = np.linspace(0, 2 * np.pi, n)
         mu_true = np.exp(0.5 + 0.5 * np.sin(x))
@@ -510,7 +510,7 @@ class TestREMLGAM:
 
 class TestTensorProductGAM:
     def test_te_basic_fit(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 300
         x1 = rng.uniform(0, 2 * np.pi, n)
         x2 = rng.uniform(0, 2 * np.pi, n)
@@ -522,7 +522,7 @@ class TestTensorProductGAM:
         assert len(model.edf) == 1
 
     def test_te_recovery(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 500
         x1 = rng.uniform(0, 2 * np.pi, n)
         x2 = rng.uniform(0, 2 * np.pi, n)
@@ -534,7 +534,7 @@ class TestTensorProductGAM:
         assert rmse < 0.25
 
     def test_te_predict(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 300
         x1 = rng.uniform(0, 1, n)
         x2 = rng.uniform(0, 1, n)
@@ -547,7 +547,7 @@ class TestTensorProductGAM:
         assert abs(pred.values[0] - 1.0) < 0.3
 
     def test_te_with_reml(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 300
         x1 = rng.uniform(0, 2 * np.pi, n)
         x2 = rng.uniform(0, 2 * np.pi, n)
@@ -558,7 +558,7 @@ class TestTensorProductGAM:
         assert len(model.smoothing_params) == 2
 
     def test_te_mixed_with_s(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 300
         x1 = rng.uniform(0, 2 * np.pi, n)
         x2 = rng.uniform(0, 2 * np.pi, n)
@@ -570,7 +570,7 @@ class TestTensorProductGAM:
         assert len(model.smoothing_params) == 3  # 2 for te + 1 for s
 
     def test_te_per_marginal_k(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 300
         x1 = rng.uniform(0, 1, n)
         x2 = rng.uniform(0, 1, n)
@@ -582,7 +582,7 @@ class TestTensorProductGAM:
         assert model.coefficients.shape[0] == 24
 
     def test_te_summary(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 200
         x1 = rng.uniform(0, 1, n)
         x2 = rng.uniform(0, 1, n)
@@ -593,7 +593,7 @@ class TestTensorProductGAM:
         assert "te(x1, x2" in text
 
     def test_te_binomial(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 500
         x1 = rng.uniform(-2, 2, n)
         x2 = rng.uniform(-2, 2, n)
@@ -607,7 +607,7 @@ class TestTensorProductGAM:
         assert np.all(model.fitted_values < 1)
 
     def test_te_poisson(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 500
         x1 = rng.uniform(0, 1, n)
         x2 = rng.uniform(0, 1, n)

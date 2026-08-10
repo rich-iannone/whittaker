@@ -14,7 +14,7 @@ from whittaker.gam import GAM
 
 class TestAICBIC:
     def test_gaussian_aic_bic_exist(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 200
         x = np.linspace(0, 2 * np.pi, n)
         y = np.sin(x) + rng.normal(0, 0.3, n)
@@ -24,7 +24,7 @@ class TestAICBIC:
         assert np.isfinite(model.bic)
 
     def test_aic_less_than_bic_for_large_n(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 500
         x = np.linspace(0, 2 * np.pi, n)
         y = np.sin(x) + rng.normal(0, 0.3, n)
@@ -34,7 +34,7 @@ class TestAICBIC:
         assert model.aic < model.bic
 
     def test_aic_formula(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 200
         x = np.linspace(0, 2 * np.pi, n)
         y = np.sin(x) + rng.normal(0, 0.3, n)
@@ -46,7 +46,7 @@ class TestAICBIC:
         assert_allclose(model.aic, expected_aic, rtol=1e-10)
 
     def test_bic_formula(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 200
         x = np.linspace(0, 2 * np.pi, n)
         y = np.sin(x) + rng.normal(0, 0.3, n)
@@ -58,7 +58,7 @@ class TestAICBIC:
         assert_allclose(model.bic, expected_bic, rtol=1e-10)
 
     def test_simpler_model_lower_aic(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 200
         x = np.linspace(0, 1, n)
         y = 2.0 * x + rng.normal(0, 0.1, n)
@@ -69,7 +69,7 @@ class TestAICBIC:
         assert model_simple.aic <= model_complex.aic + 5
 
     def test_aic_bic_in_summary(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 100
         x = np.linspace(0, 1, n)
         y = x + rng.normal(0, 0.1, n)
@@ -80,7 +80,7 @@ class TestAICBIC:
         assert "BIC:" in text
 
     def test_poisson_aic_bic(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 200
         x = np.linspace(0, 1, n)
         mu = np.exp(0.5 * x)
@@ -91,7 +91,7 @@ class TestAICBIC:
         assert np.isfinite(model.bic)
 
     def test_binomial_aic_bic(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 200
         x = np.linspace(-2, 2, n)
         p = 1.0 / (1.0 + np.exp(-x))
@@ -104,7 +104,7 @@ class TestAICBIC:
 
 class TestGammaGAM:
     def test_gamma_fit(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 300
         x = np.linspace(0.1, 2, n)
         mu_true = np.exp(0.5 * x)
@@ -115,7 +115,7 @@ class TestGammaGAM:
         assert model.deviance > 0
 
     def test_gamma_recovery(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 500
         x = np.linspace(0.1, 2, n)
         mu_true = np.exp(0.5 * x)
@@ -126,7 +126,7 @@ class TestGammaGAM:
         assert rmse < 0.3
 
     def test_gamma_predict(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 300
         x = np.linspace(0.1, 2, n)
         mu_true = np.exp(0.5 * x)
@@ -139,7 +139,7 @@ class TestGammaGAM:
         assert pred.se[0] > 0
 
     def test_gamma_aic_bic(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 300
         x = np.linspace(0.1, 2, n)
         mu_true = np.exp(0.5 * x)
@@ -150,7 +150,7 @@ class TestGammaGAM:
         assert np.isfinite(model.bic)
 
     def test_gamma_scale_not_one(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 300
         x = np.linspace(0.1, 2, n)
         mu_true = np.exp(0.5 * x)
@@ -162,7 +162,7 @@ class TestGammaGAM:
         assert 0.05 < model.scale < 0.6
 
     def test_gamma_with_reml(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 300
         x = np.linspace(0.1, 2, n)
         mu_true = np.exp(0.5 * x)
@@ -172,7 +172,7 @@ class TestGammaGAM:
         assert model.is_fitted
 
     def test_gamma_two_smooths(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 400
         x1 = np.linspace(0.1, 2, n)
         x2 = np.linspace(0, 1, n)
@@ -184,7 +184,7 @@ class TestGammaGAM:
         assert model.is_fitted
 
     def test_gamma_summary(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 200
         x = np.linspace(0.1, 2, n)
         mu_true = np.exp(0.5 * x)

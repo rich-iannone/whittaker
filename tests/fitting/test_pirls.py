@@ -384,7 +384,7 @@ class TestNumericalAccuracy:
 
 class TestBinomialFit:
     def test_binomial_converges(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 300
         x = np.linspace(-3, 3, n)
         eta_true = np.sin(x)
@@ -398,7 +398,7 @@ class TestBinomialFit:
         assert result.n_iter > 1
 
     def test_binomial_scale_is_one(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 200
         x = np.linspace(-2, 2, n)
         y = rng.binomial(1, 0.5 * np.ones(n), n).astype(float)
@@ -409,7 +409,7 @@ class TestBinomialFit:
         assert result.scale == 1.0
 
     def test_binomial_fitted_values_in_01(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 300
         x = np.linspace(-3, 3, n)
         eta_true = 1.5 * np.sin(x)
@@ -423,7 +423,7 @@ class TestBinomialFit:
         assert np.all(result.fitted_values < 1)
 
     def test_binomial_recovers_smooth_effect(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 500
         x = np.linspace(-3, 3, n)
         eta_true = np.sin(x)
@@ -438,7 +438,7 @@ class TestBinomialFit:
         assert rmse < 0.1
 
     def test_binomial_edf_reasonable(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 300
         x = np.linspace(-3, 3, n)
         eta_true = np.sin(x)
@@ -451,7 +451,7 @@ class TestBinomialFit:
         assert 1.0 < result.edf[0] < 10.0
 
     def test_binomial_fixed_sp(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 200
         x = np.linspace(-2, 2, n)
         y = rng.binomial(1, 0.5 * np.ones(n), n).astype(float)
@@ -470,7 +470,7 @@ class TestBinomialFit:
 
 class TestPoissonFit:
     def test_poisson_converges(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 300
         x = np.linspace(0, 2 * np.pi, n)
         mu_true = np.exp(0.5 + 0.8 * np.sin(x))
@@ -483,7 +483,7 @@ class TestPoissonFit:
         assert result.n_iter > 1
 
     def test_poisson_scale_is_one(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 200
         x = np.linspace(0, 1, n)
         y = rng.poisson(3.0, n).astype(float)
@@ -494,7 +494,7 @@ class TestPoissonFit:
         assert result.scale == 1.0
 
     def test_poisson_fitted_values_positive(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 300
         x = np.linspace(0, 2 * np.pi, n)
         mu_true = np.exp(0.5 + 0.8 * np.sin(x))
@@ -506,7 +506,7 @@ class TestPoissonFit:
         assert np.all(result.fitted_values > 0)
 
     def test_poisson_recovers_smooth_effect(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 500
         x = np.linspace(0, 2 * np.pi, n)
         mu_true = np.exp(0.5 + 0.8 * np.sin(x))
@@ -520,7 +520,7 @@ class TestPoissonFit:
         assert rmse < 0.5
 
     def test_poisson_edf_reasonable(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 300
         x = np.linspace(0, 2 * np.pi, n)
         mu_true = np.exp(0.5 + 0.8 * np.sin(x))
@@ -532,7 +532,7 @@ class TestPoissonFit:
         assert 1.0 < result.edf[0] < 10.0
 
     def test_poisson_fixed_sp(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 200
         x = np.linspace(0, 1, n)
         y = rng.poisson(3.0, n).astype(float)
@@ -544,7 +544,7 @@ class TestPoissonFit:
         assert result.converged
 
     def test_poisson_handles_zero_counts(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 300
         x = np.linspace(0, 2 * np.pi, n)
         mu_true = np.exp(-0.5 + 0.5 * np.sin(x))
@@ -631,7 +631,7 @@ class TestREML:
         assert rmse_reml < rmse_under
 
     def test_reml_binomial(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 400
         x = np.linspace(-3, 3, n)
         p_true = 1.0 / (1.0 + np.exp(-np.sin(x)))
@@ -646,7 +646,7 @@ class TestREML:
         assert np.all(result.fitted_values < 1)
 
     def test_reml_poisson(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 300
         x = np.linspace(0, 2 * np.pi, n)
         mu_true = np.exp(0.5 + 0.5 * np.sin(x))
@@ -675,7 +675,7 @@ class TestREML:
 
     def test_reml_gradient_finite_difference(self) -> None:
         """Verify analytic gradient against finite differences."""
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 100
         x = np.linspace(0, 2 * np.pi, n)
         y = np.sin(x) + rng.normal(0, 0.2, n)

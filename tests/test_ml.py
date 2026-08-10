@@ -256,5 +256,5 @@ class TestMLCombinations:
     def test_ml_simulate(self, simple_data):
         gam = GAM("y ~ s(x)", family=Gaussian())
         gam.fit(simple_data, method="ML")
-        sims = gam.simulate(n_sim=10, seed=42)
+        sims = gam.simulate(n_sim=10, seed=23)
         assert sims.shape == (len(simple_data["y"]), 10)

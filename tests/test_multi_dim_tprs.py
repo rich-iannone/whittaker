@@ -10,7 +10,7 @@ from whittaker.families import Gaussian, Poisson
 from whittaker.gam import GAM
 from whittaker.smooths.tprs import TPRS, _null_space_dimension, _polynomial_null_space
 
-RNG = np.random.default_rng(42)
+RNG = np.random.default_rng(23)
 
 # ---------------------------------------------------------------------------
 # Null-space dimension helper
@@ -199,7 +199,7 @@ class TestTPRSD5:
 class TestGAMD2:
     @pytest.fixture()
     def data_2d(self):
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 300
         x1 = rng.uniform(0, 2 * np.pi, n)
         x2 = rng.uniform(0, 2 * np.pi, n)
@@ -261,7 +261,7 @@ class TestGAMD2:
 
 class TestGAMD2Poisson:
     def test_fit(self):
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 300
         x1 = rng.uniform(0, 2 * np.pi, n)
         x2 = rng.uniform(0, 2 * np.pi, n)
@@ -280,7 +280,7 @@ class TestGAMD2Poisson:
 
 class TestGAMD3:
     def test_fit(self):
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 400
         x1 = rng.uniform(0, 2 * np.pi, n)
         x2 = rng.uniform(0, 2 * np.pi, n)
@@ -293,7 +293,7 @@ class TestGAMD3:
         assert gam.deviance_explained > 0.3
 
     def test_predict_new_data(self):
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 400
         x1 = rng.uniform(0, 2 * np.pi, n)
         x2 = rng.uniform(0, 2 * np.pi, n)
@@ -319,7 +319,7 @@ class TestGAMD3:
 
 class TestGAMMixed:
     def test_2d_plus_1d(self):
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 300
         x1 = rng.uniform(0, 2 * np.pi, n)
         x2 = rng.uniform(0, 2 * np.pi, n)
@@ -332,7 +332,7 @@ class TestGAMMixed:
         assert len(gam.edf) == 2
 
     def test_mixed_deviance(self):
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 300
         x1 = rng.uniform(0, 2 * np.pi, n)
         x2 = rng.uniform(0, 2 * np.pi, n)
@@ -352,7 +352,7 @@ class TestGAMMixed:
 class TestMultiDimDiagnostics:
     @pytest.fixture()
     def fitted_2d(self):
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 200
         x1 = rng.uniform(0, 2 * np.pi, n)
         x2 = rng.uniform(0, 2 * np.pi, n)
@@ -370,7 +370,7 @@ class TestMultiDimDiagnostics:
 
     def test_simulate(self, fitted_2d):
         gam, data = fitted_2d
-        sims = gam.simulate(n_sim=10, seed=42)
+        sims = gam.simulate(n_sim=10, seed=23)
         assert sims.shape == (len(data["y"]), 10)
         assert np.isfinite(sims).all()
 

@@ -18,7 +18,7 @@ from whittaker.model_matrix import build_model_matrix
 
 class TestFactorBy:
     def test_creates_one_smooth_per_level(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 200
         x = np.linspace(0, 1, n)
         group = np.array(["A"] * 100 + ["B"] * 100)
@@ -31,7 +31,7 @@ class TestFactorBy:
         assert mm.smooths[1].by_level == "B"
 
     def test_by_levels_sorted(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 150
         x = np.linspace(0, 1, n)
         group = np.array(["C"] * 50 + ["A"] * 50 + ["B"] * 50)
@@ -43,7 +43,7 @@ class TestFactorBy:
         assert levels == ["A", "B", "C"]
 
     def test_factor_by_skips_constraint(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 200
         x = np.linspace(0, 1, n)
         group = np.array(["A"] * 100 + ["B"] * 100)
@@ -57,7 +57,7 @@ class TestFactorBy:
             assert info.col_end - info.col_start == 6
 
     def test_factor_by_separate_penalties(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 200
         x = np.linspace(0, 1, n)
         group = np.array(["A"] * 100 + ["B"] * 100)
@@ -68,7 +68,7 @@ class TestFactorBy:
         assert len(mm.penalties) == 2
 
     def test_factor_by_gam_fit(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 300
         x = np.linspace(0, 2 * np.pi, n)
         group = np.array(["A"] * 150 + ["B"] * 150)
@@ -80,7 +80,7 @@ class TestFactorBy:
         assert len(model.smoothing_params) == 2
 
     def test_factor_by_recovery(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 400
         x = np.linspace(0, 2 * np.pi, n)
         group = np.array(["A"] * 200 + ["B"] * 200)
@@ -92,7 +92,7 @@ class TestFactorBy:
         assert rmse < 0.2
 
     def test_factor_by_predict(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 300
         x = np.linspace(0, 2 * np.pi, n)
         group = np.array(["A"] * 150 + ["B"] * 150)
@@ -109,7 +109,7 @@ class TestFactorBy:
         assert pred_B.se is not None
 
     def test_factor_by_three_levels(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 300
         x = np.linspace(0, 1, n)
         group = np.array(["X"] * 100 + ["Y"] * 100 + ["Z"] * 100)
@@ -120,7 +120,7 @@ class TestFactorBy:
         assert len(model.smoothing_params) == 3
 
     def test_factor_by_summary(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 200
         x = np.linspace(0, 1, n)
         group = np.array(["A"] * 100 + ["B"] * 100)
@@ -132,7 +132,7 @@ class TestFactorBy:
         assert ":B" in text
 
     def test_factor_by_with_reml(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 300
         x = np.linspace(0, 2 * np.pi, n)
         group = np.array(["A"] * 150 + ["B"] * 150)
@@ -152,7 +152,7 @@ class TestFactorBy:
 
 class TestContinuousBy:
     def test_creates_one_smooth(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 200
         x = np.linspace(0, 1, n)
         z = rng.uniform(0, 2, n)
@@ -165,7 +165,7 @@ class TestContinuousBy:
         assert mm.smooths[0].by_level is None
 
     def test_continuous_by_skips_constraint(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 200
         x = np.linspace(0, 1, n)
         z = rng.uniform(0, 2, n)
@@ -176,7 +176,7 @@ class TestContinuousBy:
         assert mm.smooths[0].col_end - mm.smooths[0].col_start == 6
 
     def test_continuous_by_gam_fit(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 300
         x = np.linspace(0, 2 * np.pi, n)
         z = rng.uniform(0, 2, n)
@@ -187,7 +187,7 @@ class TestContinuousBy:
         assert len(model.edf) == 1
 
     def test_continuous_by_recovery(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 500
         x = np.linspace(0, 2 * np.pi, n)
         z = rng.uniform(0.5, 1.5, n)
@@ -202,7 +202,7 @@ class TestContinuousBy:
         assert_allclose(pred.values, expected, atol=0.15)
 
     def test_continuous_by_predict(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 300
         x = np.linspace(0, 1, n)
         z = rng.uniform(0, 2, n)
@@ -216,7 +216,7 @@ class TestContinuousBy:
         assert abs(pred.values[0] - 1.0) < 0.3
 
     def test_continuous_by_with_reml(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 300
         x = np.linspace(0, 2 * np.pi, n)
         z = rng.uniform(0, 2, n)
@@ -233,7 +233,7 @@ class TestContinuousBy:
 
 class TestMixedBy:
     def test_by_with_regular_smooth(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 300
         x1 = np.linspace(0, 2 * np.pi, n)
         x2 = np.linspace(0, 1, n)
@@ -249,7 +249,7 @@ class TestMixedBy:
         assert len(model.smoothing_params) == 3
 
     def test_continuous_by_with_regular_smooth(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 300
         x1 = np.linspace(0, 2 * np.pi, n)
         x2 = np.linspace(0, 1, n)
@@ -261,7 +261,7 @@ class TestMixedBy:
         assert len(model.smoothing_params) == 2
 
     def test_factor_by_binomial(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 400
         x = np.linspace(-2, 2, n)
         group = np.array(["A"] * 200 + ["B"] * 200)
@@ -276,7 +276,7 @@ class TestMixedBy:
         assert len(model.edf) == 2
 
     def test_factor_by_poisson(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 400
         x = np.linspace(0, 1, n)
         group = np.array(["A"] * 200 + ["B"] * 200)
@@ -290,7 +290,7 @@ class TestMixedBy:
         assert len(model.edf) == 2
 
     def test_smooth_tests_with_by(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 300
         x = np.linspace(0, 2 * np.pi, n)
         group = np.array(["A"] * 150 + ["B"] * 150)

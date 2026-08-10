@@ -9,9 +9,8 @@ from numpy.testing import assert_allclose
 from whittaker.smooths.cubic import CRS
 from whittaker.smooths.pspline import PSpline
 from whittaker.smooths.tensor import TensorProductBasis, _row_tensor_product
-from whittaker.smooths.tprs import TPRS
 
-RNG = np.random.default_rng(42)
+RNG = np.random.default_rng(23)
 
 
 class TestRowTensorProduct:

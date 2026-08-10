@@ -243,14 +243,14 @@ class TestTweedieSimulation:
     def test_simulate_conditional(self, tweedie_data):
         gam = GAM("y ~ s(x)", family=Tweedie(p=1.5))
         gam.fit(tweedie_data)
-        sims = gam.simulate(n_sim=10, seed=42)
+        sims = gam.simulate(n_sim=10, seed=23)
         assert sims.shape == (len(tweedie_data["y"]), 10)
         assert np.all(sims > 0)
 
     def test_simulate_unconditional(self, tweedie_data):
         gam = GAM("y ~ s(x)", family=Tweedie(p=1.5))
         gam.fit(tweedie_data)
-        sims = gam.simulate(n_sim=50, seed=42, unconditional=True)
+        sims = gam.simulate(n_sim=50, seed=23, unconditional=True)
         assert np.isfinite(sims).all()
         assert np.all(sims >= 0)
 

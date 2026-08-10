@@ -31,7 +31,7 @@ def _fitted_multi() -> GAM:
 
 
 def _fitted_binomial() -> GAM:
-    rng = np.random.default_rng(42)
+    rng = np.random.default_rng(23)
     n = 300
     x = np.linspace(-3, 3, n)
     p_true = 1.0 / (1.0 + np.exp(-np.sin(x)))
@@ -40,7 +40,7 @@ def _fitted_binomial() -> GAM:
 
 
 def _fitted_poisson() -> GAM:
-    rng = np.random.default_rng(42)
+    rng = np.random.default_rng(23)
     n = 300
     x = np.linspace(0, 2 * np.pi, n)
     mu = np.exp(0.5 + 0.5 * np.sin(x))
@@ -156,7 +156,7 @@ class TestCheck:
 # ---------------------------------------------------------------------------
 
 
-RNG2 = np.random.default_rng(42)
+RNG2 = np.random.default_rng(23)
 
 
 def _fitted_te() -> GAM:
@@ -236,7 +236,7 @@ class TestPartialEffects2D:
         assert "color" in encoding
 
     def test_te_poisson(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 200
         x1 = rng.uniform(size=n)
         x2 = rng.uniform(size=n)
@@ -248,7 +248,7 @@ class TestPartialEffects2D:
         assert chart.to_dict() is not None
 
     def test_ti_only(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 200
         x1 = rng.uniform(size=n)
         x2 = rng.uniform(size=n)

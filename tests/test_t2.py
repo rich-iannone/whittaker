@@ -23,7 +23,7 @@ class TestTensorProductBasisT2:
         assert issubclass(TensorProductBasisT2, TensorProductBasis)
 
     def test_same_basis_as_te(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         x = rng.uniform(size=(80, 2))
 
         te = TensorProductBasis([TPRS(k=5), TPRS(k=5)])
@@ -36,7 +36,7 @@ class TestTensorProductBasisT2:
         assert_allclose(te.basis_matrix(x), t2.basis_matrix(x))
 
     def test_more_penalties_than_te(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         x = rng.uniform(size=(50, 2))
 
         te = TensorProductBasis([TPRS(k=5), TPRS(k=5)])
@@ -49,21 +49,21 @@ class TestTensorProductBasisT2:
         assert len(te.penalty_matrices()) == 2
 
     def test_two_marginals_3_penalties(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         x = rng.uniform(size=(50, 2))
         t2 = TensorProductBasisT2([TPRS(k=5), TPRS(k=5)])
         t2.fit(x)
         assert len(t2.penalty_matrices()) == 3  # 2^2 - 1
 
     def test_three_marginals_7_penalties(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         x = rng.uniform(size=(80, 3))
         t2 = TensorProductBasisT2([TPRS(k=4), TPRS(k=4), TPRS(k=4)])
         t2.fit(x)
         assert len(t2.penalty_matrices()) == 7  # 2^3 - 1
 
     def test_penalty_matrices_psd(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         x = rng.uniform(size=(50, 2))
         t2 = TensorProductBasisT2([TPRS(k=6), TPRS(k=6)])
         t2.fit(x)
@@ -73,7 +73,7 @@ class TestTensorProductBasisT2:
             assert np.all(eigvals >= -1e-10)
 
     def test_penalty_matrices_correct_shape(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         x = rng.uniform(size=(50, 2))
         t2 = TensorProductBasisT2([TPRS(k=5), TPRS(k=6)])
         t2.fit(x)
@@ -83,7 +83,7 @@ class TestTensorProductBasisT2:
             assert P.shape == (expected_size, expected_size)
 
     def test_penalty_matrices_symmetric(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         x = rng.uniform(size=(50, 2))
         t2 = TensorProductBasisT2([TPRS(k=5), TPRS(k=5)])
         t2.fit(x)
@@ -92,7 +92,7 @@ class TestTensorProductBasisT2:
             assert_allclose(P, P.T, atol=1e-14)
 
     def test_first_two_penalties_match_te(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         x = rng.uniform(size=(50, 2))
 
         te = TensorProductBasis([TPRS(k=5), TPRS(k=5)])
@@ -108,7 +108,7 @@ class TestTensorProductBasisT2:
         assert_allclose(t2_pens[1], te_pens[1], atol=1e-14)
 
     def test_third_penalty_is_kron_product(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         x = rng.uniform(size=(50, 2))
 
         m1, m2 = TPRS(k=5), TPRS(k=6)
@@ -123,7 +123,7 @@ class TestTensorProductBasisT2:
         assert_allclose(t2_pens[2], expected, atol=1e-14)
 
     def test_null_space_dimension_same_as_te(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         x = rng.uniform(size=(50, 2))
 
         te = TensorProductBasis([TPRS(k=5), TPRS(k=5)])
@@ -146,7 +146,7 @@ class TestTensorProductBasisT2:
 
 class TestT2ModelMatrix:
     def test_t2_builds_model_matrix(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 100
         x1 = rng.uniform(size=n)
         x2 = rng.uniform(size=n)
@@ -160,7 +160,7 @@ class TestT2ModelMatrix:
         assert len(mm.penalties) == 3
 
     def test_t2_same_basis_cols_as_te(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 100
         x1 = rng.uniform(size=n)
         x2 = rng.uniform(size=n)
@@ -174,7 +174,7 @@ class TestT2ModelMatrix:
         assert t2_cols == te_cols
 
     def test_t2_more_penalties_than_te(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 100
         x1 = rng.uniform(size=n)
         x2 = rng.uniform(size=n)
@@ -186,7 +186,7 @@ class TestT2ModelMatrix:
         assert len(mm_t2.penalties) > len(mm_te.penalties)
 
     def test_t2_penalty_indices(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 100
         x1 = rng.uniform(size=n)
         x2 = rng.uniform(size=n)
@@ -203,7 +203,7 @@ class TestT2ModelMatrix:
 
 class TestT2GAM:
     def test_t2_fit_converges(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 200
         x1 = rng.uniform(size=n)
         x2 = rng.uniform(size=n)
@@ -213,7 +213,7 @@ class TestT2GAM:
         assert model.is_fitted
 
     def test_t2_has_3_smoothing_params(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 200
         x1 = rng.uniform(size=n)
         x2 = rng.uniform(size=n)
@@ -223,7 +223,7 @@ class TestT2GAM:
         assert len(model.smoothing_params) == 3
 
     def test_t2_predict(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 200
         x1 = rng.uniform(size=n)
         x2 = rng.uniform(size=n)
@@ -236,7 +236,7 @@ class TestT2GAM:
         assert pred.se[0] > 0
 
     def test_t2_deviance_explained(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 300
         x1 = rng.uniform(size=n)
         x2 = rng.uniform(size=n)
@@ -246,7 +246,7 @@ class TestT2GAM:
         assert 0.0 < model.deviance_explained < 1.0
 
     def test_t2_aic_bic_finite(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 200
         x1 = rng.uniform(size=n)
         x2 = rng.uniform(size=n)
@@ -257,7 +257,7 @@ class TestT2GAM:
         assert np.isfinite(model.bic)
 
     def test_t2_smooth_tests(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 300
         x1 = rng.uniform(size=n)
         x2 = rng.uniform(size=n)
@@ -269,7 +269,7 @@ class TestT2GAM:
         assert tests[0].p_value < 0.05
 
     def test_t2_residuals(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 200
         x1 = rng.uniform(size=n)
         x2 = rng.uniform(size=n)
@@ -281,7 +281,7 @@ class TestT2GAM:
             assert np.all(np.isfinite(r))
 
     def test_t2_with_reml(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 200
         x1 = rng.uniform(size=n)
         x2 = rng.uniform(size=n)
@@ -291,7 +291,7 @@ class TestT2GAM:
         assert model.is_fitted
 
     def test_t2_summary(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 200
         x1 = rng.uniform(size=n)
         x2 = rng.uniform(size=n)
@@ -302,7 +302,7 @@ class TestT2GAM:
         assert "t2(x1, x2" in text
 
     def test_t2_poisson(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 300
         x1 = rng.uniform(size=n)
         x2 = rng.uniform(size=n)
@@ -314,7 +314,7 @@ class TestT2GAM:
         assert 0.0 < model.deviance_explained < 1.0
 
     def test_t2_with_univariate_smooth(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 300
         x1 = rng.uniform(size=n)
         x2 = rng.uniform(size=n)
@@ -325,7 +325,7 @@ class TestT2GAM:
         assert len(model.edf) == 2
 
     def test_t2_comparable_fit_to_te(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 300
         x1 = rng.uniform(size=n)
         x2 = rng.uniform(size=n)
@@ -339,7 +339,7 @@ class TestT2GAM:
         assert abs(rmse_te - rmse_t2) / max(rmse_te, 1e-10) < 0.5
 
     def test_t2_concurvity(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 200
         x1 = rng.uniform(size=n)
         x2 = rng.uniform(size=n)
@@ -354,7 +354,7 @@ class TestT2GAM:
         pytest.importorskip("altair")
         import altair as alt
 
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 200
         x1 = rng.uniform(size=n)
         x2 = rng.uniform(size=n)

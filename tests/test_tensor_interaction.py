@@ -19,7 +19,7 @@ from whittaker.smooths.tprs import TPRS
 
 class TestTensorInteractionBasis:
     def test_fewer_columns_than_te(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 100
         x = rng.uniform(size=(n, 2))
         k = 6
@@ -33,7 +33,7 @@ class TestTensorInteractionBasis:
         assert ti.n_basis < te.n_basis
 
     def test_basis_matrix_shape(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 80
         x = rng.uniform(size=(n, 2))
         k = 6
@@ -45,7 +45,7 @@ class TestTensorInteractionBasis:
         assert B.shape == (n, ti.n_basis)
 
     def test_null_space_dimension_is_zero(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         x = rng.uniform(size=(50, 2))
 
         ti = TensorInteractionBasis([TPRS(k=5), TPRS(k=5)])
@@ -54,7 +54,7 @@ class TestTensorInteractionBasis:
         assert ti.null_space_dimension() == 0
 
     def test_penalty_matrices_count(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         x = rng.uniform(size=(50, 2))
 
         ti = TensorInteractionBasis([TPRS(k=5), TPRS(k=5)])
@@ -64,7 +64,7 @@ class TestTensorInteractionBasis:
         assert len(pens) == 2
 
     def test_penalty_matrices_psd(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         x = rng.uniform(size=(50, 2))
 
         ti = TensorInteractionBasis([TPRS(k=6), TPRS(k=6)])
@@ -75,7 +75,7 @@ class TestTensorInteractionBasis:
             assert np.all(eigvals >= -1e-10)
 
     def test_penalty_matrix_shape(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         x = rng.uniform(size=(50, 2))
 
         ti = TensorInteractionBasis([TPRS(k=5), TPRS(k=5)])
@@ -90,12 +90,12 @@ class TestTensorInteractionBasis:
 
     def test_fit_validates_columns(self) -> None:
         ti = TensorInteractionBasis([TPRS(k=5), TPRS(k=5)])
-        x = np.random.default_rng(42).uniform(size=(50, 3))
+        x = np.random.default_rng(23).uniform(size=(50, 3))
         with pytest.raises(ValueError, match="Expected 2 columns"):
             ti.fit(x)
 
     def test_three_way_interaction(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 100
         x = rng.uniform(size=(n, 3))
         k = 5
@@ -109,7 +109,7 @@ class TestTensorInteractionBasis:
         assert len(ti.penalty_matrices()) == 3
 
     def test_identifiability_constraints(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         x = rng.uniform(size=(80, 2))
 
         ti = TensorInteractionBasis([TPRS(k=6), TPRS(k=6)])
@@ -121,7 +121,7 @@ class TestTensorInteractionBasis:
         assert C.shape[1] == ti.n_basis
 
     def test_range_dims_correct(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         x = rng.uniform(size=(50, 2))
 
         m1, m2 = TPRS(k=6), TPRS(k=5)
@@ -141,7 +141,7 @@ class TestTensorInteractionBasis:
 
 class TestTiModelMatrix:
     def test_ti_builds_model_matrix(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 100
         x1 = rng.uniform(size=n)
         x2 = rng.uniform(size=n)
@@ -155,7 +155,7 @@ class TestTiModelMatrix:
         assert len(mm.penalties) == 2
 
     def test_anova_decomposition(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 100
         x1 = rng.uniform(size=n)
         x2 = rng.uniform(size=n)
@@ -169,7 +169,7 @@ class TestTiModelMatrix:
         assert ti_info.null_space_dim == 0
 
     def test_ti_fewer_cols_than_te(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 100
         x1 = rng.uniform(size=n)
         x2 = rng.uniform(size=n)
@@ -190,7 +190,7 @@ class TestTiModelMatrix:
 
 class TestTiGAM:
     def test_ti_fit_converges(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 200
         x1 = rng.uniform(size=n)
         x2 = rng.uniform(size=n)
@@ -200,7 +200,7 @@ class TestTiGAM:
         assert model.is_fitted
 
     def test_anova_decomposition_fit(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 300
         x1 = rng.uniform(size=n)
         x2 = rng.uniform(size=n)
@@ -213,7 +213,7 @@ class TestTiGAM:
         assert len(model.edf) == 3
 
     def test_ti_predict(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 200
         x1 = rng.uniform(size=n)
         x2 = rng.uniform(size=n)
@@ -228,7 +228,7 @@ class TestTiGAM:
         assert pred.se[0] > 0
 
     def test_ti_deviance_explained(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 300
         x1 = rng.uniform(size=n)
         x2 = rng.uniform(size=n)
@@ -240,7 +240,7 @@ class TestTiGAM:
         assert 0.0 < model.deviance_explained < 1.0
 
     def test_ti_aic_bic_finite(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 200
         x1 = rng.uniform(size=n)
         x2 = rng.uniform(size=n)
@@ -251,7 +251,7 @@ class TestTiGAM:
         assert np.isfinite(model.bic)
 
     def test_ti_smooth_tests(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 300
         x1 = rng.uniform(size=n)
         x2 = rng.uniform(size=n)
@@ -266,7 +266,7 @@ class TestTiGAM:
         assert ti_test.p_value < 0.05
 
     def test_ti_residuals(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 200
         x1 = rng.uniform(size=n)
         x2 = rng.uniform(size=n)
@@ -278,7 +278,7 @@ class TestTiGAM:
             assert np.all(np.isfinite(r))
 
     def test_ti_with_reml(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 200
         x1 = rng.uniform(size=n)
         x2 = rng.uniform(size=n)
@@ -290,7 +290,7 @@ class TestTiGAM:
         assert model.is_fitted
 
     def test_ti_summary(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 200
         x1 = rng.uniform(size=n)
         x2 = rng.uniform(size=n)
@@ -303,7 +303,7 @@ class TestTiGAM:
         assert "ti(x1, x2" in text
 
     def test_ti_poisson(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 300
         x1 = rng.uniform(size=n)
         x2 = rng.uniform(size=n)
@@ -317,7 +317,7 @@ class TestTiGAM:
         assert 0.0 < model.deviance_explained < 1.0
 
     def test_anova_vs_te_comparable_fit(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 300
         x1 = rng.uniform(size=n)
         x2 = rng.uniform(size=n)

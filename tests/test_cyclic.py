@@ -19,34 +19,34 @@ from whittaker.smooths.cyclic import CyclicCRS, CyclicPSpline
 
 class TestCyclicCRS:
     def test_n_basis_is_k_minus_1(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         x = rng.uniform(size=50)
         basis = CyclicCRS(k=8).fit(x)
         assert basis.n_basis == 7
 
     def test_basis_matrix_shape(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         x = rng.uniform(size=50)
         basis = CyclicCRS(k=8).fit(x)
         B = basis.basis_matrix(x)
         assert B.shape == (50, 7)
 
     def test_penalty_matrix_shape(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         x = rng.uniform(size=50)
         basis = CyclicCRS(k=8).fit(x)
         S = basis.penalty_matrix()
         assert S.shape == (7, 7)
 
     def test_penalty_symmetric(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         x = rng.uniform(size=50)
         basis = CyclicCRS(k=10).fit(x)
         S = basis.penalty_matrix()
         assert_allclose(S, S.T, atol=1e-14)
 
     def test_penalty_psd(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         x = rng.uniform(size=50)
         basis = CyclicCRS(k=10).fit(x)
         eigvals = np.linalg.eigvalsh(basis.penalty_matrix())
@@ -56,7 +56,7 @@ class TestCyclicCRS:
         assert CyclicCRS(k=8).null_space_dimension() == 1
 
     def test_penalty_null_space_is_constant(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         x = rng.uniform(size=50)
         basis = CyclicCRS(k=8).fit(x)
         S = basis.penalty_matrix()
@@ -64,7 +64,7 @@ class TestCyclicCRS:
         assert_allclose(S @ ones, 0.0, atol=1e-10)
 
     def test_periodicity_at_endpoints(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         x = rng.uniform(0, 2 * np.pi, 100)
         basis = CyclicCRS(k=10).fit(x)
         x_min, x_max = x.min(), x.max()
@@ -73,7 +73,7 @@ class TestCyclicCRS:
         assert_allclose(B_lo, B_hi, atol=1e-12)
 
     def test_periodicity_outside_range(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         x = rng.uniform(0, 1, 100)
         basis = CyclicCRS(k=8).fit(x)
         period = x.max() - x.min()
@@ -93,7 +93,7 @@ class TestCyclicCRS:
             CyclicCRS(k=10).fit(np.array([1.0, 2.0, 3.0]))
 
     def test_identifiability_constraints(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         x = rng.uniform(size=50)
         basis = CyclicCRS(k=8).fit(x)
         C = basis.identifiability_constraints()
@@ -101,7 +101,7 @@ class TestCyclicCRS:
         assert C.shape == (1, 7)
 
     def test_knots_property(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         x = rng.uniform(size=50)
         basis = CyclicCRS(k=8).fit(x)
         knots = basis.knots
@@ -115,34 +115,34 @@ class TestCyclicCRS:
 
 class TestCyclicPSpline:
     def test_n_basis_is_k(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         x = rng.uniform(size=50)
         basis = CyclicPSpline(k=10).fit(x)
         assert basis.n_basis == 10
 
     def test_basis_matrix_shape(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         x = rng.uniform(size=50)
         basis = CyclicPSpline(k=10).fit(x)
         B = basis.basis_matrix(x)
         assert B.shape == (50, 10)
 
     def test_penalty_matrix_shape(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         x = rng.uniform(size=50)
         basis = CyclicPSpline(k=10).fit(x)
         S = basis.penalty_matrix()
         assert S.shape == (10, 10)
 
     def test_penalty_symmetric(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         x = rng.uniform(size=50)
         basis = CyclicPSpline(k=10).fit(x)
         S = basis.penalty_matrix()
         assert_allclose(S, S.T, atol=1e-14)
 
     def test_penalty_psd(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         x = rng.uniform(size=50)
         basis = CyclicPSpline(k=10).fit(x)
         eigvals = np.linalg.eigvalsh(basis.penalty_matrix())
@@ -152,7 +152,7 @@ class TestCyclicPSpline:
         assert CyclicPSpline(k=10).null_space_dimension() == 1
 
     def test_penalty_null_space_is_constant(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         x = rng.uniform(size=50)
         basis = CyclicPSpline(k=10).fit(x)
         S = basis.penalty_matrix()
@@ -160,7 +160,7 @@ class TestCyclicPSpline:
         assert_allclose(S @ ones, 0.0, atol=1e-12)
 
     def test_periodicity_at_endpoints(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         x = rng.uniform(0, 2 * np.pi, 100)
         basis = CyclicPSpline(k=10).fit(x)
         x_min, x_max = x.min(), x.max()
@@ -169,7 +169,7 @@ class TestCyclicPSpline:
         assert_allclose(B_lo, B_hi, atol=1e-10)
 
     def test_periodicity_outside_range(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         x = rng.uniform(0, 1, 100)
         basis = CyclicPSpline(k=10).fit(x)
         period = x.max() - x.min()
@@ -181,21 +181,21 @@ class TestCyclicPSpline:
         assert_allclose(B1, B3, atol=1e-10)
 
     def test_partition_of_unity(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         x = rng.uniform(0, 1, 100)
         basis = CyclicPSpline(k=10).fit(x)
         B = basis.basis_matrix(x)
         assert_allclose(B.sum(axis=1), 1.0, atol=1e-10)
 
     def test_custom_degree(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         x = rng.uniform(size=50)
         basis = CyclicPSpline(k=10, degree=2).fit(x)
         B = basis.basis_matrix(x)
         assert B.shape == (50, 10)
 
     def test_custom_penalty_order(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         x = rng.uniform(size=50)
         basis = CyclicPSpline(k=10, m=1).fit(x)
         S = basis.penalty_matrix()
@@ -220,7 +220,7 @@ class TestCyclicPSpline:
             CyclicPSpline(k=5).fit(np.ones(20))
 
     def test_identifiability_constraints(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         x = rng.uniform(size=50)
         basis = CyclicPSpline(k=10).fit(x)
         C = basis.identifiability_constraints()
@@ -235,7 +235,7 @@ class TestCyclicPSpline:
 
 class TestCyclicModelMatrix:
     def test_cc_builds_model_matrix(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 100
         x = rng.uniform(0, 2 * np.pi, n)
         y = np.sin(x) + 0.1 * rng.standard_normal(n)
@@ -246,7 +246,7 @@ class TestCyclicModelMatrix:
         assert len(mm.smooths) == 1
 
     def test_cp_builds_model_matrix(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 100
         x = rng.uniform(0, 2 * np.pi, n)
         y = np.sin(x) + 0.1 * rng.standard_normal(n)
@@ -257,7 +257,7 @@ class TestCyclicModelMatrix:
         assert len(mm.smooths) == 1
 
     def test_cc_fewer_cols_than_cr(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 100
         x = rng.uniform(size=n)
         y = 0.1 * rng.standard_normal(n)
@@ -277,7 +277,7 @@ class TestCyclicModelMatrix:
 
 class TestCyclicGAM:
     def test_cc_fit_converges(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 200
         x = rng.uniform(0, 2 * np.pi, n)
         y = np.sin(x) + 0.2 * rng.standard_normal(n)
@@ -286,7 +286,7 @@ class TestCyclicGAM:
         assert model.is_fitted
 
     def test_cp_fit_converges(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 200
         x = rng.uniform(0, 2 * np.pi, n)
         y = np.sin(x) + 0.2 * rng.standard_normal(n)
@@ -295,7 +295,7 @@ class TestCyclicGAM:
         assert model.is_fitted
 
     def test_cc_deviance_explained(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 300
         x = rng.uniform(0, 2 * np.pi, n)
         y = np.sin(x) + 0.2 * rng.standard_normal(n)
@@ -304,7 +304,7 @@ class TestCyclicGAM:
         assert model.deviance_explained > 0.8
 
     def test_cp_deviance_explained(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 300
         x = rng.uniform(0, 2 * np.pi, n)
         y = np.sin(x) + 0.2 * rng.standard_normal(n)
@@ -313,7 +313,7 @@ class TestCyclicGAM:
         assert model.deviance_explained > 0.8
 
     def test_cc_predict_periodic(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 300
         x = rng.uniform(0, 2 * np.pi, n)
         y = np.sin(x) + 0.2 * rng.standard_normal(n)
@@ -324,7 +324,7 @@ class TestCyclicGAM:
         assert_allclose(pred.values[0], pred.values[1], atol=1e-10)
 
     def test_cp_predict_periodic(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 300
         x = rng.uniform(0, 2 * np.pi, n)
         y = np.sin(x) + 0.2 * rng.standard_normal(n)
@@ -335,7 +335,7 @@ class TestCyclicGAM:
         assert_allclose(pred.values[0], pred.values[1], atol=1e-10)
 
     def test_cc_predict_with_se(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 200
         x = rng.uniform(0, 2 * np.pi, n)
         y = np.sin(x) + 0.2 * rng.standard_normal(n)
@@ -346,7 +346,7 @@ class TestCyclicGAM:
         assert np.all(pred.se > 0)
 
     def test_cc_aic_bic_finite(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 200
         x = rng.uniform(0, 2 * np.pi, n)
         y = np.sin(x) + 0.2 * rng.standard_normal(n)
@@ -356,7 +356,7 @@ class TestCyclicGAM:
         assert np.isfinite(model.bic)
 
     def test_cc_smooth_tests(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 300
         x = rng.uniform(0, 2 * np.pi, n)
         y = 3 * np.sin(x) + 0.2 * rng.standard_normal(n)
@@ -367,7 +367,7 @@ class TestCyclicGAM:
         assert tests[0].p_value < 0.05
 
     def test_cc_residuals(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 200
         x = rng.uniform(0, 2 * np.pi, n)
         y = np.sin(x) + 0.2 * rng.standard_normal(n)
@@ -378,7 +378,7 @@ class TestCyclicGAM:
             assert np.all(np.isfinite(r))
 
     def test_cc_with_reml(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 200
         x = rng.uniform(0, 2 * np.pi, n)
         y = np.sin(x) + 0.2 * rng.standard_normal(n)
@@ -387,7 +387,7 @@ class TestCyclicGAM:
         assert model.is_fitted
 
     def test_cc_summary_output(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 200
         x = rng.uniform(0, 2 * np.pi, n)
         y = np.sin(x) + 0.2 * rng.standard_normal(n)
@@ -397,7 +397,7 @@ class TestCyclicGAM:
         assert "s(x" in text
 
     def test_cc_poisson(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 300
         x = rng.uniform(0, 2 * np.pi, n)
         mu = np.exp(0.5 + 0.5 * np.sin(x))
@@ -407,7 +407,7 @@ class TestCyclicGAM:
         assert model.is_fitted
 
     def test_cc_with_other_smooths(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 300
         x1 = rng.uniform(0, 2 * np.pi, n)
         x2 = rng.uniform(0, 1, n)
@@ -418,7 +418,7 @@ class TestCyclicGAM:
         assert len(model.edf) == 2
 
     def test_cc_in_tensor_product(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 200
         x1 = rng.uniform(0, 2 * np.pi, n)
         x2 = rng.uniform(0, 1, n)
@@ -428,7 +428,7 @@ class TestCyclicGAM:
         assert model.is_fitted
 
     def test_cp_with_reml(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 200
         x = rng.uniform(0, 2 * np.pi, n)
         y = np.sin(x) + 0.2 * rng.standard_normal(n)
@@ -437,7 +437,7 @@ class TestCyclicGAM:
         assert model.is_fitted
 
     def test_cc_concurvity(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 200
         x1 = rng.uniform(0, 2 * np.pi, n)
         x2 = rng.uniform(0, 1, n)
@@ -451,7 +451,7 @@ class TestCyclicGAM:
     def test_cc_plot(self) -> None:
         pytest.importorskip("altair")
 
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 200
         x = rng.uniform(0, 2 * np.pi, n)
         y = np.sin(x) + 0.2 * rng.standard_normal(n)
@@ -463,7 +463,7 @@ class TestCyclicGAM:
     def test_cp_plot(self) -> None:
         pytest.importorskip("altair")
 
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 200
         x = rng.uniform(0, 2 * np.pi, n)
         y = np.sin(x) + 0.2 * rng.standard_normal(n)

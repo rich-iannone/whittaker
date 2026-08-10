@@ -17,7 +17,7 @@ def _simulate_nb(rng, n, x, mu, theta):
 
 class TestNBGAMFit:
     def test_nb_fit_converges(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 300
         x = np.linspace(0, 2, n)
         mu = np.exp(0.5 + 0.5 * x)
@@ -27,7 +27,7 @@ class TestNBGAMFit:
         assert model.is_fitted
 
     def test_theta_estimated(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 500
         x = np.linspace(0, 2, n)
         mu = np.exp(0.5 + 0.5 * x)
@@ -40,7 +40,7 @@ class TestNBGAMFit:
         assert 1.0 < fam.theta < 10.0
 
     def test_theta_recovery_small(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 1000
         x = np.linspace(0, 2, n)
         mu = np.exp(1.0 + 0.3 * x)
@@ -52,7 +52,7 @@ class TestNBGAMFit:
         assert abs(fam.theta - true_theta) / true_theta < 0.5
 
     def test_theta_recovery_large(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 1000
         x = np.linspace(0, 2, n)
         mu = np.exp(1.0 + 0.3 * x)
@@ -64,7 +64,7 @@ class TestNBGAMFit:
         assert abs(fam.theta - true_theta) / true_theta < 0.5
 
     def test_mean_recovery(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 500
         x = np.linspace(0, 2, n)
         mu_true = np.exp(0.5 + 0.5 * x)
@@ -75,7 +75,7 @@ class TestNBGAMFit:
         assert rmse < 1.0
 
     def test_predict(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 300
         x = np.linspace(0, 2, n)
         mu = np.exp(0.5 * x)
@@ -88,7 +88,7 @@ class TestNBGAMFit:
         assert pred.se[0] > 0
 
     def test_aic_bic_finite(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 300
         x = np.linspace(0, 2, n)
         mu = np.exp(0.5 * x)
@@ -99,7 +99,7 @@ class TestNBGAMFit:
         assert np.isfinite(model.bic)
 
     def test_deviance_explained(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 300
         x = np.linspace(0, 2, n)
         mu = np.exp(1.0 + x)
@@ -109,7 +109,7 @@ class TestNBGAMFit:
         assert 0.0 < model.deviance_explained < 1.0
 
     def test_residual_types(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 200
         x = np.linspace(0, 2, n)
         mu = np.exp(0.5 * x)
@@ -121,7 +121,7 @@ class TestNBGAMFit:
             assert np.all(np.isfinite(r))
 
     def test_deviance_residuals_sum(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 200
         x = np.linspace(0, 2, n)
         mu = np.exp(0.5 * x)
@@ -132,7 +132,7 @@ class TestNBGAMFit:
         assert_allclose(np.sum(dev_r**2), model.deviance, rtol=1e-10)
 
     def test_two_smooths(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 400
         x1 = np.linspace(0, 2, n)
         x2 = np.linspace(0, 1, n)
@@ -145,7 +145,7 @@ class TestNBGAMFit:
         assert len(model.edf) == 2
 
     def test_with_reml(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 300
         x = np.linspace(0, 2, n)
         mu = np.exp(0.5 * x)
@@ -155,7 +155,7 @@ class TestNBGAMFit:
         assert model.is_fitted
 
     def test_summary(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 200
         x = np.linspace(0, 2, n)
         mu = np.exp(0.5 * x)
@@ -166,7 +166,7 @@ class TestNBGAMFit:
         assert "NegativeBinomial" in text
 
     def test_smooth_tests(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 300
         x = np.linspace(0, 2, n)
         mu = np.exp(1.0 + x)
@@ -178,7 +178,7 @@ class TestNBGAMFit:
         assert tests[0].p_value < 0.05
 
     def test_nb_better_than_poisson_for_overdispersed(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 500
         x = np.linspace(0, 2, n)
         mu = np.exp(0.5 + 0.5 * x)
