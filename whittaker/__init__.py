@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from importlib.metadata import PackageNotFoundError, version
 
+from whittaker.bam import BigGAM
 from whittaker.calibration import calibrate_sigma
 from whittaker.cross_validation import CVResult, cross_validate
 from whittaker.families import Beta, Binomial, Family, Gamma, Gaussian, NegativeBinomial, Poisson
@@ -12,7 +13,7 @@ from whittaker.formula import parse as parse_formula
 from whittaker.gam import GAM
 from whittaker.model_matrix import ModelMatrix, build_model_matrix, predict_matrix
 from whittaker.sklearn import GAMClassifier, GAMRegressor
-from whittaker.smooths import CRS, TPRS, PSpline, SmoothBasis
+from whittaker.smooths import CRS, TPRS, GaussianProcess, PSpline, SmoothBasis, SoapFilm
 
 try:
     __version__: str = version("whittaker")
@@ -21,6 +22,7 @@ except PackageNotFoundError:
 
 __all__ = [
     "__version__",
+    "BigGAM",
     "calibrate_sigma",
     "cross_validate",
     "CVResult",
@@ -34,6 +36,7 @@ __all__ = [
     "GAMRegressor",
     "Gamma",
     "Gaussian",
+    "GaussianProcess",
     "NegativeBinomial",
     "Poisson",
     "ModelMatrix",
@@ -43,6 +46,7 @@ __all__ = [
     "OffsetTerm",
     "SmoothBasis",
     "SmoothTerm",
+    "SoapFilm",
     "TPRS",
     "build_model_matrix",
     "parse_formula",
