@@ -12,6 +12,7 @@ from whittaker.families.gamma_ls import GammaLS
 from whittaker.families.gaussian import Gaussian
 from whittaker.families.gaussian_ls import GaussianLS
 from whittaker.families.inverse_gaussian import InverseGaussian
+from whittaker.families.multinomial import Multinomial
 from whittaker.families.negative_binomial import NegativeBinomial
 from whittaker.families.ordered_categorical import OrderedCategorical
 from whittaker.families.poisson import Poisson
@@ -31,6 +32,7 @@ __all__ = [
     "Gaussian",
     "GaussianLS",
     "InverseGaussian",
+    "Multinomial",
     "NegativeBinomial",
     "OrderedCategorical",
     "Poisson",
