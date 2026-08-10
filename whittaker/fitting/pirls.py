@@ -1,7 +1,6 @@
 """Penalized Iteratively Reweighted Least Squares (P-IRLS) fitting.
 
-This module implements the core GAM fitting algorithm following Wood (2017,
-*Generalized Additive Models: An Introduction with R*, 2nd ed.).
+This module implements the core GAM fitting algorithm.
 
 For Gaussian response with identity link the P-IRLS loop collapses to a single penalized least
 squares solve:
@@ -33,6 +32,12 @@ from whittaker.families.base import Family
 from whittaker.families.gaussian import Gaussian
 from whittaker.families.negative_binomial import NegativeBinomial
 from whittaker.model_matrix import ModelMatrix
+from whittaker.smooths.monotone import (
+    ConvexPSpline,
+    MonotonePSpline,
+    project_convex,
+    project_monotone,
+)
 
 
 @dataclass
@@ -539,6 +544,24 @@ def _estimate_nb_theta(
     return float(np.exp(result.x))
 
 
+def _apply_shape_constraints(beta: NDArray, model: ModelMatrix) -> NDArray:
+    """Project smooth coefficients onto shape-constraint cones."""
+    for s in model.smooths:
+        basis = s.basis
+        if isinstance(basis, MonotonePSpline):
+            b = beta[s.col_start : s.col_end].copy()
+            beta[s.col_start : s.col_end] = project_monotone(b, decreasing=basis.decreasing)
+        elif isinstance(basis, ConvexPSpline):
+            b = beta[s.col_start : s.col_end].copy()
+            beta[s.col_start : s.col_end] = project_convex(b, concave=basis.concave)
+    return beta
+
+
+def _has_shape_constraints(model: ModelMatrix) -> bool:
+    """Check if any smooth term has a shape constraint."""
+    return any(isinstance(s.basis, (MonotonePSpline, ConvexPSpline)) for s in model.smooths)
+
+
 def pirls_fit(
     model: ModelMatrix,
     family: Family | None = None,
@@ -655,7 +678,8 @@ def pirls_fit(
 
     pw = prior_weights
 
-    is_gaussian_identity = isinstance(family, Gaussian)
+    has_constraints = _has_shape_constraints(model)
+    is_gaussian_identity = isinstance(family, Gaussian) and not has_constraints
     W_final: NDArray | None = None
     z_final: NDArray = y
 
@@ -710,6 +734,9 @@ def pirls_fit(
                     W=W_total,
                     offset=offset,
                 )
+
+                if has_constraints:
+                    beta = _apply_shape_constraints(beta, model)
 
                 eta = X @ beta
                 if offset is not None:
