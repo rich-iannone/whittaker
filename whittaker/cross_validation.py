@@ -7,6 +7,7 @@ from dataclasses import dataclass
 import numpy as np
 from numpy.typing import NDArray
 
+from whittaker.data import InputData, prepare_data
 from whittaker.families.base import Family
 from whittaker.families.gaussian import Gaussian
 from whittaker.gam import GAM
@@ -36,7 +37,7 @@ class CVResult:
 
 def cross_validate(
     formula: str,
-    data: dict[str, NDArray],
+    data: InputData,
     *,
     family: Family | None = None,
     n_folds: int = 10,
@@ -73,17 +74,16 @@ def cross_validate(
     if family is None:
         family = Gaussian()
 
+    arrays = prepare_data(data)
     rng = np.random.default_rng(seed)
     response = formula.split("~")[0].strip()
-    y = np.asarray(data[response], dtype=float)
+    y = arrays[response]
     n = len(y)
 
     perm = rng.permutation(n)
     fold_ids = np.zeros(n, dtype=int)
     for i in range(n):
         fold_ids[perm[i]] = i * n_folds // n
-
-    arrays = {k: np.asarray(data[k], dtype=float) for k in data}
 
     fold_losses = np.zeros(n_folds)
 

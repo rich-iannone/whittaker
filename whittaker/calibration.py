@@ -5,13 +5,14 @@ from __future__ import annotations
 import numpy as np
 from numpy.typing import NDArray
 
+from whittaker.data import InputData, prepare_data
 from whittaker.families.quantile import QuantileFamily, _elf_loss
 from whittaker.gam import GAM
 
 
 def calibrate_sigma(
     formula: str,
-    data: dict[str, NDArray],
+    data: InputData,
     tau: float = 0.5,
     *,
     n_folds: int = 5,
@@ -49,14 +50,13 @@ def calibrate_sigma(
     float
         Calibrated sigma value (the one minimising CV pinball loss).
     """
+    arrays = prepare_data(data)
     rng = np.random.default_rng(seed)
     response = formula.split("~")[0].strip()
-    y = np.asarray(data[response], dtype=float)
+    y = arrays[response]
     n = len(y)
 
     fold_ids = rng.integers(0, n_folds, size=n)
-
-    arrays = {k: np.asarray(data[k], dtype=float) for k in data}
 
     custom_grid = sigma_values is not None
     if custom_grid:
