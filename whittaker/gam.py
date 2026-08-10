@@ -10,6 +10,7 @@ from numpy.typing import NDArray
 from whittaker.data import InputData, prepare_data
 from whittaker.families.base import Family
 from whittaker.families.gaussian import Gaussian
+from whittaker.families.tweedie_estimated import TweedieEstimated
 from whittaker.fitting.pirls import FitResult, pirls_fit
 from whittaker.formula.parser import parse
 from whittaker.formula.terms import Formula
@@ -206,15 +207,72 @@ class GAM:
             if np.any(pw <= 0):
                 raise ValueError("All weights must be positive.")
 
-        self._fit_result = pirls_fit(
-            self._model_matrix,
-            self._family,
-            smoothing_params=smoothing_params,
-            method=method,
-            prior_weights=pw,
-        )
+        if isinstance(self._family, TweedieEstimated) and not self._family.p_estimated:
+            self._fit_result = self._profile_tweedie_power(
+                self._model_matrix,
+                self._family,
+                smoothing_params=smoothing_params,
+                method=method,
+                prior_weights=pw,
+            )
+        else:
+            self._fit_result = pirls_fit(
+                self._model_matrix,
+                self._family,
+                smoothing_params=smoothing_params,
+                method=method,
+                prior_weights=pw,
+            )
         self._fitted = True
         return self
+
+    @staticmethod
+    def _profile_tweedie_power(
+        model_matrix: ModelMatrix,
+        family: TweedieEstimated,
+        *,
+        smoothing_params: list[float] | None,
+        method: str,
+        prior_weights: NDArray | None,
+    ) -> FitResult:
+        from whittaker.families.tweedie import Tweedie
+
+        p_lo, p_hi = family._p_range
+        grid = np.linspace(p_lo, p_hi, family._n_grid)
+
+        best_aic = np.inf
+        best_result: FitResult | None = None
+        best_p = grid[len(grid) // 2]
+
+        for p_val in grid:
+            candidate = Tweedie(p=p_val)
+            try:
+                result = pirls_fit(
+                    model_matrix,
+                    candidate,
+                    smoothing_params=smoothing_params,
+                    method=method,
+                    prior_weights=prior_weights,
+                )
+            except Exception:
+                continue
+            if result.aic is not None and result.aic < best_aic:
+                best_aic = result.aic
+                best_result = result
+                best_p = p_val
+
+        if best_result is None:
+            candidate = Tweedie(p=best_p)
+            best_result = pirls_fit(
+                model_matrix,
+                candidate,
+                smoothing_params=smoothing_params,
+                method=method,
+                prior_weights=prior_weights,
+            )
+
+        family._set_p(best_p)
+        return best_result
 
     def predict(
         self,
