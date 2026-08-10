@@ -11,6 +11,7 @@ from whittaker.formula import Formula, InteractionTerm, LinearTerm, OffsetTerm, 
 from whittaker.formula import parse as parse_formula
 from whittaker.gam import GAM
 from whittaker.model_matrix import ModelMatrix, build_model_matrix, predict_matrix
+from whittaker.sklearn import GAMClassifier, GAMRegressor
 from whittaker.smooths import CRS, TPRS, PSpline, SmoothBasis
 
 try:
@@ -28,6 +29,8 @@ __all__ = [
     "Family",
     "Formula",
     "GAM",
+    "GAMClassifier",
+    "GAMRegressor",
     "Gamma",
     "Gaussian",
     "NegativeBinomial",
