@@ -63,6 +63,56 @@ class TermsPredictionResult:
     labels: list[str] = field(default_factory=list)
 
 
+@dataclass
+class GamCheckResult:
+    """Result of `GAM.gam_check()` with diagnostic information.
+
+    Attributes
+    ----------
+    deviance_residuals:
+        Deviance residuals, shape `(n,)`.
+    fitted_values:
+        Fitted values μ on the response scale, shape `(n,)`.
+    response:
+        Response values y, shape `(n,)`.
+    k_check:
+        Basis dimension check results (list of `KCheckResult`).
+    deviance_explained:
+        Proportion of deviance explained.
+    scale:
+        Estimated scale parameter.
+    edf_total:
+        Total effective degrees of freedom.
+    n_obs:
+        Number of observations.
+    """
+
+    deviance_residuals: NDArray
+    fitted_values: NDArray
+    response: NDArray
+    k_check: list
+    deviance_explained: float
+    scale: float
+    edf_total: float
+    n_obs: int
+
+    def __repr__(self) -> str:
+        lines = [
+            "GAM check results",
+            f"  n = {self.n_obs}, edf = {self.edf_total:.1f}, "
+            f"scale = {self.scale:.4f}, dev.expl = {self.deviance_explained:.1%}",
+            "",
+            "Basis dimension check:",
+        ]
+        for kc in self.k_check:
+            star = " *" if kc.p_value < 0.05 else ""
+            lines.append(
+                f"  {kc.term_label}: k_index={kc.k_index:.3f}, "
+                f"edf={kc.edf:.1f}/{kc.k_prime}, p={kc.p_value:.3f}{star}"
+            )
+        return "\n".join(lines)
+
+
 class GAM:
     """Generalized Additive Model.
 
@@ -187,22 +237,22 @@ class GAM:
         type:
             Prediction type:
 
-            - `"response"`` (default): predictions on the response scale (mu = g^{-1}(eta)).
+            - `"response"` (default): predictions on the response scale (mu = g^{-1}(eta)).
             - `"link"`: predictions on the linear predictor scale (eta = X beta).
             - `"terms"`: individual smooth term contributions to the linear predictor.
         interval:
-            Interval type. ``None`` (default) returns no intervals. ``"confidence"`` computes
-            intervals for the mean response (uncertainty in eta only). ``"prediction"`` computes
+            Interval type. `None` (default) returns no intervals. `"confidence"` computes
+            intervals for the mean response (uncertainty in eta only). `"prediction"` computes
             intervals for a new observation (adds response-distribution variance). Intervals are
             computed on the linear predictor scale and transformed to the response scale. Not
-            available for ``type="terms"``.
+            available for `type="terms"`.
         level:
-            Nominal coverage probability for the interval (default ``0.95``).
+            Nominal coverage probability for the interval (default `0.95`).
         unconditional:
-            If ``True``, include smoothing parameter uncertainty in standard errors and intervals
+            If `True`, include smoothing parameter uncertainty in standard errors and intervals
             (Marra & Wood 2012). This uses the unconditional covariance matrix V_c instead of the
             conditional V_p, producing wider and more honest intervals. Requires that the model was
-            fitted with ``method="REML"`` or ``method="ML"``.
+            fitted with `method="REML"` or `method="ML"`.
 
         Returns
         -------
@@ -315,9 +365,7 @@ class GAM:
 
         return TermsPredictionResult(terms=terms_dict, se=se_dict, labels=labels)
 
-    def _prediction_se(
-        self, X_new: NDArray, *, unconditional: bool = False
-    ) -> NDArray:
+    def _prediction_se(self, X_new: NDArray, *, unconditional: bool = False) -> NDArray:
         """Compute standard errors for predictions at X_new.
 
         SE = sqrt(diag(X_new @ V_β @ X_new.T))
@@ -335,8 +383,8 @@ class GAM:
     ) -> NDArray:
         """Return the coefficient covariance matrix V_β.
 
-        When ``unconditional=True``, returns V_c (Marra & Wood 2012) which accounts for smoothing
-        parameter uncertainty. Otherwise returns the conditional Bayesian covariance V_p.
+        When `unconditional=True`, returns `V_c` (Marra & Wood 2012) which accounts for smoothing
+        Otherwise returns the conditional Bayesian covariance `V_p`.
         """
         from whittaker.fitting.inference import _bayesian_covariance
 
@@ -347,9 +395,8 @@ class GAM:
             from whittaker.fitting.inference import _unconditional_covariance
 
             n_unpenalized = (
-                (1 if self._model_matrix.has_intercept else 0)
-                + self._model_matrix.n_parametric
-            )
+                1 if self._model_matrix.has_intercept else 0
+            ) + self._model_matrix.n_parametric
             for s_info in self._model_matrix.smooths:
                 n_unpenalized += s_info.null_space_dim
 
@@ -598,6 +645,35 @@ class GAM:
         resid = self.get_residuals("deviance")
         return k_check(self._fit_result, self._model_matrix, self._data, resid, n_sim=n_sim)
 
+    def gam_check(self, *, n_sim: int = 100) -> GamCheckResult:
+        """Run all-in-one GAM diagnostics.
+
+        Returns a `GamCheckResult` containing deviance residuals, fitted values, response values,
+        basis dimension checks, and summary statistics. Print the result for a quick diagnostic
+        summary.
+
+        Parameters
+        ----------
+        n_sim:
+            Number of permutations for the k-check p-values (default `100`).
+
+        Returns
+        -------
+        GamCheckResult
+            Diagnostic results with a readable `__repr__`.
+        """
+        self._check_fitted()
+        return GamCheckResult(
+            deviance_residuals=self.get_residuals("deviance"),
+            fitted_values=self._fit_result.fitted_values.copy(),
+            response=self._model_matrix.response.copy(),
+            k_check=self.k_check(n_sim=n_sim),
+            deviance_explained=self.deviance_explained,
+            scale=self.scale,
+            edf_total=self._fit_result.edf_total,
+            n_obs=self._model_matrix.X.shape[0],
+        )
+
     def simulate(
         self,
         new_data: dict[str, NDArray] | None = None,
@@ -614,7 +690,7 @@ class GAM:
         2. Computing η* = X @ β* (+ offset if present) for each draw.
         3. Transforming to the response scale: μ* = g⁻¹(η*).
 
-        When ``unconditional=True``, response noise is added by sampling from the family distribution
+        When `unconditional=True`, response noise is added by sampling from the family distribution
         at each μ*.
 
         Parameters
