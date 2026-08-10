@@ -35,6 +35,7 @@ from whittaker.smooths.base import SmoothBasis
 from whittaker.smooths.cubic import CRS
 from whittaker.smooths.cyclic import CyclicCRS, CyclicPSpline
 from whittaker.smooths.factor_smooth import FactorSmoothBasis
+from whittaker.smooths.monotone import ConvexPSpline, MonotonePSpline
 from whittaker.smooths.pspline import PSpline
 from whittaker.smooths.random import RandomEffectBasis
 from whittaker.smooths.shrinkage import ShrinkageCRS, ShrinkageTPRS
@@ -55,6 +56,10 @@ _BS_REGISTRY: dict[str, type[SmoothBasis]] = {
     "cs": ShrinkageCRS,
     "re": RandomEffectBasis,
     "ad": AdaptiveTPRS,
+    "mpi": MonotonePSpline,
+    "mpd": lambda **kw: MonotonePSpline(decreasing=True, **kw),
+    "cx": ConvexPSpline,
+    "cv": lambda **kw: ConvexPSpline(concave=True, **kw),
 }
 
 
@@ -74,7 +79,7 @@ def _resolve_basis(term: SmoothTerm) -> SmoothBasis:
     if term.k != -1:
         kwargs["k"] = term.k
 
-    if term.bs in ("ps", "cp"):
+    if term.bs in ("ps", "cp", "mpi", "mpd", "cx", "cv"):
         if "degree" in term.extra:
             kwargs["degree"] = term.extra["degree"]
         if "m" in term.extra:
