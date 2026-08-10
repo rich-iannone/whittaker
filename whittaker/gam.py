@@ -342,9 +342,10 @@ class GAM:
 
         if interval is not None:
             interval_lower = interval.lower()
-            if interval_lower not in ("confidence", "prediction"):
+            if interval_lower not in ("confidence", "prediction", "simultaneous"):
                 raise ValueError(
-                    f"Unknown interval type {interval!r}. Choose from 'confidence' or 'prediction'."
+                    f"Unknown interval type {interval!r}. "
+                    "Choose from 'confidence', 'prediction', or 'simultaneous'."
                 )
         else:
             interval_lower = None
@@ -362,14 +363,28 @@ class GAM:
         lower = None
         upper = None
         if interval_lower is not None and se_values is not None:
-            lower, upper = self._compute_interval(
-                eta,
-                se_values,
-                X_new,
-                interval_lower,
-                level,
-                type_lower,
-            )
+            if interval_lower == "simultaneous":
+                crit = self._simultaneous_quantile(
+                    X_new,
+                    level=level,
+                    unconditional=unconditional,
+                )
+                eta_lower = eta - crit * se_values
+                eta_upper = eta + crit * se_values
+                if type_lower == "link":
+                    lower, upper = eta_lower, eta_upper
+                else:
+                    lower = self._family.link_inverse(eta_lower)
+                    upper = self._family.link_inverse(eta_upper)
+            else:
+                lower, upper = self._compute_interval(
+                    eta,
+                    se_values,
+                    X_new,
+                    interval_lower,
+                    level,
+                    type_lower,
+                )
 
         if type_lower == "link":
             return PredictionResult(
@@ -529,6 +544,127 @@ class GAM:
             return eta_lower, eta_upper
 
         return self._family.link_inverse(eta_lower), self._family.link_inverse(eta_upper)
+
+    def _simultaneous_quantile(
+        self,
+        X_new: NDArray,
+        *,
+        level: float = 0.95,
+        n_sim: int = 10_000,
+        unconditional: bool = False,
+        seed: int = 0,
+    ) -> float:
+        """Compute the critical value for simultaneous confidence bands.
+
+        Simulates from the posterior of β, computes max |deviation / se| across all prediction
+        points, and returns the empirical quantile at the requested coverage level.
+        """
+        V_beta = self._covariance_matrix(unconditional=unconditional)
+        se_values = np.sqrt(np.maximum(np.sum(X_new * (X_new @ V_beta), axis=1), 0.0))
+        se_values = np.maximum(se_values, np.finfo(float).eps)
+
+        rng = np.random.default_rng(seed)
+        L = np.linalg.cholesky(V_beta + np.eye(V_beta.shape[0]) * 1e-10)
+
+        max_devs = np.empty(n_sim)
+        for i in range(n_sim):
+            z = rng.standard_normal(V_beta.shape[0])
+            beta_sim = L @ z
+            f_sim = X_new @ beta_sim
+            max_devs[i] = np.max(np.abs(f_sim) / se_values)
+
+        return float(np.quantile(max_devs, level))
+
+    def simultaneous_ci(
+        self,
+        new_data: InputData,
+        *,
+        term: int | str | None = None,
+        level: float = 0.95,
+        n_sim: int = 10_000,
+        unconditional: bool = False,
+        seed: int = 0,
+    ) -> dict:
+        """Compute simultaneous confidence bands for smooth terms.
+
+        Unlike pointwise intervals, these bands have (approximate) `level=` coverage probability for
+        the *entire* function simultaneously, not just at individual points.
+
+        Parameters
+        ----------
+        new_data:
+            Prediction data.
+        term:
+            Which smooth term to compute bands for. An integer index (0-based) or the term label
+            string. If `None` and the model has exactly one smooth, that term is used.
+        level:
+            Nominal simultaneous coverage probability (default `0.95`).
+        n_sim:
+            Number of posterior simulations for the critical value (default `10_000`).
+        unconditional:
+            If `True`, include smoothing parameter uncertainty.
+        seed:
+            Random seed for reproducibility.
+
+        Returns
+        -------
+        dict
+            Keys: `"estimate"`, `"se"`, `"lower"`, `"upper"`, `"term_label"`, `"crit_value"`.
+        """
+        self._check_fitted()
+        new_data = prepare_data(new_data)
+
+        smooths = self._model_matrix.smooths
+        if term is None:
+            if len(smooths) != 1:
+                raise ValueError(
+                    f"Model has {len(smooths)} smooth terms; specify which one via 'term'."
+                )
+            idx = 0
+        elif isinstance(term, int):
+            idx = term
+        else:
+            idx = None
+            for i, s in enumerate(smooths):
+                if repr(s.term) == term or term in repr(s.term):
+                    idx = i
+                    break
+            if idx is None:
+                raise ValueError(f"No smooth term matching {term!r}.")
+
+        info = smooths[idx]
+        cs, ce = info.col_start, info.col_end
+
+        X_new = predict_matrix(self._model_matrix, new_data)
+        X_j = np.zeros_like(X_new)
+        X_j[:, cs:ce] = X_new[:, cs:ce]
+
+        beta = self._fit_result.coefficients
+        estimate = X_j @ beta
+
+        V_beta = self._covariance_matrix(unconditional=unconditional)
+        se_values = np.sqrt(np.maximum(np.sum(X_j * (X_j @ V_beta), axis=1), 0.0))
+
+        crit = self._simultaneous_quantile(
+            X_j,
+            level=level,
+            n_sim=n_sim,
+            unconditional=unconditional,
+            seed=seed,
+        )
+
+        label = repr(info.term)
+        if info.by_level is not None:
+            label = f"{label}:{info.by_level}"
+
+        return {
+            "estimate": estimate,
+            "se": se_values,
+            "lower": estimate - crit * se_values,
+            "upper": estimate + crit * se_values,
+            "term_label": label,
+            "crit_value": crit,
+        }
 
     @property
     def coefficients(self) -> NDArray:
