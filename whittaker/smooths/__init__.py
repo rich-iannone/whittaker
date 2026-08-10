@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from whittaker.smooths.adaptive import AdaptiveTPRS
 from whittaker.smooths.base import SmoothBasis
 from whittaker.smooths.cubic import CRS
 from whittaker.smooths.cyclic import CyclicCRS, CyclicPSpline
@@ -17,6 +18,7 @@ from whittaker.smooths.tensor import (
 from whittaker.smooths.tprs import TPRS
 
 __all__ = [
+    "AdaptiveTPRS",
     "CRS",
     "CyclicCRS",
     "CyclicPSpline",
