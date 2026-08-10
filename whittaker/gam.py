@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 import numpy as np
 from numpy.typing import NDArray
 
+from whittaker.data import InputData, prepare_data
 from whittaker.families.base import Family
 from whittaker.families.gaussian import Gaussian
 from whittaker.fitting.pirls import FitResult, pirls_fit
@@ -157,7 +158,7 @@ class GAM:
 
     def fit(
         self,
-        data: dict[str, NDArray],
+        data: InputData,
         *,
         smoothing_params: list[float] | None = None,
         method: str = "GCV",
@@ -190,6 +191,7 @@ class GAM:
         GAM
             Returns `self` for method chaining.
         """
+        data = prepare_data(data)
         self._data = data
         self._model_matrix = build_model_matrix(self._formula, data, select=select)
 
@@ -216,7 +218,7 @@ class GAM:
 
     def predict(
         self,
-        new_data: dict[str, NDArray],
+        new_data: InputData,
         *,
         se: bool = False,
         type: str = "response",
@@ -261,6 +263,7 @@ class GAM:
             `TermsPredictionResult` with per-smooth contributions.
         """
         self._check_fitted()
+        new_data = prepare_data(new_data)
         type_lower = type.lower()
 
         if type_lower == "terms":
@@ -676,7 +679,7 @@ class GAM:
 
     def simulate(
         self,
-        new_data: dict[str, NDArray] | None = None,
+        new_data: InputData | None = None,
         *,
         n_sim: int = 1000,
         seed: int | None = None,
@@ -720,6 +723,7 @@ class GAM:
             X_new = self._model_matrix.X
             offset = self._model_matrix.offset
         else:
+            new_data = prepare_data(new_data)
             X_new = predict_matrix(self._model_matrix, new_data)
             offset = predict_offset(self._model_matrix, new_data)
 

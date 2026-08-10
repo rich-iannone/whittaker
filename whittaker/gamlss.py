@@ -7,6 +7,7 @@ from dataclasses import dataclass
 import numpy as np
 from numpy.typing import NDArray
 
+from whittaker.data import InputData, prepare_data
 from whittaker.families.gamlss_base import GAMLSSFamily
 from whittaker.families.gaussian_ls import GaussianLS
 from whittaker.fitting.gamlss_fit import GAMLSSFitResult, _compute_zw, gamlss_fit
@@ -142,7 +143,7 @@ class GAMLSS:
 
     def fit(
         self,
-        data: dict[str, NDArray],
+        data: InputData,
         *,
         method: str = "GCV",
         max_outer: int = 50,
@@ -171,6 +172,7 @@ class GAMLSS:
         -------
         self
         """
+        data = prepare_data(data)
         response_name = None
         for param, fstr in self._formula_strings.items():
             formula = parse(fstr)
@@ -205,7 +207,7 @@ class GAMLSS:
 
     def predict(
         self,
-        new_data: dict[str, NDArray],
+        new_data: InputData,
         *,
         parameter: str | None = None,
         se: bool = False,
@@ -227,6 +229,7 @@ class GAMLSS:
         `GAMLSSPrediction` or `NDArray`
         """
         self._check_fitted()
+        new_data = prepare_data(new_data)
 
         values: dict[str, NDArray] = {}
         linear_predictors: dict[str, NDArray] = {}
