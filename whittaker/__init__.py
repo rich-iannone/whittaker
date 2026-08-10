@@ -6,7 +6,7 @@ from importlib.metadata import PackageNotFoundError, version
 
 from whittaker.calibration import calibrate_sigma
 from whittaker.cross_validation import CVResult, cross_validate
-from whittaker.families import Binomial, Family, Gamma, Gaussian, NegativeBinomial, Poisson
+from whittaker.families import Beta, Binomial, Family, Gamma, Gaussian, NegativeBinomial, Poisson
 from whittaker.formula import Formula, InteractionTerm, LinearTerm, OffsetTerm, SmoothTerm
 from whittaker.formula import parse as parse_formula
 from whittaker.gam import GAM
@@ -24,6 +24,7 @@ __all__ = [
     "calibrate_sigma",
     "cross_validate",
     "CVResult",
+    "Beta",
     "Binomial",
     "CRS",
     "Family",
