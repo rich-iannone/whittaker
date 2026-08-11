@@ -1159,7 +1159,7 @@ class DerivativeResult:
     x:
         Covariate values at which derivatives are evaluated.
     derivative:
-        Estimated derivative values, shape ``(n,)``.
+        Estimated derivative values, shape `(n,)`.
     se:
         Standard errors of the derivative estimates.
     lower:
@@ -1219,16 +1219,15 @@ def smooth_derivatives(
         eps = x_range / (n_points * 10) if order == 1 else x_range / (n_points * 5)
         eps = max(eps, 1e-7)
 
-    base_data = {k: np.full(n_points, np.mean(v)) if k != variable else x_grid
-                 for k, v in data.items()}
+    base_data = {
+        k: np.full(n_points, np.mean(v)) if k != variable else x_grid for k, v in data.items()
+    }
 
     if V_beta is None:
         W = fit.weights
         if fit.prior_weights is not None and W is None:
             W = fit.prior_weights
-        V_beta = _bayesian_covariance(
-            mm.X, mm.penalties, fit.smoothing_params, fit.scale, W=W
-        )
+        V_beta = _bayesian_covariance(mm.X, mm.penalties, fit.smoothing_params, fit.scale, W=W)
 
     z_crit = norm.ppf(1.0 - (1.0 - level) / 2.0)
 
@@ -1247,18 +1246,14 @@ def smooth_derivatives(
             label = f"{label}:{info.by_level}"
 
         if order == 1:
-            data_plus = {k: (v + eps if k == variable else v.copy())
-                         for k, v in base_data.items()}
-            data_minus = {k: (v - eps if k == variable else v.copy())
-                          for k, v in base_data.items()}
+            data_plus = {k: (v + eps if k == variable else v.copy()) for k, v in base_data.items()}
+            data_minus = {k: (v - eps if k == variable else v.copy()) for k, v in base_data.items()}
             X_plus = predict_matrix(mm, data_plus)
             X_minus = predict_matrix(mm, data_minus)
             dX_j = (X_plus[:, cs:ce] - X_minus[:, cs:ce]) / (2.0 * eps)
         elif order == 2:
-            data_plus = {k: (v + eps if k == variable else v.copy())
-                         for k, v in base_data.items()}
-            data_minus = {k: (v - eps if k == variable else v.copy())
-                          for k, v in base_data.items()}
+            data_plus = {k: (v + eps if k == variable else v.copy()) for k, v in base_data.items()}
+            data_minus = {k: (v - eps if k == variable else v.copy()) for k, v in base_data.items()}
             data_center = base_data
             X_plus = predict_matrix(mm, data_plus)
             X_minus = predict_matrix(mm, data_minus)
@@ -1274,21 +1269,21 @@ def smooth_derivatives(
         lower = deriv_vals - z_crit * se_deriv
         upper = deriv_vals + z_crit * se_deriv
 
-        results.append(DerivativeResult(
-            term=label,
-            x=x_grid,
-            derivative=deriv_vals,
-            se=se_deriv,
-            lower=lower,
-            upper=upper,
-            level=level,
-            order=order,
-        ))
+        results.append(
+            DerivativeResult(
+                term=label,
+                x=x_grid,
+                derivative=deriv_vals,
+                se=se_deriv,
+                lower=lower,
+                upper=upper,
+                level=level,
+                order=order,
+            )
+        )
 
     if not results:
-        raise ValueError(
-            f"No smooth terms found involving variable {variable!r}."
-        )
+        raise ValueError(f"No smooth terms found involving variable {variable!r}.")
 
     return results
 
@@ -1349,9 +1344,9 @@ def marginal_effects(
 ) -> list[MarginalEffectResult]:
     """Compute marginal (partial) effects of a variable.
 
-    Evaluates the smooth term(s) involving *variable* over a grid while holding
-    other variables fixed at their means or at values specified via *at*. This
-    is the ``gratia::smooth_estimates()`` / ``marginaleffects`` equivalent.
+    Evaluates the smooth term(s) involving *variable* over a grid while holding other variables
+    fixed at their means or at values specified via *at*. This is the `gratia::smooth_estimates()` /
+    `marginaleffects` equivalent.
     """
     from whittaker.model_matrix import predict_matrix
 
@@ -1367,9 +1362,7 @@ def marginal_effects(
         W = fit.weights
         if fit.prior_weights is not None and W is None:
             W = fit.prior_weights
-        V_beta = _bayesian_covariance(
-            mm.X, mm.penalties, fit.smoothing_params, fit.scale, W=W
-        )
+        V_beta = _bayesian_covariance(mm.X, mm.penalties, fit.smoothing_params, fit.scale, W=W)
 
     z_crit = norm.ppf(1.0 - (1.0 - level) / 2.0)
 
@@ -1421,22 +1414,22 @@ def marginal_effects(
             lower = effect - z_crit * se_j
             upper = effect + z_crit * se_j
 
-            results.append(MarginalEffectResult(
-                term=label,
-                variable=variable,
-                x=x_grid.copy(),
-                effect=effect,
-                se=se_j,
-                lower=lower,
-                upper=upper,
-                level=level,
-                by_values=at_vals if at_vals else None,
-            ))
+            results.append(
+                MarginalEffectResult(
+                    term=label,
+                    variable=variable,
+                    x=x_grid.copy(),
+                    effect=effect,
+                    se=se_j,
+                    lower=lower,
+                    upper=upper,
+                    level=level,
+                    by_values=at_vals if at_vals else None,
+                )
+            )
 
     if not results:
-        raise ValueError(
-            f"No smooth terms found involving variable {variable!r}."
-        )
+        raise ValueError(f"No smooth terms found involving variable {variable!r}.")
 
     return results
 
@@ -1494,12 +1487,11 @@ def pairwise_comparisons(
 ) -> list[ContrastResult]:
     """Compute pairwise contrasts between conditions.
 
-    Each pair is ``(condition1, condition2)`` where each condition is a dict of
-    covariate values. The contrast is ``f(x | condition1) - f(x | condition2)``
-    evaluated over a grid of the focal *variable*.
+    Each pair is `(condition1, condition2)` where each condition is a dict of covariate values. The
+    contrast is `f(x | condition1) - f(x | condition2)` evaluated over a grid of the focal
+    *variable*.
 
-    This is the ``emmeans``/``marginaleffects::comparisons()`` equivalent for
-    smooth terms.
+    This is the `emmeans`/`marginaleffects::comparisons()` equivalent for smooth terms.
     """
     from whittaker.model_matrix import predict_matrix
 
@@ -1515,9 +1507,7 @@ def pairwise_comparisons(
         W = fit.weights
         if fit.prior_weights is not None and W is None:
             W = fit.prior_weights
-        V_beta = _bayesian_covariance(
-            mm.X, mm.penalties, fit.smoothing_params, fit.scale, W=W
-        )
+        V_beta = _bayesian_covariance(mm.X, mm.penalties, fit.smoothing_params, fit.scale, W=W)
 
     z_crit = norm.ppf(1.0 - (1.0 - level) / 2.0)
 
@@ -1560,15 +1550,17 @@ def pairwise_comparisons(
             cond2_str = ", ".join(f"{k}={v}" for k, v in sorted(cond2.items()))
             comparison_label = f"({cond1_str}) - ({cond2_str})"
 
-            results.append(ContrastResult(
-                term=label_term,
-                x=x_grid.copy(),
-                difference=diff,
-                se=se_diff,
-                lower=lower,
-                upper=upper,
-                level=level,
-                label=comparison_label,
-            ))
+            results.append(
+                ContrastResult(
+                    term=label_term,
+                    x=x_grid.copy(),
+                    difference=diff,
+                    se=se_diff,
+                    lower=lower,
+                    upper=upper,
+                    level=level,
+                    label=comparison_label,
+                )
+            )
 
     return results
