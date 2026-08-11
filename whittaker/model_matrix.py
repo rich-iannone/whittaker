@@ -38,6 +38,7 @@ from whittaker.smooths.duchon import DuchonSpline
 from whittaker.smooths.factor_smooth import FactorSmoothBasis
 from whittaker.smooths.gp import GaussianProcess
 from whittaker.smooths.monotone import ConvexPSpline, MonotonePSpline
+from whittaker.smooths.mrf import MRFBasis
 from whittaker.smooths.pspline import PSpline
 from whittaker.smooths.random import RandomEffectBasis
 from whittaker.smooths.shrinkage import ShrinkageCRS, ShrinkageTPRS
@@ -62,6 +63,7 @@ _BS_REGISTRY: dict[str, type[SmoothBasis]] = {
     "so": SoapFilm,
     "gp": GaussianProcess,
     "ds": DuchonSpline,
+    "mrf": MRFBasis,
     "mpi": MonotonePSpline,
     "mpd": lambda **kw: MonotonePSpline(decreasing=True, **kw),
     "cx": ConvexPSpline,
@@ -109,6 +111,11 @@ def _resolve_basis(term: SmoothTerm) -> SmoothBasis:
         xt = term.extra.get("xt", None)
         if isinstance(xt, str):
             kwargs["cov"] = xt
+    elif term.bs == "mrf":
+        xt = term.extra.get("xt", {})
+        if isinstance(xt, dict):
+            if "neighborhood" in xt:
+                kwargs["neighborhood"] = xt["neighborhood"]
 
     return cls(**kwargs)
 
@@ -546,7 +553,7 @@ def build_model_matrix(
             basis.fit(x_numeric, x_factor)
             basis_mat = basis.basis_matrix(x_numeric, x_factor)
             nsd = basis.null_space_dimension()
-        elif isinstance(basis, RandomEffectBasis):
+        elif isinstance(basis, (RandomEffectBasis, MRFBasis)):
             x = _extract_by_column(data, term.variables[0])
             basis.fit(x)
             basis_mat = basis.basis_matrix(x)
@@ -748,7 +755,7 @@ def predict_matrix(
             x_numeric = _extract_column(new_data, term.variables[0])
             x_factor = _extract_by_column(new_data, term.variables[1])
             basis_mat = info.basis.basis_matrix(x_numeric, x_factor)
-        elif isinstance(info.basis, RandomEffectBasis):
+        elif isinstance(info.basis, (RandomEffectBasis, MRFBasis)):
             x = _extract_by_column(new_data, term.variables[0])
             basis_mat = info.basis.basis_matrix(x)
         elif len(term.variables) == 1:

@@ -194,6 +194,10 @@ class GAM:
         """
         data = prepare_data(data)
         self._data = data
+
+        if hasattr(self._family, "set_data"):
+            self._family.set_data(data)
+
         self._model_matrix = build_model_matrix(self._formula, data, select=select)
 
         pw = None
