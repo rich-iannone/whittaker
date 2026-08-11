@@ -14,7 +14,7 @@ from whittaker.polars_streaming import PolarsGAM, _count_lazy, _to_lazy
 @pytest.fixture
 def sin_df():
     """Polars DataFrame with sin(x) + noise data."""
-    rng = np.random.default_rng(42)
+    rng = np.random.default_rng(23)
     n = 500
     x = np.linspace(0, 2 * np.pi, n)
     y = np.sin(x) + rng.normal(0, 0.2, n)
@@ -30,7 +30,7 @@ def sin_lazy(sin_df):
 @pytest.fixture
 def multi_df():
     """Polars DataFrame with multi-predictor data."""
-    rng = np.random.default_rng(42)
+    rng = np.random.default_rng(23)
     n = 400
     x1 = np.linspace(0, 2 * np.pi, n)
     x2 = rng.uniform(0, 1, n)
@@ -41,7 +41,7 @@ def multi_df():
 @pytest.fixture
 def poisson_df():
     """Polars DataFrame with count data."""
-    rng = np.random.default_rng(42)
+    rng = np.random.default_rng(23)
     n = 400
     x = np.linspace(0, 3, n)
     y = rng.poisson(np.exp(0.5 * x)).astype(float)
@@ -75,7 +75,7 @@ class TestHelpers:
 
     def test_to_lazy_bad_type(self):
         with pytest.raises(TypeError, match="Unsupported"):
-            _to_lazy(42)
+            _to_lazy(23)
 
     def test_count_lazy(self, sin_lazy):
         n = _count_lazy(sin_lazy)
@@ -143,7 +143,7 @@ class TestPolarsGAMPredictions:
 
         new_data = {
             "x1": np.linspace(0, 2 * np.pi, 30),
-            "x2": np.random.default_rng(42).uniform(0, 1, 30),
+            "x2": np.random.default_rng(23).uniform(0, 1, 30),
         }
         pred = model.predict(new_data)
         assert pred.values.shape == (30,)
