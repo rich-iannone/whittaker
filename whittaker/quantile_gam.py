@@ -1,19 +1,17 @@
 """Non-crossing quantile GAM.
 
-Provides `QuantileGAM`, which fits multiple quantile levels simultaneously and
-enforces the non-crossing constraint: for tau_1 < tau_2 < ... < tau_k, the
-fitted quantile curves satisfy q_{tau_1}(x) <= q_{tau_2}(x) <= ... <= q_{tau_k}(x)
-at all observed covariate values.
+Provides `QuantileGAM`, which fits multiple quantile levels simultaneously and enforces the
+non-crossing constraint: for tau_1 < tau_2 < ... < tau_k, the fitted quantile curves satisfy
+q_{tau_1}(x) <= q_{tau_2}(x) <= ... <= q_{tau_k}(x) at all observed covariate values.
 
-The approach fits each quantile via the standard ELF-based PIRLS and then
-projects the fitted values onto the monotone cone (isotonic regression across
-quantile levels at each observation) after each IRLS iteration. This follows
-the "stepwise projection" strategy of Bondell, Reich, & Wang (2010).
+The approach fits each quantile via the standard ELF-based PIRLS and then projects the fitted values
+onto the monotone cone (isotonic regression across quantile levels at each observation) after each
+IRLS iteration. This follows the "stepwise projection" strategy of Bondell, Reich, & Wang (2010).
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 import numpy as np
 from numpy.typing import NDArray
@@ -24,7 +22,7 @@ from whittaker.fitting.pirls import FitResult
 from whittaker.formula.parser import parse
 from whittaker.formula.terms import Formula
 from whittaker.gam import GAM, PredictionResult
-from whittaker.model_matrix import ModelMatrix, build_model_matrix, predict_matrix, predict_offset
+from whittaker.model_matrix import ModelMatrix, build_model_matrix
 
 
 @dataclass
@@ -107,13 +105,13 @@ class QuantileGAM:
     Parameters
     ----------
     formula:
-        Model formula (e.g. ``"y ~ s(x)"``).
+        Model formula (e.g. `"y ~ s(x)"`).
     quantiles:
-        Quantile levels to fit. Must be in ``(0, 1)`` and will be sorted.
+        Quantile levels to fit. Must be in `(0, 1)` and will be sorted.
     sigma:
-        ELF bandwidth for all quantiles. If ``None``, uses ``0.1``.
+        ELF bandwidth for all quantiles. If `None`, uses `0.1`.
     non_crossing:
-        If ``True`` (default), enforce the non-crossing constraint.
+        If `True` (default), enforce the non-crossing constraint.
 
     Examples
     --------
@@ -189,14 +187,14 @@ class QuantileGAM:
         max_iter:
             Number of non-crossing projection iterations. Each iteration
             fits all quantiles and projects to enforce ordering. Ignored
-            when ``non_crossing=False``.
+            when `non_crossing=False`.
         select:
-            If ``True``, enable double-penalty variable selection.
+            If `True`, enable double-penalty variable selection.
 
         Returns
         -------
         QuantileGAM
-            Returns ``self`` for method chaining.
+            Returns `self` for method chaining.
         """
         self._data = prepare_data(data)
 
@@ -216,10 +214,7 @@ class QuantileGAM:
             if not self._non_crossing:
                 break
 
-            fitted = {
-                tau: self._models[tau].predict(self._data).values
-                for tau in self._quantiles
-            }
+            fitted = {tau: self._models[tau].predict(self._data).values for tau in self._quantiles}
 
             if _check_non_crossing(fitted, self._quantiles):
                 break
@@ -273,7 +268,7 @@ class QuantileGAM:
         new_data:
             New covariate data.
         se:
-            If ``True``, include standard errors.
+            If `True`, include standard errors.
 
         Returns
         -------
@@ -323,7 +318,7 @@ class QuantileGAM:
         Returns
         -------
         tuple[NDArray, NDArray]
-            ``(lower, upper)`` prediction bounds.
+            `(lower, upper)` prediction bounds.
         """
         self._check_fitted()
         preds = self.predict(new_data)
@@ -334,13 +329,9 @@ class QuantileGAM:
             upper_tau = self._quantiles[-1]
 
         if lower_tau not in preds:
-            raise ValueError(
-                f"Quantile {lower_tau} not fitted. Available: {self._quantiles}"
-            )
+            raise ValueError(f"Quantile {lower_tau} not fitted. Available: {self._quantiles}")
         if upper_tau not in preds:
-            raise ValueError(
-                f"Quantile {upper_tau} not fitted. Available: {self._quantiles}"
-            )
+            raise ValueError(f"Quantile {upper_tau} not fitted. Available: {self._quantiles}")
 
         return preds[lower_tau].values, preds[upper_tau].values
 
@@ -355,7 +346,7 @@ class QuantileGAM:
         Returns
         -------
         float
-            Fraction of observations within ``[q_low, q_high]``.
+            Fraction of observations within `[q_low, q_high]`.
         """
         self._check_fitted()
         if data is None:
@@ -408,17 +399,12 @@ class QuantileGAM:
         ]
         for tau in self._quantiles:
             m = self._models[tau]
-            lines.append(
-                f"  tau={tau:.2f}: edf={m.edf_total:.1f}, "
-                f"dev={m.deviance:.1f}"
-            )
+            lines.append(f"  tau={tau:.2f}: edf={m.edf_total:.1f}, dev={m.deviance:.1f}")
         return "\n".join(lines)
 
     def _check_fitted(self) -> None:
         if not self._fitted:
-            raise RuntimeError(
-                "This QuantileGAM has not been fitted yet. Call .fit(data) first."
-            )
+            raise RuntimeError("This QuantileGAM has not been fitted yet. Call .fit(data) first.")
 
     def __repr__(self) -> str:
         status = "fitted" if self._fitted else "unfitted"
