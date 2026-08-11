@@ -5,14 +5,13 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from whittaker.families.gaussian import Gaussian
 from whittaker.families.poisson import Poisson
 from whittaker.gam import GAM
 
 
 @pytest.fixture
 def gaussian_model():
-    rng = np.random.default_rng(42)
+    rng = np.random.default_rng(23)
     x = np.linspace(0, 2 * np.pi, 200)
     y = np.sin(x) + rng.normal(0, 0.2, 200)
     data = {"x": x, "y": y}
@@ -23,7 +22,7 @@ def gaussian_model():
 
 @pytest.fixture
 def poisson_model():
-    rng = np.random.default_rng(42)
+    rng = np.random.default_rng(23)
     x = np.linspace(0, 3, 300)
     y = rng.poisson(np.exp(0.5 * x))
     data = {"x": x, "y": y.astype(float)}
@@ -34,7 +33,7 @@ def poisson_model():
 
 @pytest.fixture
 def multi_param_model():
-    rng = np.random.default_rng(42)
+    rng = np.random.default_rng(23)
     n = 300
     x1 = rng.normal(0, 1, n)
     x2 = rng.normal(0, 1, n)
@@ -85,29 +84,29 @@ class TestInfluence:
 class TestQuantileResiduals:
     def test_gaussian_shape(self, gaussian_model):
         model, _ = gaussian_model
-        qr = model.quantile_residuals(seed=42)
+        qr = model.quantile_residuals(seed=23)
         assert qr.shape == (200,)
 
     def test_gaussian_approx_normal(self, gaussian_model):
         model, _ = gaussian_model
-        qr = model.quantile_residuals(seed=42)
+        qr = model.quantile_residuals(seed=23)
         assert abs(np.mean(qr)) < 0.3
         assert abs(np.std(qr) - 1.0) < 0.3
 
     def test_poisson_shape(self, poisson_model):
         model, _ = poisson_model
-        qr = model.quantile_residuals(seed=42)
+        qr = model.quantile_residuals(seed=23)
         assert qr.shape == (300,)
 
     def test_poisson_approx_normal(self, poisson_model):
         model, _ = poisson_model
-        qr = model.quantile_residuals(seed=42)
+        qr = model.quantile_residuals(seed=23)
         assert abs(np.mean(qr)) < 0.5
         assert np.std(qr) > 0.3
 
     def test_finite(self, gaussian_model):
         model, _ = gaussian_model
-        qr = model.quantile_residuals(seed=42)
+        qr = model.quantile_residuals(seed=23)
         assert np.all(np.isfinite(qr))
 
 
@@ -124,7 +123,7 @@ class TestDispersionTest:
         assert result.dispersion > 0
 
     def test_dispersion_near_one_for_poisson(self):
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 1000
         x = np.linspace(0, 2, n)
         mu = np.exp(0.5 * x)
@@ -157,7 +156,7 @@ class TestVIF:
             assert r.vif < 5.0
 
     def test_collinear_vars_high_vif(self):
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 300
         x1 = rng.normal(0, 1, n)
         x2 = x1 + rng.normal(0, 0.01, n)
@@ -169,7 +168,7 @@ class TestVIF:
         assert any(r.vif > 100 for r in results)
 
     def test_single_param_returns_empty(self, gaussian_model):
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 200
         x = rng.normal(0, 1, n)
         y = x + rng.normal(0, 0.5, n)
@@ -200,7 +199,7 @@ class TestExistingDiagnostics:
         assert result.deviance_explained > 0
 
     def test_concurvity_full(self):
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 200
         x1 = np.linspace(0, 2 * np.pi, n)
         x2 = rng.uniform(0, 1, n)
