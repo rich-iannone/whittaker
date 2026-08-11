@@ -3,7 +3,7 @@
 Implements smooths based on Gaussian process covariance functions. The basis is constructed from
 the leading eigenfunctions of the covariance matrix evaluated at training knot locations.
 
-Supported covariance functions (selected via the ``cov`` parameter):
+Supported covariance functions (selected via the `cov=` parameter):
 
 * `"exp"`: exponential (Matérn ν=½): `σ² exp(-r/ρ)`
 * `"matern32"`: Matérn ν=3/2: `σ² (1 + √3 r/ρ) exp(-√3 r/ρ)`

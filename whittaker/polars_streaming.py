@@ -1,14 +1,14 @@
 """Polars streaming GAM fitting.
 
-Provides `PolarsGAM`, a GAM variant that reads data from a Polars LazyFrame
-or file path (CSV/Parquet) and fits the model using discretized basis evaluation
-(same approach as `BigGAM`). Data is processed in chunks via Polars' streaming
-engine, so the full dataset is never fully materialized.
+Provides `PolarsGAM`, a GAM variant that reads data from a Polars LazyFrame or file path
+(CSV/Parquet) and fits the model using discretized basis evaluation (same approach as `BigGAM`).
+Data is processed in chunks via Polars' streaming engine, so the full dataset is never fully
+materialized.
 
-Suitable for datasets in the 1M--100M row range. For even larger datasets
-backed by DuckDB, see :class:`~whittaker.duckdb.DuckDBGAM`.
+Suitable for datasets in the 1M--100M row range. For even larger datasets backed by DuckDB, see
+`~whittaker.duckdb.DuckDBGAM`.
 
-Requires the ``polars`` package (install via ``pip install whittaker[polars]``).
+Requires the `polars` package (install via `pip install whittaker[polars]`).
 """
 
 from __future__ import annotations
@@ -22,7 +22,7 @@ from numpy.typing import NDArray
 from whittaker.bam import BigGAM, build_discretized_model_matrix
 from whittaker.data import InternalData, _to_array
 from whittaker.families.base import Family
-from whittaker.fitting.bam import DiscretizedModelMatrix, bam_fit
+from whittaker.fitting.bam import bam_fit
 from whittaker.formula.terms import Formula
 from whittaker.model_matrix import ModelMatrix
 
@@ -34,8 +34,7 @@ def _import_polars():
         return pl
     except ImportError:
         raise ImportError(
-            "Polars is required for PolarsGAM. "
-            "Install it with: pip install whittaker[polars]"
+            "Polars is required for PolarsGAM. Install it with: pip install whittaker[polars]"
         ) from None
 
 
@@ -90,9 +89,8 @@ def _count_lazy(lf) -> int:
 class PolarsGAM(BigGAM):
     """GAM that reads data from Polars LazyFrames or file paths.
 
-    Data is collected via Polars' streaming engine and the model is fit using
-    discretized basis evaluation (same as `BigGAM`), so the full design matrix
-    is never materialized.
+    Data is collected via Polars' streaming engine and the model is fit using discretized basis
+    evaluation (same as `BigGAM`), so the full design matrix is never materialized.
 
     Parameters
     ----------
@@ -154,21 +152,19 @@ class PolarsGAM(BigGAM):
         Parameters
         ----------
         source:
-            A Polars ``LazyFrame``, ``DataFrame``, or a file path (string or
-            ``Path``) to a Parquet, CSV, IPC, or NDJSON file. File paths are
-            scanned lazily.
+            A Polars `LazyFrame`, `DataFrame`, or a file path (string or `Path`) to a Parquet, CSV,
+            IPC, or NDJSON file. File paths are scanned lazily.
         smoothing_params:
-            Fixed smoothing parameters. If ``None``, selected automatically.
+            Fixed smoothing parameters. If `None`, selected automatically.
         method:
-            Smoothing selection method: ``"fREML"`` (default), ``"REML"``,
-            ``"ML"``, or ``"GCV"``.
+            Smoothing selection method: `"fREML"` (default), `"REML"`, `"ML"`, or `"GCV"`.
         select:
-            If ``True``, enable double-penalty variable selection.
+            If `True`, enable double-penalty variable selection.
 
         Returns
         -------
         PolarsGAM
-            Returns ``self`` for method chaining.
+            Returns `self` for method chaining.
         """
         lf = _to_lazy(source)
         self._n_rows = _count_lazy(lf)

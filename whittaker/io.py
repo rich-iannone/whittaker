@@ -2,9 +2,9 @@
 
 Provides:
 
-- ``save_gam`` / ``load_gam``: Serialize/deserialize a fitted GAM to/from a ``.npz`` archive.
-- ``to_mgcv_dict`` / ``from_mgcv_dict``: Convert between a fitted GAM and an mgcv-compatible
-  dictionary structure (for R interoperability).
+- `save_gam` / `load_gam`: Serialize/deserialize a fitted GAM to/from a `.npz` archive.
+- `to_mgcv_dict` / `from_mgcv_dict`: Convert between a fitted GAM and an mgcv-compatible dictionary
+structure (for R interoperability).
 """
 
 from __future__ import annotations
@@ -222,9 +222,7 @@ def _basis_state(basis: SmoothBasis) -> dict[str, Any]:
     state: dict[str, Any] = {"class": type(basis).__name__}
     for attr in sorted(vars(basis)):
         val = getattr(basis, attr)
-        if isinstance(val, np.ndarray):
-            state[attr] = val
-        elif isinstance(val, (int, float, str, bool, type(None))):
+        if isinstance(val, np.ndarray) or isinstance(val, (int, float, str, bool, type(None))):
             state[attr] = val
         elif isinstance(val, dict):
             state[attr] = {str(k): v for k, v in val.items()}
@@ -302,18 +300,18 @@ def _basis_from_state(state: dict[str, Any]) -> SmoothBasis:
 
 
 def save_gam(model: Any, path: str | Path) -> None:
-    """Save a fitted GAM to a ``.npz`` archive.
+    """Save a fitted GAM to a `.npz` archive.
 
-    The archive contains the formula, family, fitted coefficients, smoothing parameters,
-    penalty matrices, training design matrix, and fitted smooth basis state — everything
-    needed to reconstruct the model for prediction and inference.
+    The archive contains the formula, family, fitted coefficients, smoothing parameters, penalty
+    matrices, training design matrix, and fitted smooth basis state (everything needed to
+    reconstruct the model for prediction and inference).
 
     Parameters
     ----------
     model:
-        A fitted ``GAM`` instance.
+        A fitted `GAM` instance.
     path:
-        Output file path. A ``.npz`` extension is recommended.
+        Output file path. A `.npz` extension is recommended.
     """
     from whittaker.gam import GAM
 
@@ -418,17 +416,17 @@ def save_gam(model: Any, path: str | Path) -> None:
 
 
 def load_gam(path: str | Path) -> Any:
-    """Load a fitted GAM from a ``.npz`` archive created by ``save_gam``.
+    """Load a fitted GAM from a `.npz` archive created by `save_gam`.
 
     Parameters
     ----------
     path:
-        Path to the ``.npz`` file.
+        Path to the `.npz` file.
 
     Returns
     -------
     GAM
-        A fitted ``GAM`` ready for prediction and inference.
+        A fitted `GAM` ready for prediction and inference.
     """
     from whittaker.gam import GAM
 
@@ -465,9 +463,7 @@ def load_gam(path: str | Path) -> Any:
     )
 
     mm_meta = metadata["model_matrix"]
-    n_penalties = sum(
-        len(s["penalty_indices"]) for s in metadata["smooths"]
-    )
+    n_penalties = sum(len(s["penalty_indices"]) for s in metadata["smooths"])
     penalties = [data[f"penalty_{i}"] for i in range(n_penalties)]
 
     smooths = []
@@ -529,19 +525,18 @@ def load_gam(path: str | Path) -> Any:
 def to_mgcv_dict(model: Any) -> dict[str, Any]:
     """Export a fitted GAM as an mgcv-compatible dictionary.
 
-    The resulting dictionary mirrors the structure of an mgcv ``gam`` object in R,
-    making it suitable for JSON export and import by R code.
+    The resulting dictionary mirrors the structure of an mgcv `gam` object in R, making it suitable
+    for JSON export and import by R code.
 
     Parameters
     ----------
     model:
-        A fitted ``GAM`` instance.
+        A fitted `GAM` instance.
 
     Returns
     -------
     dict
-        An mgcv-compatible dictionary with keys like ``coefficients``, ``sp``,
-        ``family``, ``smooth``, etc.
+        An mgcv-compatible dictionary with keys like `coefficients`, `sp`, `family`, `smooth`, etc.
     """
     from whittaker.gam import GAM
 
@@ -639,24 +634,23 @@ def from_mgcv_dict(
     d: dict[str, Any],
     data: dict[str, NDArray] | None = None,
 ) -> Any:
-    """Import an mgcv ``gam`` object exported as a dictionary.
+    """Import an mgcv `gam` object exported as a dictionary.
 
-    This reconstructs a fitted ``GAM`` from an mgcv-compatible dictionary structure. The
-    resulting model can be used for prediction if ``data`` (the original training data) is
-    provided to build the design matrix; otherwise only the coefficients and smoothing
-    parameters are restored.
+    This reconstructs a fitted `GAM` from an mgcv-compatible dictionary structure. The resulting
+    model can be used for prediction if `data` (the original training data) is provided to build the
+    design matrix; otherwise only the coefficients and smoothing parameters are restored.
 
     Parameters
     ----------
     d:
-        An mgcv-compatible dictionary (e.g., from ``jsonlite::toJSON(gam_model)`` in R).
+        An mgcv-compatible dictionary (e.g., from `jsonlite::toJSON(gam_model)` in R).
     data:
-        Training data as ``{name: 1-D array}``. Required for full model reconstruction.
+        Training data as `{name: 1-D array}`. Required for full model reconstruction.
 
     Returns
     -------
     GAM
-        A fitted ``GAM`` instance.
+        A fitted `GAM` instance.
     """
     from whittaker.gam import GAM
     from whittaker.model_matrix import build_model_matrix

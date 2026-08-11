@@ -1125,7 +1125,7 @@ class GAM:
         Returns
         -------
         InfluenceResult
-            Object with ``hat_values`` and ``cooks_distance`` arrays.
+            Object with `hat_values` and `cooks_distance` arrays.
         """
         from whittaker.fitting.inference import influence
 
@@ -1145,7 +1145,7 @@ class GAM:
         Returns
         -------
         NDArray
-            Quantile residuals, shape ``(n,)``.
+            Quantile residuals, shape `(n,)`.
         """
         from whittaker.fitting.inference import quantile_residuals
 
@@ -1158,7 +1158,7 @@ class GAM:
         Returns
         -------
         DispersionTestResult
-            Object with ``dispersion``, ``chi2_stat``, and ``p_value``.
+            Object with `dispersion`, `chi2_stat`, and `p_value`.
         """
         from whittaker.fitting.inference import dispersion_test
 

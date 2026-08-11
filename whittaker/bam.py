@@ -383,7 +383,7 @@ class BigGAM(GAM):
         smoothing_params:
             Fixed smoothing parameters. If `None`, selected automatically.
         method:
-            Smoothing selection method: `"fREML"` (default), `"REML"`, `"ML"`, or `"GCV"``.
+            Smoothing selection method: `"fREML"` (default), `"REML"`, `"ML"`, or `"GCV"`.
         weights:
             Observation weights, shape `(n,)`.
         select:

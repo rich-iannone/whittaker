@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 
 import numpy as np
 from numpy.typing import NDArray
-from scipy.stats import chi2, norm, uniform
+from scipy.stats import chi2, norm
 from scipy.stats import f as f_dist
 from scipy.stats import t as t_dist
 
@@ -938,9 +938,9 @@ class InfluenceResult:
     Attributes
     ----------
     hat_values:
-        Leverage (diagonal of the hat matrix), shape ``(n,)``.
+        Leverage (diagonal of the hat matrix), shape `(n,)`.
     cooks_distance:
-        Cook's distance for each observation, shape ``(n,)``.
+        Cook's distance for each observation, shape `(n,)`.
     """
 
     hat_values: NDArray

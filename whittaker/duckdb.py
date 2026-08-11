@@ -10,23 +10,19 @@ is *n x p* (p basis functions, often p >> d). By streaming the raw data and
 discretizing, memory usage stays roughly *O(n d + grid_size * p)* instead of
 *O(n p)*.
 
-Requires the ``duckdb`` package (install via ``pip install whittaker[duckdb]``).
+Requires the `duckdb` package (install via `pip install whittaker[duckdb]`).
 """
 
 from __future__ import annotations
 
-from typing import Any
-
 import numpy as np
 from numpy.typing import NDArray
 
-from whittaker.bam import build_discretized_model_matrix
+from whittaker.bam import BigGAM, build_discretized_model_matrix
 from whittaker.data import InternalData, _to_array
 from whittaker.families.base import Family
-from whittaker.fitting.bam import DiscretizedModelMatrix, bam_fit
+from whittaker.fitting.bam import bam_fit
 from whittaker.formula.terms import Formula
-from whittaker.bam import BigGAM
-from whittaker.gam import GAM
 from whittaker.model_matrix import ModelMatrix
 
 
@@ -37,8 +33,7 @@ def _import_duckdb():
         return duckdb
     except ImportError:
         raise ImportError(
-            "DuckDB is required for DuckDBGAM. "
-            "Install it with: pip install whittaker[duckdb]"
+            "DuckDB is required for DuckDBGAM. Install it with: pip install whittaker[duckdb]"
         ) from None
 
 
@@ -64,9 +59,7 @@ def _fetch_as_dict(conn, source_query: str) -> InternalData:
     }
 
 
-def _stream_as_dict(
-    conn, source_query: str, chunk_size: int = 100_000
-) -> InternalData:
+def _stream_as_dict(conn, source_query: str, chunk_size: int = 100_000) -> InternalData:
     """Stream a DuckDB query into dict[str, NDArray] via Arrow batches.
 
     Builds the result incrementally so that only one batch is in memory at a
@@ -144,28 +137,27 @@ class DuckDBGAM(BigGAM):
     ) -> DuckDBGAM:
         """Fit the GAM by reading data from DuckDB.
 
-        Data is streamed in Arrow batches of `chunk_size` rows, then
-        discretized and fit using the BigGAM approach.
+        Data is streamed in Arrow batches of `chunk_size` rows, then discretized and fit using the
+        BigGAM approach.
 
         Parameters
         ----------
         source:
-            DuckDB table name or SQL query (e.g. ``"my_table"`` or
-            ``"SELECT * FROM my_table WHERE year > 2020"``).
+            DuckDB table name or SQL query (e.g. `"my_table"` or
+            `"SELECT * FROM my_table WHERE year > 2020"`).
         conn:
-            DuckDB connection object (``duckdb.DuckDBPyConnection``).
+            DuckDB connection object (`duckdb.DuckDBPyConnection`).
         smoothing_params:
-            Fixed smoothing parameters. If ``None``, selected automatically.
+            Fixed smoothing parameters. If `None`, selected automatically.
         method:
-            Smoothing selection method: ``"fREML"`` (default), ``"REML"``,
-            ``"ML"``, or ``"GCV"``.
+            Smoothing selection method: `"fREML"` (default), `"REML"`, `"ML"`, or `"GCV"`.
         select:
-            If ``True``, enable double-penalty variable selection.
+            If `True`, enable double-penalty variable selection.
 
         Returns
         -------
         DuckDBGAM
-            Returns ``self`` for method chaining.
+            Returns `self` for method chaining.
         """
         _import_duckdb()
         self._source = source
@@ -213,7 +205,7 @@ class DuckDBGAM(BigGAM):
     ) -> DuckDBGAM:
         """Convenience method: fit from an explicit SQL query.
 
-        Equivalent to ``fit(query, conn, ...)`` but makes the intent clearer
+        Equivalent to `fit(query, conn, ...)` but makes the intent clearer
         when the source is a query rather than a table name.
         """
         return self.fit(query, conn, **kwargs)
