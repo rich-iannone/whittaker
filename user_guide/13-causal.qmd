@@ -1,0 +1,514 @@
+---
+title: Causal inference
+guide-section: "Advanced features"
+---
+
+```{python}
+#| echo: false
+#| output: false
+import great_docs as gd
+
+gd.enable_tbl_preview(n_head=8, n_tail=3)
+```
+
+Prediction and causal inference are fundamentally different tasks. A prediction model asks "what
+value of $Y$ do we expect given $X$?", while a causal model asks "what would happen to $Y$ if we
+intervened to change $D$?" A model that predicts well can give badly biased causal estimates when
+confounders --- variables that affect both the treatment and the outcome --- are present.
+
+Whittaker's `CausalGAM` combines the flexible nonlinear modeling of GAMs with the
+**double/debiased machine learning** (DML) framework of Chernozhukov et al. (2018) to produce
+valid causal estimates even when the relationship between confounders and outcome is highly
+nonlinear.
+
+## Why prediction is not causation
+
+Consider estimating the effect of a job training program ($D$) on wages ($Y$). Participants
+self-select into training, and the factors driving that selection (education, prior experience) also
+affect wages. A naive regression of $Y$ on $D$ confounds the treatment effect with these selection
+effects.
+
+The core problem is **confounding**: when $X$ causes both $D$ and $Y$, the observed association
+between $D$ and $Y$ mixes the causal effect of $D$ with the indirect path through $X$.
+
+::: {.callout-important}
+## No statistical method can eliminate unmeasured confounding
+The methods on this page require that all confounders are observed and included in the model. This
+is the **unconfoundedness** (or selection-on-observables) assumption. If important confounders are
+omitted, the estimated treatment effect will be biased regardless of how flexible the model is.
+:::
+
+## The partially linear model
+
+`CausalGAM` estimates the **partially linear model**:
+
+$$Y = \theta D + g(X) + \varepsilon$$
+
+where:
+
+- $Y$ is the outcome,
+- $D$ is the treatment (binary or continuous),
+- $X$ is a vector of confounders,
+- $g(X)$ is an unknown smooth function of the confounders (estimated with a GAM),
+- $\theta$ is the **average treatment effect** (ATE) --- the causal parameter of interest,
+- $\varepsilon$ is the error term, assumed to satisfy $E[\varepsilon \mid D, X] = 0$.
+
+The key insight is that $g(X)$ is a **nuisance function**: we need to estimate it to remove
+confounding, but we do not care about its shape. The DML framework ensures that small errors in
+estimating $g$ do not contaminate the estimate of $\theta$.
+
+## The DML framework
+
+Double/debiased machine learning (Chernozhukov et al. 2018) solves two problems that arise when
+using flexible models for causal inference: **regularization bias** and **overfitting bias**.
+
+### Cross-fitted residualization
+
+The DML procedure has three steps:
+
+1. **Residualize the outcome.** Regress $Y$ on $X$ using a GAM and compute residuals:
+   $\tilde{Y} = Y - \hat{g}(X)$.
+
+2. **Residualize the treatment.** Regress $D$ on $X$ using a GAM and compute residuals:
+   $\tilde{D} = D - \hat{m}(X)$.
+
+3. **Estimate $\theta$.** Regress $\tilde{Y}$ on $\tilde{D}$ (OLS on the residuals):
+   $\hat{\theta} = \frac{\sum \tilde{D}_i \tilde{Y}_i}{\sum \tilde{D}_i^2}$.
+
+To avoid overfitting bias, steps 1--2 use **cross-fitting**: the data is split into $K$ folds, and
+the residuals for each fold are computed using a model trained on the remaining $K - 1$ folds. This
+ensures that the residuals are not evaluated on the same data used to fit the nuisance models.
+
+### The orthogonal moment condition
+
+The estimate $\hat{\theta}$ satisfies the **orthogonal moment condition**:
+
+$$\frac{1}{n} \sum_{i=1}^{n} \tilde{D}_i \left( \tilde{Y}_i - \hat{\theta} \tilde{D}_i \right) = 0$$
+
+This moment is "orthogonal" in the sense that it is locally insensitive to small perturbations in
+the nuisance functions $\hat{g}$ and $\hat{m}$. This property --- called **Neyman orthogonality**
+--- is what allows the use of regularized, data-adaptive estimators (like GAMs) for the nuisance
+functions without introducing first-order bias into $\hat{\theta}$.
+
+::: {.callout-note}
+## Why "double" in double machine learning?
+The name refers to the two residualization steps: residualizing both the outcome and the treatment
+against the confounders. The "debiased" part comes from the orthogonal moment condition, which
+removes the bias that would arise from using a single residualization.
+:::
+
+## Average treatment effect (ATE)
+
+The simplest causal question is: "what is the average effect of treatment on the outcome?" This is
+the **average treatment effect** (ATE). Let's estimate it with simulated data where we know the
+true effect.
+
+### Simulating an RCT-like dataset
+
+We generate data from a partially linear model with a known treatment effect of $\theta = 2.0$,
+nonlinear confounding, and a binary treatment whose probability depends on the confounders:
+
+```{python}
+import numpy as np
+import whittaker as wk
+
+# Simulate RCT-like data with known treatment effect
+rng = np.random.default_rng(42)
+n = 1000
+
+# Two confounders
+x1 = rng.normal(0, 1, n)
+x2 = rng.normal(0, 1, n)
+
+# Treatment depends on confounders (selection bias)
+propensity = 1 / (1 + np.exp(-(0.5 * x1 + 0.3 * x2)))
+d = rng.binomial(1, propensity, n).astype(float)
+
+# Outcome: nonlinear confounding + treatment effect of 2.0
+true_theta = 2.0
+g_x = np.sin(2 * x1) + x2**2 - 1  # nonlinear confounder effect
+y = true_theta * d + g_x + rng.normal(0, 0.5, n)
+
+data = {"y": y, "d": d, "x1": x1, "x2": x2}
+```
+
+### Fitting the causal model
+
+```{python}
+# Create and fit a CausalGAM
+causal = wk.CausalGAM(
+    outcome="y",
+    treatment="d",
+    confounders=["x1", "x2"],
+    method="partially_linear",
+    n_folds=5,
+)
+
+causal.fit(data, seed=42)
+```
+
+The `n_folds=5` argument controls the number of cross-fitting folds. More folds reduce overfitting
+bias at the cost of fitting more nuisance models.
+
+### Extracting the treatment effect
+
+```{python}
+# Get the ATE with 95% confidence interval
+te = causal.treatment_effect(level=0.95)
+
+print(f"Estimated ATE: {te.ate:.3f}")
+print(f"Standard error: {te.se:.3f}")
+print(f"95% CI: [{te.ci_lower:.3f}, {te.ci_upper:.3f}]")
+print(f"p-value: {te.p_value:.4f}")
+print(f"True effect: {true_theta}")
+```
+
+The estimated ATE should be close to the true value of 2.0, with a confidence interval that covers
+it. The p-value tests the null hypothesis $H_0: \theta = 0$ (no treatment effect).
+
+### Model summary
+
+The `summary()` method provides a complete overview of the causal analysis:
+
+```{python}
+print(causal.summary())
+```
+
+### Inspecting residuals
+
+The orthogonalized residuals from the cross-fitting procedure can be inspected directly. These
+are the $\tilde{Y}$ and $\tilde{D}$ values used to estimate $\theta$:
+
+```{python}
+import altair as alt
+
+resid_y, resid_d = causal.residuals()
+
+# Plot residualized outcome vs residualized treatment
+resid_data = [
+    {"d_resid": float(resid_d[i]),
+     "y_resid": float(resid_y[i])}
+    for i in range(n)
+]
+
+points = alt.Chart({"values": resid_data}).mark_circle(
+    size=12, opacity=0.3, color="steelblue"
+).encode(
+    x=alt.X("d_resid:Q", title="Residualized treatment (D~)"),
+    y=alt.Y("y_resid:Q", title="Residualized outcome (Y~)"),
+)
+
+# Add the regression line (slope = ATE)
+x_range = np.linspace(float(resid_d.min()),
+                      float(resid_d.max()), 100)
+line_data = [
+    {"d_resid": float(x_range[i]),
+     "y_resid": float(te.ate * x_range[i])}
+    for i in range(len(x_range))
+]
+
+line = alt.Chart({"values": line_data}).mark_line(
+    color="firebrick", strokeWidth=2
+).encode(x="d_resid:Q", y="y_resid:Q")
+
+(points + line).properties(
+    width=550, height=350,
+    title="Orthogonalized residuals: slope = estimated ATE"
+)
+```
+
+The slope of the red line through the residualized data is exactly the estimated ATE. After
+removing the confounders' effects from both $Y$ and $D$, the remaining linear relationship
+captures the causal effect of treatment on outcome.
+
+::: {.callout-tip}
+## Interpreting the residual plot
+A tight linear pattern in the residual plot indicates that the treatment effect is well-identified
+after conditioning on confounders. Nonlinearity or heteroscedasticity in this plot may suggest
+model misspecification or the presence of treatment effect heterogeneity.
+:::
+
+## Conditional average treatment effect (CATE)
+
+The ATE summarizes the treatment effect into a single number, but the effect may vary across
+individuals. The **conditional average treatment effect** (CATE) captures this heterogeneity:
+
+$$\tau(x) = E[Y(1) - Y(0) \mid X = x]$$
+
+where $Y(1)$ and $Y(0)$ are potential outcomes under treatment and control. When $\tau(x)$ varies
+with $x$, we say there is **treatment effect heterogeneity**.
+
+`CausalGAM` estimates the CATE by fitting a smooth function of the covariates to the treatment
+effect surface.
+
+### Simulating heterogeneous effects
+
+We now simulate data where the treatment effect varies with $x_1$:
+
+```{python}
+# Simulate data with heterogeneous treatment effects
+rng = np.random.default_rng(123)
+n = 1200
+
+x1 = rng.uniform(-3, 3, n)
+x2 = rng.normal(0, 1, n)
+
+# Treatment assignment depends on confounders
+propensity = 1 / (1 + np.exp(-(0.4 * x1 - 0.2 * x2)))
+d = rng.binomial(1, propensity, n).astype(float)
+
+# The treatment effect varies with x1: larger effect for positive x1
+true_cate = 1.0 + 1.5 * np.sin(x1)
+g_x = 0.5 * x1**2 + x2
+y = true_cate * d + g_x + rng.normal(0, 0.5, n)
+
+cate_data = {"y": y, "d": d, "x1": x1, "x2": x2}
+```
+
+### Estimating the CATE curve
+
+```{python}
+# Fit the causal model
+causal_het = wk.CausalGAM(
+    outcome="y",
+    treatment="d",
+    confounders=["x1", "x2"],
+    method="interactive",
+    n_folds=5,
+)
+causal_het.fit(cate_data, seed=123)
+
+# Estimate the CATE as a function of x1
+cate_result = causal_het.cate(cate_data, variable="x1", n_points=50, level=0.95)
+```
+
+### Plotting the CATE curve
+
+```{python}
+# Build plot data for estimated CATE
+cate_plot_data = [
+    {"x1": float(cate_result.x[i]),
+     "cate": float(cate_result.cate[i]),
+     "lower": float(cate_result.lower[i]),
+     "upper": float(cate_result.upper[i])}
+    for i in range(len(cate_result.x))
+]
+
+# Build true CATE curve
+x1_grid = np.linspace(-3, 3, 200)
+true_cate_curve = 1.0 + 1.5 * np.sin(x1_grid)
+true_data = [
+    {"x1": float(x1_grid[i]), "true_cate": float(true_cate_curve[i])}
+    for i in range(len(x1_grid))
+]
+
+# Estimated CATE with confidence band
+band = alt.Chart({"values": cate_plot_data}).mark_area(
+    opacity=0.2, color="firebrick"
+).encode(
+    x=alt.X("x1:Q", title="x1"),
+    y=alt.Y("lower:Q", title="Treatment effect"),
+    y2="upper:Q",
+)
+
+cate_line = alt.Chart({"values": cate_plot_data}).mark_line(
+    color="firebrick", strokeWidth=2
+).encode(x="x1:Q", y="cate:Q")
+
+# True CATE
+true_line = alt.Chart({"values": true_data}).mark_line(
+    color="gray", strokeDash=[4, 4], strokeWidth=1.5
+).encode(x="x1:Q", y="true_cate:Q")
+
+(band + cate_line + true_line).properties(
+    width=550, height=350,
+    title="CATE as a function of x1 (estimated vs. true)"
+)
+```
+
+The red curve is the estimated CATE $\hat{\tau}(x_1)$ with its 95% confidence band, and the gray
+dashed line is the true effect $1 + 1.5 \sin(x_1)$. The GAM-based CATE estimator captures the
+nonlinear treatment effect heterogeneity. Regions where the confidence band is wider indicate
+less certainty about the effect --- typically at the edges of the data distribution.
+
+::: {.callout-note}
+## CATE interpretation
+A positive CATE at $x_1 = a$ means the treatment is beneficial (increases $Y$) for individuals
+with $x_1 = a$. A negative CATE means the treatment is harmful. If the confidence band covers
+zero, the effect is not statistically distinguishable from zero at that point.
+:::
+
+## Mediation analysis
+
+Sometimes we want to understand not just whether a treatment affects an outcome, but **how** it
+operates. Mediation analysis decomposes the total effect of $D$ on $Y$ into:
+
+- **Direct effect**: the effect of $D$ on $Y$ that does not pass through the mediator $M$.
+- **Indirect effect**: the effect of $D$ on $Y$ that operates through $M$.
+
+The relationship is: total effect = direct effect + indirect effect.
+
+The **proportion mediated** measures how much of the total effect is explained by the mediator.
+
+### Example: training, skills, and wages
+
+Suppose a training program ($D$) improves wages ($Y$), but part of the effect operates through
+skill acquisition ($M$). We want to know how much of the wage gain is due to improved skills
+versus other channels (signaling, network effects, etc.).
+
+```{python}
+# Simulate mediation data
+rng = np.random.default_rng(99)
+n = 800
+
+x1 = rng.normal(0, 1, n)
+
+# Treatment (binary)
+d = rng.binomial(1, 0.5, n).astype(float)
+
+# Mediator: skills are affected by treatment and confounders
+m = 0.8 * d + 0.5 * x1 + rng.normal(0, 0.3, n)
+
+# Outcome: wages depend on treatment (directly) and mediator
+y = 1.0 * d + 1.5 * m + np.sin(x1) + rng.normal(0, 0.5, n)
+
+med_data = {"y": y, "d": d, "m": m, "x1": x1}
+```
+
+In this simulation:
+
+- The direct effect of $D$ on $Y$ is 1.0.
+- The indirect effect through $M$ is $0.8 \times 1.5 = 1.2$ (treatment increases $M$ by 0.8,
+  and each unit of $M$ increases $Y$ by 1.5).
+- The total effect is $1.0 + 1.2 = 2.2$.
+
+```{python}
+# Run the mediation analysis
+med_result = wk.mediation_analysis(
+    outcome="y",
+    treatment="d",
+    mediator="m",
+    confounders=["x1"],
+    data=med_data,
+    n_simulations=500,
+    seed=42,
+)
+
+print(f"Total effect:         {med_result.total_effect:.3f} (SE: {med_result.total_se:.3f})")
+print(f"Direct effect:        {med_result.direct_effect:.3f} (SE: {med_result.direct_se:.3f})")
+print(f"Indirect effect:      {med_result.indirect_effect:.3f} (SE: {med_result.indirect_se:.3f})")
+print(f"Proportion mediated:  {med_result.proportion_mediated:.3f}")
+```
+
+The results should recover the true effects: a total effect near 2.2, a direct effect near 1.0,
+and an indirect effect near 1.2. The proportion mediated should be approximately $1.2 / 2.2
+\approx 0.55$, indicating that more than half the treatment effect operates through the mediator.
+
+::: {.callout-warning}
+## Mediation requires stronger assumptions
+Beyond unconfoundedness of the treatment, mediation analysis assumes that there are no unmeasured
+confounders of the mediator-outcome relationship. This is a stronger and often harder-to-justify
+assumption. Interpret mediation results with appropriate caution.
+:::
+
+## Practical guidance
+
+### When are causal GAMs appropriate?
+
+`CausalGAM` is well-suited when:
+
+- **Confounders affect the outcome nonlinearly.** Linear adjustment may leave residual confounding
+  if the true $g(X)$ is nonlinear. GAMs handle this automatically.
+- **You have observational data with a clear treatment variable.** The partially linear model
+  is designed for settings where one variable is the "treatment" and the rest are confounders.
+- **The treatment effect is approximately constant or varies smoothly.** The DML framework
+  estimates a single ATE. For heterogeneous effects, the CATE method provides smooth variation,
+  but not arbitrary discontinuities.
+- **Sample sizes are moderate to large.** Cross-fitting requires enough data in each fold to fit
+  good nuisance models. With $K = 5$ folds, each nuisance model is trained on 80% of the data.
+
+### Key assumptions
+
+1. **Unconfoundedness (no unmeasured confounders).** All variables that affect both $D$ and $Y$
+   must be included in the confounders. This is not testable from the data alone and requires
+   domain knowledge to justify.
+
+2. **Overlap (positivity).** For every value of the confounders, there must be a positive
+   probability of receiving both treatment and control. If some confounder values perfectly predict
+   treatment assignment, the effect is not identifiable in that region.
+
+3. **Correct model structure.** The partially linear model assumes that the treatment enters
+   linearly ($\theta D$) while confounders enter nonparametrically ($g(X)$). If the treatment
+   effect is truly heterogeneous, the ATE is still interpretable as an average, but the CATE
+   method is more informative.
+
+::: {.callout-tip}
+## Sensitivity analysis
+Since unconfoundedness cannot be tested, it is good practice to conduct sensitivity analyses:
+how large would an unmeasured confounder need to be to change your conclusions? While Whittaker
+does not yet include built-in sensitivity tools, the treatment effect estimates and standard
+errors provide the raw materials for manual sensitivity bounds (e.g., Rosenbaum bounds or the
+E-value approach).
+:::
+
+### Choosing the number of folds
+
+The `n_folds` parameter controls the bias-variance trade-off in cross-fitting:
+
+| Folds | Training fraction | Behavior |
+|-------|-------------------|----------|
+| 2 | 50% | More bias from weaker nuisance models |
+| 5 | 80% | Good default; balances bias and variance |
+| 10 | 90% | Less bias, but more computation |
+
+Five folds is the default and works well in most settings. Increase to 10 if you have a large
+dataset and want to minimize finite-sample bias.
+
+### Comparison with naive regression
+
+To illustrate the value of the DML approach, consider what happens when we ignore confounding:
+
+```{python}
+# Naive estimate: regress y on d without adjusting for confounders
+# Using the ATE simulation data from above
+rng = np.random.default_rng(42)
+n = 1000
+
+x1 = rng.normal(0, 1, n)
+x2 = rng.normal(0, 1, n)
+propensity = 1 / (1 + np.exp(-(0.5 * x1 + 0.3 * x2)))
+d = rng.binomial(1, propensity, n).astype(float)
+true_theta = 2.0
+g_x = np.sin(2 * x1) + x2**2 - 1
+y = true_theta * d + g_x + rng.normal(0, 0.5, n)
+
+# Naive difference in means
+naive_ate = y[d == 1].mean() - y[d == 0].mean()
+
+# DML estimate
+causal_check = wk.CausalGAM(
+    outcome="y",
+    treatment="d",
+    confounders=["x1", "x2"],
+    method="partially_linear",
+    n_folds=5,
+)
+causal_check.fit({"y": y, "d": d, "x1": x1, "x2": x2}, seed=42)
+dml_ate = causal_check.treatment_effect().ate
+
+print(f"True ATE:       {true_theta:.3f}")
+print(f"Naive estimate: {naive_ate:.3f}")
+print(f"DML estimate:   {dml_ate:.3f}")
+```
+
+The naive difference-in-means estimate is biased because treated individuals tend to have
+confounder values that are associated with higher outcomes. The DML estimator removes this
+confounding and recovers the true effect.
+
+## References
+
+- Chernozhukov, V., Chetverikov, D., Demirer, M., Duflo, E., Hansen, C., Newey, W., & Robins,
+  J. (2018). Double/debiased machine learning for treatment and structural parameters.
+  *The Econometrics Journal*, 21(1), C1--C68.
+- Robinson, P. M. (1988). Root-n-consistent semiparametric regression. *Econometrica*, 56(4),
+  931--954.

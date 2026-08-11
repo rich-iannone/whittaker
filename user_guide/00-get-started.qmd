@@ -3,37 +3,81 @@ title: Get started
 guide-section: "Getting started"
 ---
 
-Whittaker brings the full power of Generalized Additive Models (GAMs) to Python. It is built
-on [Narwhals](https://narwhals-dev.github.io/narwhals/) for backend-agnostic compute, follows
-the mathematical framework of Wood's `mgcv` (the R gold standard), and is visualized with
-[Altair](https://altair-viz.github.io/).
+```{python}
+#| echo: false
+#| output: false
+import great_docs as gd
+
+gd.enable_tbl_preview(n_head=8, n_tail=3)
+```
+
+Whittaker brings the full power of Generalized Additive Models (GAMs) to Python. It is built on
+NumPy and SciPy, follows the mathematical framework of Wood's `mgcv` (the gold standard for GAMs in
+R), and provides a formula-based interface that makes specifying even complex models a one-liner.
+
+A GAM extends a linear model by replacing one or more linear terms $\beta x$ with smooth functions
+$f(x)$ whose shape is learned from the data:
+
+$$y = \beta_0 + f_1(x_1) + f_2(x_2) + \cdots + \varepsilon$$
+
+The smoothness of each $f_j$ is controlled automatically by penalized likelihood (REML or GCV), so
+you specify what to model, not how wiggly it should be.
 
 ## The pipeline
 
 Every Whittaker analysis follows a consistent workflow:
 
 1. **Specify the model**: write a formula string like `"y ~ s(x1) + s(x2)"` or build terms
-   programmatically with `s()`, `te()`, and `ti()`.
-2. **Fit**: call `model.fit(data)`. Smoothness parameters are estimated automatically by
-   REML unless you specify otherwise.
-3. **Summarize**: `model.summary()` reports effective degrees of freedom, approximate
-   p-values, and smoothing parameters for every term.
-4. **Check**: `model.check()` runs basis dimension adequacy tests and plots residual
-   diagnostics.
-5. **Predict**: `model.predict(new_data)` returns fitted values on the response scale,
-   with optional standard errors or term-level contributions.
-6. **Visualize**: `model.plot()` produces partial-effect plots with confidence bands for
-   every smooth term.
+   programmatically.
+2. **Fit**: call `model.fit(data)`. Smoothing parameters are estimated automatically by REML unless
+   you specify otherwise.
+3. **Summarize**: `model.summary()` reports effective degrees of freedom, approximate p-values, and
+   smoothing parameters for every term.
+4. **Check**: `model.check()` runs basis dimension adequacy tests and produces residual diagnostics.
+5. **Predict**: `model.predict(new_data)` returns fitted values on the response scale, with optional
+   standard errors or term-level contributions.
+
+## What Whittaker provides
+
+Beyond the core GAM, Whittaker includes a broad set of tools for modern statistical modeling:
+
+- **14 response families** including Gaussian, Poisson, Binomial, Gamma, Negative Binomial, Beta,
+  Tweedie, Inverse Gaussian, Cox PH, and more
+- **20+ smooth basis types** including thin plate regression splines (TPRS), P-splines, cubic
+  regression splines, tensor products, cyclic splines, random effects, soap film smooths, Gaussian
+  processes, and Markov random fields
+- **Shape constraints**: monotone increasing/decreasing, convex, and concave smooths
+- **Distributional regression** (GAMLSS): model location, scale, and shape parameters simultaneously
+- **Quantile regression** with non-crossing constraints
+- **Conformal prediction** for distribution-free prediction intervals
+- **Causal inference** via double/debiased machine learning
+- **Streaming/online fitting** for data that arrives in batches
+- **Multi-response GAMs** for jointly modeling multiple outcomes
+- **Functional regression** for scalar-on-function models
+- **Large dataset support** via BigGAM, PolarsGAM, and DuckDBGAM
+- **scikit-learn integration** for use in ML pipelines
 
 ## How this guide is organized
 
 The user guide walks through each part of the pipeline in depth:
 
-- **Installation**: how to get Whittaker and its optional extras.
-- **Quick start**: a complete example from raw data to a fitted model and plot.
-- **Smooth terms**: the full catalog of basis types and how to choose among them.
-- **Response families**: Gaussian, Poisson, Binomial, and more.
-- **Model fitting**: the P-IRLS algorithm, smoothness selection, and convergence.
-- **Prediction and inference**: point estimates, standard errors, and confidence bands.
-- **Model diagnostics**: how to check that your model is adequate.
-- **Data input**: how Whittaker uses Narwhals to accept any dataframe library.
+- **[Installation](01-installation.qmd)**: how to install Whittaker.
+- **[Quick start](02-quick-start.qmd)**: a complete example from raw data to a fitted model.
+- **[Smooth terms](03-smooths.qmd)**: the full catalog of basis types and how to choose among them.
+- **[Response families](04-families.qmd)**: Gaussian, Poisson, Binomial, and more.
+- **[Model fitting](05-fitting.qmd)**: the P-IRLS algorithm, smoothness selection, and convergence.
+- **[Prediction and inference](06-prediction.qmd)**: point estimates, standard errors, and
+  confidence bands.
+- **[Model diagnostics](07-diagnostics.qmd)**: how to check that your model is adequate.
+- **[Data input](08-data-input.qmd)**: how Whittaker accepts dict-based data.
+- **[Shape constraints](09-shape-constraints.qmd)**: monotone, convex, and concave smooths.
+- **[Distributional regression](10-gamlss.qmd)**: GAMLSS for location-scale-shape models.
+- **[Quantile regression](11-quantile.qmd)**: quantile GAMs with non-crossing constraints.
+- **[Conformal prediction](12-conformal.qmd)**: distribution-free prediction intervals.
+- **[Causal inference](13-causal.qmd)**: causal GAMs via double machine learning.
+- **[Streaming and online fitting](14-streaming.qmd)**: incremental GAM fitting.
+- **[Multi-response models](15-multi-response.qmd)**: jointly modeling multiple outcomes.
+- **[Functional regression](16-functional.qmd)**: scalar-on-function regression.
+- **[Cross-validation](17-cross-validation.qmd)**: K-fold cross-validation for GAMs.
+- **[Large datasets](18-large-datasets.qmd)**: BigGAM, PolarsGAM, and DuckDBGAM.
+- **[Serialization](19-serialization.qmd)**: saving and loading fitted models.

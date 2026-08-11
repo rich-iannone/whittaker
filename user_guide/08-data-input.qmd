@@ -3,68 +3,167 @@ title: Data input
 guide-section: "Results"
 ---
 
-Whittaker uses [Narwhals](https://narwhals-dev.github.io/narwhals/) to accept any DataFrame library
-without coupling the package to a specific backend.
+```{python}
+#| echo: false
+#| output: false
+import great_docs as gd
 
-## Supported backends
+gd.enable_tbl_preview(n_head=8, n_tail=3)
+```
 
-Any DataFrame that Narwhals supports works directly with `model.fit()` and `model.predict()`:
+Whittaker accepts data as a Python dictionary mapping column names to 1-D NumPy arrays. This is the
+simplest and most portable data format. It works with any data source and avoids coupling the
+library to a specific DataFrame backend.
 
-| Library | Install |
-|---|---|
-| [Polars](https://pola.rs/) | `pip install "whittaker[pl]"` |
-| [Pandas](https://pandas.pydata.org/) | `pip install "whittaker[pd]"` |
-| [PyArrow](https://arrow.apache.org/docs/python/) | `pip install "whittaker[pa]"` |
-| [Modin](https://modin.readthedocs.io/) | no extra needed (Narwhals detects it) |
-| [cuDF](https://docs.rapids.ai/api/cudf/stable/) | no extra needed |
+## The data dictionary
 
-## Usage example
+Every `fit()` and `predict()` call expects a dictionary where keys are column names (strings) and
+values are 1-D NumPy arrays of the same length.
 
-```python
-import polars as pl
-import pandas as pd
+```{python}
+import numpy as np
 import whittaker as wk
 
-# Works with Polars
-data_pl = pl.read_csv("data.csv")
-model.fit(data_pl)
+# The data dictionary: one key per column, one array per key
+data = {
+    "x1": np.linspace(0, 2 * np.pi, 100),
+    "x2": np.random.default_rng(42).uniform(0, 1, 100),
+    "y": np.sin(np.linspace(0, 2 * np.pi, 100)) + np.random.default_rng(42).normal(0, 0.3, 100),
+}
 
-# Works with Pandas (same call, same result)
-data_pd = pd.read_csv("data.csv")
-model.fit(data_pd)
+# Fit a model (the formula references keys from the dictionary)
+model = wk.GAM("y ~ s(x1) + s(x2)")
+model.fit(data, method="REML")
+
+print(f"Fitted with {len(data['y'])} observations")
 ```
 
-## Output format
+Every column referenced in the formula must be present in the dictionary. Extra columns are ignored.
 
-Predictions and other tabular outputs use the same DataFrame type as the input by default. Pass
-`format=` to override:
+## Converting from DataFrames
 
-```python
-preds = model.predict(data_pd, format="polars")   # always get a Polars frame
-preds = model.predict(data_pl, format="pandas")   # always get a Pandas frame
+If your data is in a Polars or Pandas DataFrame, convert it to a dictionary before passing it to
+Whittaker.
+
+### From Polars
+
+```{python}
+import polars as pl
+
+# Create a Polars DataFrame
+df_pl = pl.DataFrame({
+    "x": np.linspace(0, 2 * np.pi, 100),
+    "y": np.sin(np.linspace(0, 2 * np.pi, 100)) + np.random.default_rng(42).normal(0, 0.3, 100),
+})
+
+# Convert to a dict of NumPy arrays
+data_from_polars = {col: df_pl[col].to_numpy() for col in df_pl.columns}
+
+# Fit the model
+model = wk.GAM("y ~ s(x)")
+model.fit(data_from_polars, method="REML")
+print(f"Fitted from Polars: EDF = {model.edf_total:.1f}")
 ```
 
-## Narwhals internals
+### From Pandas
 
-Internally Whittaker converts your frame to a Narwhals frame with `nw.from_native()`, extracts the
-required columns, and converts to NumPy arrays for computation. The conversion is zero-copy for
-Polars and Arrow-backed frames.
+```{python}
+import pandas as pd
 
-```python
-import narwhals as nw
+# Create a Pandas DataFrame
+df_pd = pd.DataFrame({
+    "x": np.linspace(0, 2 * np.pi, 100),
+    "y": np.sin(np.linspace(0, 2 * np.pi, 100)) + np.random.default_rng(42).normal(0, 0.3, 100),
+})
 
-df = nw.from_native(your_dataframe)       # accepts any supported backend
-arr = df["x"].to_numpy()                  # zero-copy for Polars/Arrow
+# Convert to a dict of NumPy arrays
+data_from_pandas = {col: df_pd[col].to_numpy() for col in df_pd.columns}
+
+# Fit the model
+model = wk.GAM("y ~ s(x)")
+model.fit(data_from_pandas, method="REML")
+print(f"Fitted from Pandas: EDF = {model.edf_total:.1f}")
+```
+
+::: {.callout-tip}
+## Zero-copy conversion
+
+For Polars DataFrames backed by Arrow arrays, `to_numpy()` is often zero-copy, so no data is
+duplicated. For Pandas with NumPy-backed columns, `to_numpy()` returns a view of the underlying
+array. This means conversion is essentially free for typical numerical data.
+:::
+
+## Prediction data
+
+The `predict()` method accepts the same dictionary format. You only need to include the covariate
+columns; the response column is not required for prediction.
+
+```{python}
+# Predict on new data (only covariate columns are needed)
+new_data = {"x": np.linspace(0, 2 * np.pi, 50)}
+
+preds = model.predict(new_data)
+print(f"Predictions shape: {preds.values.shape}")
 ```
 
 ## Missing values
 
-GAMs do not support missing values in model predictors. Whittaker raises a clear error at fit time:
+GAMs do not support missing values in model covariates. If your data contains `NaN` values, Whittaker
+will raise an error at fit time. Remove or impute missing values before fitting.
 
+```{python}
+# Example: cleaning missing values before fitting
+rng = np.random.default_rng(42)
+x_with_nans = np.array([1.0, 2.0, np.nan, 4.0, 5.0, np.nan, 7.0, 8.0, 9.0, 10.0])
+y_with_nans = np.sin(x_with_nans)
+
+# Drop rows with NaN in any column
+mask = np.isfinite(x_with_nans) & np.isfinite(y_with_nans)
+clean_data = {
+    "x": x_with_nans[mask],
+    "y": y_with_nans[mask],
+}
+
+print(f"Original: {len(x_with_nans)} rows")
+print(f"After cleaning: {len(clean_data['x'])} rows")
 ```
-WhittakerError: Cannot fit model: column 'x1' contains 3 null values.
 
-Options:
-  1. Drop rows with nulls:   data.drop_nulls(["x1"])
-  2. Set na_action="exclude" to drop and reindex predictions automatically.
+## Data types
+
+All values are converted to `float64` internally. Integer arrays, boolean arrays, and other numeric
+types are converted automatically. Non-numeric data (strings, objects) cannot be used directly;
+encode categorical variables as numeric indicators before passing them to Whittaker.
+
+```{python}
+# Integer data is converted to float automatically
+data_int = {
+    "x": np.arange(50),
+    "y": np.random.default_rng(42).poisson(3, 50).astype(float),
+}
+
+model = wk.GAM("y ~ s(x)", family=wk.Poisson())
+model.fit(data_int, method="REML")
+print(f"Fitted with integer covariates: EDF = {model.edf_total:.1f}")
+```
+
+## Functional covariates
+
+For [functional regression](16-functional.qmd), functional covariates are passed as 2-D arrays in
+the data dictionary. Each row is one observation's curve, and each column is one grid point along the
+functional domain.
+
+```{python}
+# Functional covariate: each row is a curve observed at 50 grid points
+rng = np.random.default_rng(42)
+n, T = 100, 50
+X_func = rng.normal(0, 1, (n, T)).cumsum(axis=1) / np.sqrt(T)
+
+# The data dict can mix 1-D (scalar) and 2-D (functional) arrays
+data_func = {
+    "curves": X_func,        # shape (100, 50), functional covariate
+    "y": rng.normal(0, 1, n),  # shape (100,), scalar response
+}
+
+print(f"Functional covariate shape: {data_func['curves'].shape}")
+print(f"Response shape: {data_func['y'].shape}")
 ```

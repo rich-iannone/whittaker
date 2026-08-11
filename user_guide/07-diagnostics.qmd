@@ -3,74 +3,276 @@ title: Model diagnostics
 guide-section: "Results"
 ---
 
-Always run `model.check()` after fitting. GAMs can fail silently when a basis dimension is too small
-or when the data contain structure the smoother cannot capture.
+```{python}
+#| echo: false
+#| output: false
+import great_docs as gd
 
-## `model.check()`
-
-```python
-model.check()
+gd.enable_tbl_preview(n_head=8, n_tail=3)
 ```
 
-`check()` produces four pieces of output:
+Always check your model after fitting. GAMs can fail silently when a basis dimension is too small,
+when the data contain structure the smoother cannot capture, or when the distributional assumptions
+are wrong. This page covers the diagnostic tools Whittaker provides.
 
-1. **Basis dimension adequacy**: for each smooth term, reports the k-index and an approximate
-p-value. A k-index below 1 with a significant p-value indicates that the basis dimension is too
-small. Re-fit with a larger `k`.
-2. **Convergence**: reports the number of P-IRLS iterations and whether the algorithm converged
-within the tolerance.
-3. **Residual plots**: four-panel figure: QQ plot, residuals vs. fitted, histogram of residuals, and
-response vs. fitted.
+## A model to diagnose
 
-## Residuals
+We start by fitting a model to data with a known structure, so we can verify that the diagnostics
+behave sensibly.
 
-```python
-model.residuals()                      # deviance residuals (default)
-model.residuals(type="pearson")        # Pearson residuals
-model.residuals(type="response")       # y - fitted (on response scale)
-model.residuals(type="working")        # from the final IRLS pseudo-data
+```{python}
+import numpy as np
+import whittaker as wk
+
+# Generate data: sin(x) + noise
+rng = np.random.default_rng(42)
+n = 300
+x = np.linspace(0, 2 * np.pi, n)
+y = np.sin(x) + rng.normal(0, 0.3, n)
+
+# Fit with default settings
+model = wk.GAM("y ~ s(x)")
+model.fit({"x": x, "y": y}, method="REML")
+
+print(model.summary())
 ```
 
-For Gaussian models with an identity link, all residual types are equivalent to the raw
-residuals $y - \hat\mu$.
+## Model summary
 
-## Summary output
+The `summary()` method is the first thing to inspect. It reports:
 
-```python
-model.summary()
+- **Effective degrees of freedom (EDF)** for each smooth term. An EDF near 1 means the smooth is
+  approximately linear. An EDF close to $k - 1$ (the maximum) suggests the basis may be too small.
+- **Deviance explained**: the proportion of null deviance accounted for by the model, analogous to
+  $R^2$ in linear regression.
+- **Scale estimate** $\hat\phi$: for Gaussian models, this is the estimated residual variance
+  $\hat\sigma^2$.
+
+```{python}
+# Access individual fit statistics
+print(f"EDF total:         {model.edf_total:.1f}")
+print(f"Scale (sigma^2):   {model.scale:.4f}")
+print(f"Deviance:          {model.deviance:.2f}")
 ```
 
-The summary table contains:
+## Basis dimension adequacy
 
-- **Parametric coefficients**: estimate, standard error, z-statistic, p-value for each linear term.
-- **Approximate significance of smooth terms**: reference df, EDF, test statistic, and p-value for
-each smooth.
-- **Model-level statistics**: deviance explained, adjusted R², GCV score, scale estimate
-($\hat\phi$), $n$.
+The basis dimension $k$ sets the maximum complexity of each smooth. If $k$ is too small, the model
+cannot capture the true function shape. The `check()` method runs a basis dimension adequacy test
+(the k-index test) for each smooth term.
 
-The EDF (effective degrees of freedom) measures how much of the maximum complexity the smoothness
-selection actually used. An EDF near 1 means the smooth is nearly linear. An EDF near `k-1` (or `k`)
-suggests the basis may be too small.
+```{python}
+# Run the check
+check_result = model.check()
+print(check_result)
+```
 
-## Basis dimension test (k-index)
+The k-index is based on the ratio of the residual variance estimated from neighboring residuals to
+the overall residual variance. A k-index below 1 with a significant p-value is a warning that the
+basis dimension may be too small.
 
-The k-index is based on the ratio of the mean square of the first differences of the residuals to
-their variance. Values below 1 suggest inadequate basis dimension. Re-fit with a larger `k` if this
-test is significant:
+::: {.callout-note}
+## When to increase k
+
+If `check()` reports a k-index below 1 with a significant p-value, re-fit with a larger `k`:
 
 ```python
-# Increase k and re-check
 model2 = wk.GAM("y ~ s(x, k=20)")
-model2.fit(data)
+model2.fit(data, method="REML")
 model2.check()
 ```
 
-## Plotting
+Keep increasing `k` until the k-index test is no longer significant. The smoothing parameter
+selection (REML) will prevent overfitting even with a large `k`; the penalty shrinks away
+unnecessary complexity.
+:::
 
-```python
-model.plot()             # partial-effect plots for all smooth terms
-model.plot("s(x1)")     # a specific term
+## Residual analysis
+
+Residuals are the primary tool for checking distributional assumptions. For Gaussian models, well-
+behaved residuals should be approximately normal with constant variance.
+
+```{python}
+# Deviance residuals (default)
+resids = model.residuals
+
+print(f"Residual shape: {resids.shape}")
+print(f"Mean:           {resids.mean():.4f}")
+print(f"Std:            {resids.std():.4f}")
 ```
 
-Each panel shows the estimated function $\hat{f}_j(x_j)$ centered at zero, with a 95% pointwise
-confidence band and a rug of observed covariate values along the x-axis.
+### Residuals vs. fitted values
+
+Plotting residuals against fitted values checks the constant-variance assumption. The plot should
+show no systematic pattern, just a random scatter around zero.
+
+```{python}
+import altair as alt
+
+# Get fitted values and residuals
+fitted = model.fitted_values
+resids = model.residuals
+
+# Build the plot data
+resid_data = [
+    {"fitted": float(fitted[i]), "residual": float(resids[i])}
+    for i in range(len(fitted))
+]
+
+alt.Chart({"values": resid_data}).mark_circle(
+    size=15, opacity=0.4, color="steelblue"
+).encode(
+    x=alt.X("fitted:Q", title="Fitted values"),
+    y=alt.Y("residual:Q", title="Deviance residuals"),
+).properties(
+    width=500, height=300,
+    title="Residuals vs. fitted values"
+) + alt.Chart({"values": [{"y": 0}]}).mark_rule(
+    color="firebrick", strokeDash=[4, 4]
+).encode(y="y:Q")
+```
+
+A funnel shape (variance increasing with fitted values) suggests a non-constant variance and may
+indicate that a different family or link function is needed.
+
+### QQ plot of residuals
+
+A quantile-quantile plot compares the distribution of residuals against a theoretical normal
+distribution. Points should fall close to the diagonal line.
+
+```{python}
+# Compute theoretical and sample quantiles for QQ plot
+sorted_resids = np.sort(resids)
+n_resids = len(sorted_resids)
+theoretical = np.array([
+    float(x) for x in np.quantile(
+        rng.normal(0, 1, 10000),
+        np.linspace(0.5 / n_resids, 1 - 0.5 / n_resids, n_resids)
+    )
+])
+
+qq_data = [
+    {"theoretical": float(theoretical[i]), "sample": float(sorted_resids[i])}
+    for i in range(n_resids)
+]
+
+# QQ points
+qq_points = alt.Chart({"values": qq_data}).mark_circle(
+    size=15, opacity=0.4, color="steelblue"
+).encode(
+    x=alt.X("theoretical:Q", title="Theoretical quantiles"),
+    y=alt.Y("sample:Q", title="Sample quantiles"),
+)
+
+# Reference line
+ref_min = min(theoretical.min(), sorted_resids.min())
+ref_max = max(theoretical.max(), sorted_resids.max())
+ref_data = [{"x": float(ref_min), "y": float(ref_min)}, {"x": float(ref_max), "y": float(ref_max)}]
+ref_line = alt.Chart({"values": ref_data}).mark_line(
+    color="firebrick", strokeDash=[4, 4]
+).encode(x="x:Q", y="y:Q")
+
+(qq_points + ref_line).properties(
+    width=400, height=400,
+    title="Normal QQ plot of residuals"
+)
+```
+
+Systematic departures from the line indicate non-normality. Heavy tails (S-shaped departures)
+suggest a heavier-tailed family might be more appropriate.
+
+### Histogram of residuals
+
+```{python}
+# Histogram of deviance residuals
+hist_data = [{"residual": float(r)} for r in resids]
+
+alt.Chart({"values": hist_data}).mark_bar(
+    opacity=0.7, color="steelblue"
+).encode(
+    x=alt.X("residual:Q", bin=alt.Bin(maxbins=30), title="Deviance residuals"),
+    y=alt.Y("count():Q", title="Frequency"),
+).properties(
+    width=500, height=250,
+    title="Distribution of residuals"
+)
+```
+
+## Diagnosing an inadequate model
+
+To illustrate what diagnostics look like when something is wrong, let's deliberately under-fit by
+using too few basis functions for a complex signal.
+
+```{python}
+# Generate data with high-frequency oscillation
+rng = np.random.default_rng(42)
+n = 300
+x = np.linspace(0, 4 * np.pi, n)
+y = np.sin(x) + 0.5 * np.sin(3 * x) + rng.normal(0, 0.3, n)
+
+# Fit with k=5 (too few basis functions for this signal)
+model_bad = wk.GAM("y ~ s(x, k=5)")
+model_bad.fit({"x": x, "y": y}, method="REML")
+
+# Check: the k-index should flag the problem
+check_bad = model_bad.check()
+print(check_bad)
+```
+
+```{python}
+# Re-fit with more basis functions
+model_good = wk.GAM("y ~ s(x, k=20)")
+model_good.fit({"x": x, "y": y}, method="REML")
+
+# The check should now pass
+check_good = model_good.check()
+print(check_good)
+```
+
+```{python}
+# Compare fits visually
+x_plot = np.linspace(0, 4 * np.pi, 300)
+pred_bad = model_bad.predict({"x": x_plot})
+pred_good = model_good.predict({"x": x_plot})
+true_vals = np.sin(x_plot) + 0.5 * np.sin(3 * x_plot)
+
+# Build plot data
+plot_data = []
+for i in range(len(x_plot)):
+    plot_data.append({"x": float(x_plot[i]), "y": float(pred_bad.values[i]), "model": "k=5 (underfit)"})
+    plot_data.append({"x": float(x_plot[i]), "y": float(pred_good.values[i]), "model": "k=20 (adequate)"})
+    plot_data.append({"x": float(x_plot[i]), "y": float(true_vals[i]), "model": "Truth"})
+
+alt.Chart({"values": plot_data}).mark_line().encode(
+    x=alt.X("x:Q"),
+    y=alt.Y("y:Q"),
+    color=alt.Color("model:N", title="Model"),
+    strokeDash=alt.condition(
+        alt.datum.model == "Truth",
+        alt.value([4, 4]),
+        alt.value([0])
+    ),
+).properties(width=600, height=300, title="Effect of basis dimension on fit quality")
+```
+
+The underfit model (k=5) misses the high-frequency component entirely, while k=20 captures both
+sine components. The `check()` method correctly flagged the k=5 model.
+
+## Practical diagnostic workflow
+
+A good diagnostic workflow after fitting any GAM:
+
+1. **`model.summary()`**: check that EDF values make sense, deviance explained is reasonable
+2. **`model.check()`**: verify basis dimensions are adequate (k-index test)
+3. **Residuals vs. fitted**: check for patterns indicating wrong family or missing terms
+4. **QQ plot**: check the distributional assumption
+5. **If any diagnostic fails**: consider increasing `k`, changing the family, adding terms, or
+   restructuring the model
+
+::: {.callout-tip}
+## The most common fix
+
+The most common diagnostic issue is an inadequate basis dimension. REML will never overfit even with
+a generous `k`, so it is always safe to increase `k`. Start with the default (10), check, and
+double if the k-index test is significant. Repeat until the test passes.
+:::

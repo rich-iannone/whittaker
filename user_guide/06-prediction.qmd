@@ -1,72 +1,637 @@
 ---
-title: Prediction and inference
+title: "Prediction and inference"
 guide-section: "Results"
 ---
 
-After fitting, `model.predict()` generates predictions for new covariate values.
+```{python}
+#| echo: false
+#| output: false
+import great_docs as gd
 
-## Point predictions
-
-```python
-preds = model.predict(new_data)
+gd.enable_tbl_preview(n_head=8, n_tail=3)
 ```
 
-By default, predictions are on the **response scale** (after applying the inverse link). Use `type=`
-to change the scale:
+After fitting a GAM, the next step is to generate predictions and quantify uncertainty. This page
+covers point predictions, standard errors, confidence intervals, term-level decompositions,
+residuals, and how link functions affect interpretation for non-Gaussian models.
 
-| `type=` | Returns |
-|---|---|
-| `"response"` | $\hat\mu = g^{-1}(\hat\eta)$: fitted values on the response scale (default) |
-| `"link"` | $\hat\eta = X\hat\beta$: fitted values on the linear predictor scale |
-| `"terms"` | A frame with one column per model term, showing each term's contribution to $\hat\eta$ |
+## Point predictions on the response scale
 
-```python
-# On the linear predictor scale
+The `predict()` method generates predictions for new covariate values. By default, predictions are on
+the **response scale** -- meaning the inverse link function has already been applied:
+
+$$\hat\mu = g^{-1}(\hat\eta) = g^{-1}(X_{\text{new}} \hat\beta)$$
+
+For Gaussian models with the identity link, this reduces to $\hat\mu = X_{\text{new}} \hat\beta$. For
+Poisson models with the log link, predictions are exponentiated counts. For binomial models with the
+logit link, predictions are probabilities.
+
+```{python}
+import numpy as np
+import whittaker as wk
+
+# Generate data from a noisy sine curve
+rng = np.random.default_rng(42)
+n = 200
+x = np.linspace(0, 2 * np.pi, n)
+y = np.sin(x) + rng.normal(0, 0.3, n)
+
+data = {"x": x, "y": y}
+
+# Fit a Gaussian GAM
+model = wk.GAM("y ~ s(x)")
+model.fit(data, method="REML")
+
+# Predict on a fine grid
+x_new = np.linspace(0, 2 * np.pi, 100)
+new_data = {"x": x_new}
+
+preds = model.predict(new_data)
+
+print(f"Prediction shape: {preds.values.shape}")
+print(f"First 5 values: {preds.values[:5].round(4)}")
+```
+
+The result is a `PredictionResult` object. The `.values` attribute contains the response-scale
+predictions.
+
+## Predictions on the linear predictor scale
+
+Sometimes you need predictions on the **linear predictor scale** (before the inverse link is
+applied). This is the raw $\hat\eta = X_{\text{new}} \hat\beta$. Pass `type="link"` to get these:
+
+```{python}
 preds_link = model.predict(new_data, type="link")
 
-# Term contributions
-term_preds = model.predict(new_data, type="terms")
+# For Gaussian + identity link, the two scales are identical
+print(f"Link-scale values: {preds_link.values[:5].round(4)}")
+print(f"Response-scale values: {preds.values[:5].round(4)}")
 ```
+
+The `PredictionResult` always carries both scales. Regardless of the `type=` argument, you can access
+the linear predictor via `.linear_predictor`:
+
+```{python}
+preds = model.predict(new_data)
+
+# .values is on the response scale; .linear_predictor is on the link scale
+print(f"Response: {preds.values[:3].round(4)}")
+print(f"Linear predictor: {preds.linear_predictor[:3].round(4)}")
+```
+
+::: {.callout-tip}
+For Gaussian models with the identity link, `.values` and `.linear_predictor` are numerically
+identical. The distinction matters for non-Gaussian families where the link function is nonlinear
+(see [Prediction for non-Gaussian models](#prediction-for-non-gaussian-models) below).
+:::
 
 ## Standard errors
 
-Set `se=True` to also return a standard error for each prediction:
+Setting `se=True` computes a standard error for each prediction. Standard errors are always reported
+on the **linear predictor scale**, regardless of whether you requested response-scale predictions:
 
-```python
-preds = model.predict(new_data, se=True)
-# Returns a frame with columns: fit, se_fit
+```{python}
+preds_se = model.predict(new_data, se=True)
+
+print(f"SE shape: {preds_se.se.shape}")
+print(f"First 5 SEs: {preds_se.se[:5].round(4)}")
 ```
 
-Standard errors are computed from the Bayesian covariance matrix
-$V_\beta = (X^\top W X + \sum_j \lambda_j S_j)^{-1}$, which accounts for smoothing parameter
-uncertainty via the empirical Bayes correction of Marra & Wood.
+### The Bayesian covariance matrix
 
-## Confidence intervals
+The standard errors come from the **Bayesian posterior covariance** of the coefficient vector
+$\hat\beta$:
 
-```python
-ci = model.predict_interval(new_data, level=0.95)
-# Returns: fit, lower, upper
+$$V_\beta = \hat\phi \bigl(X^\top W X + \textstyle\sum_j \lambda_j S_j\bigr)^{-1}$$
+
+where:
+
+- $\hat\phi$ is the estimated scale parameter,
+- $W$ is the diagonal matrix of working weights from the final IRLS iteration,
+- $S_j$ are the penalty matrices for each smooth term, and
+- $\lambda_j$ are the estimated smoothing parameters.
+
+The prediction variance at a new point $\mathbf{x}_*$ is:
+
+$$\text{Var}(\hat\eta_*) = \mathbf{x}_*^\top V_\beta\, \mathbf{x}_*$$
+
+and the standard error is $\text{SE}(\hat\eta_*) = \sqrt{\mathbf{x}_*^\top V_\beta\, \mathbf{x}_*}$.
+
+::: {.callout-note}
+These are **Bayesian** standard errors, not frequentist. They have good frequentist coverage
+properties (Nychka 1988; Wood 2006), but they include a component from the penalty that a purely
+frequentist SE would not. This is why the SEs are well-calibrated even at the boundaries of the data,
+where the smooth is partially identified by the penalty.
+:::
+
+### Unconditional standard errors
+
+By default, the covariance matrix conditions on the estimated smoothing parameters $\hat\lambda_j$
+as if they were known. Setting `unconditional=True` uses the corrected covariance
+$V_c$ (Marra & Wood, 2012), which accounts for the additional uncertainty in $\hat\lambda$:
+
+```{python}
+# Unconditional SEs (wider, more honest)
+preds_unc = model.predict(new_data, se=True, unconditional=True)
+
+print(f"Conditional SE (first 3):   {preds_se.se[:3].round(4)}")
+print(f"Unconditional SE (first 3): {preds_unc.se[:3].round(4)}")
 ```
 
-By default these are **pointwise** intervals. For **simultaneous** bands that hold uniformly across
-the covariate range:
+::: {.callout-important}
+Unconditional standard errors require the model to be fitted with `method="REML"` or `method="ML"`.
+If the model was fitted with `method="GCV"`, requesting `unconditional=True` raises a `ValueError`.
+:::
 
-```python
-ci = model.predict_interval(new_data, level=0.95, simultaneous=True)
+## Constructing confidence intervals
+
+### Using `interval="confidence"`
+
+The most convenient way to obtain confidence intervals is the `interval=` argument to `predict()`:
+
+```{python}
+preds_ci = model.predict(new_data, interval="confidence", level=0.95)
+
+print(f"Lower bound (first 3): {preds_ci.lower[:3].round(4)}")
+print(f"Fitted value (first 3): {preds_ci.values[:3].round(4)}")
+print(f"Upper bound (first 3): {preds_ci.upper[:3].round(4)}")
 ```
 
-## In-sample fitted values
+Intervals are computed on the linear predictor scale and transformed to the response scale by the
+inverse link. For the Gaussian identity-link case, the pointwise 95% interval is:
 
-```python
-fitted = model.fitted_values          # on the response scale
-linear_pred = model.linear_predictor  # on the link scale
+$$\hat\mu \pm t_{n - \text{edf},\; 0.975}\;\text{SE}(\hat\eta)$$
+
+For families with known scale (Poisson, binomial), the normal quantile $z_{0.975}$ is used instead
+of the $t$-quantile.
+
+### Manual construction from SEs
+
+You can also build intervals yourself from the standard errors. This gives full control over the
+quantile used:
+
+```{python}
+from scipy.stats import norm
+
+preds_se = model.predict(new_data, se=True)
+
+# 95% pointwise CI on the linear predictor scale
+z = norm.ppf(0.975)
+eta_lower = preds_se.linear_predictor - z * preds_se.se
+eta_upper = preds_se.linear_predictor + z * preds_se.se
+
+# For Gaussian identity link, the response scale is the same
+print(f"Manual lower (first 3): {eta_lower[:3].round(4)}")
+print(f"Built-in lower (first 3): {preds_ci.lower[:3].round(4)}")
 ```
 
-## Residuals
+::: {.callout-tip}
+For non-Gaussian models, construct the interval on the linear predictor scale and then apply the
+inverse link to both bounds. This ensures the interval respects the natural constraints of the
+response (e.g., positivity for Poisson counts, $[0, 1]$ for binomial probabilities).
+:::
 
-```python
-model.residuals()                     # deviance residuals (default)
-model.residuals(type="pearson")
-model.residuals(type="response")
-model.residuals(type="working")
+### Prediction intervals
+
+Confidence intervals quantify uncertainty in the **mean** response $\mu$. **Prediction intervals**
+additionally include the response-distribution variance, so they cover where a new observation might
+fall:
+
+```{python}
+preds_pi = model.predict(new_data, interval="prediction", level=0.95)
+
+print(f"CI width (mean): {(preds_ci.upper - preds_ci.lower).mean():.4f}")
+print(f"PI width (mean): {(preds_pi.upper - preds_pi.lower).mean():.4f}")
 ```
+
+Prediction intervals are always wider than confidence intervals because they account for both
+estimation uncertainty and observation-level noise.
+
+### Simultaneous confidence bands
+
+Pointwise intervals cover the true function at each individual point with the stated probability, but
+they do not guarantee coverage of the **entire** curve simultaneously. For a band that holds
+uniformly:
+
+```{python}
+preds_sim = model.predict(
+    new_data,
+    interval="simultaneous",
+    level=0.95,
+)
+
+print(f"Pointwise CI width (mean): {(preds_ci.upper - preds_ci.lower).mean():.4f}")
+print(f"Simultaneous band width (mean): {(preds_sim.upper - preds_sim.lower).mean():.4f}")
+```
+
+Simultaneous bands are wider than pointwise intervals because they must cover the function everywhere
+at once.
+
+## Visualizing predictions with a confidence band
+
+Here is a complete example that fits a GAM, predicts on a grid, and plots the result with observed
+data, the fitted curve, and a 95% confidence band:
+
+```{python}
+import altair as alt
+
+# Predict with confidence interval
+x_plot = np.linspace(0, 2 * np.pi, 200)
+preds_plot = model.predict({"x": x_plot}, interval="confidence", level=0.95)
+
+# Observed data layer
+obs_data = [{"x": float(x[i]), "y": float(y[i])} for i in range(n)]
+points = alt.Chart({"values": obs_data}).mark_circle(
+    size=15, opacity=0.3, color="steelblue"
+).encode(
+    x=alt.X("x:Q", title="x"),
+    y=alt.Y("y:Q", title="y"),
+)
+
+# Fitted curve + confidence band
+fit_data = [
+    {
+        "x": float(x_plot[i]),
+        "fit": float(preds_plot.values[i]),
+        "lower": float(preds_plot.lower[i]),
+        "upper": float(preds_plot.upper[i]),
+    }
+    for i in range(len(x_plot))
+]
+
+line = alt.Chart({"values": fit_data}).mark_line(
+    color="firebrick", strokeWidth=2
+).encode(x="x:Q", y="fit:Q")
+
+band = alt.Chart({"values": fit_data}).mark_area(
+    opacity=0.2, color="firebrick"
+).encode(x="x:Q", y="lower:Q", y2="upper:Q")
+
+# True function
+true_data = [
+    {"x": float(x_plot[i]), "true": float(np.sin(x_plot[i]))}
+    for i in range(len(x_plot))
+]
+true_line = alt.Chart({"values": true_data}).mark_line(
+    color="gray", strokeDash=[4, 4], strokeWidth=1.5
+).encode(x="x:Q", y="true:Q")
+
+(band + points + line + true_line).properties(
+    width=550, height=320,
+    title="Gaussian GAM with 95% confidence band"
+)
+```
+
+The red curve is the estimated smooth $\hat{f}(x)$, the shaded band is the 95% pointwise confidence
+interval, the gray dashed line is the true $\sin(x)$, and the blue points are the observed data.
+
+## Term-level predictions
+
+For models with multiple smooth terms, `type="terms"` decomposes the linear predictor into the
+individual contribution of each smooth:
+
+$$\hat\eta = \hat\beta_0 + \hat{f}_1(x_1) + \hat{f}_2(x_2) + \cdots$$
+
+Each $\hat{f}_j$ is returned separately, allowing you to visualize how each predictor affects the
+response.
+
+```{python}
+# Fit a model with two smooth terms
+rng = np.random.default_rng(42)
+n = 300
+x1 = np.linspace(0, 2 * np.pi, n)
+x2 = rng.uniform(0, 1, n)
+y_multi = np.sin(x1) + 2 * x2**2 + rng.normal(0, 0.3, n)
+
+data_multi = {"x1": x1, "x2": x2, "y": y_multi}
+model_multi = wk.GAM("y ~ s(x1) + s(x2)")
+model_multi.fit(data_multi, method="REML")
+
+# Predict term-level contributions
+x1_grid = np.linspace(0, 2 * np.pi, 100)
+x2_grid = np.linspace(0, 1, 100)
+new_data_terms = {"x1": x1_grid, "x2": x2_grid}
+
+term_preds = model_multi.predict(new_data_terms, type="terms", se=True)
+
+print(f"Term labels: {term_preds.labels}")
+for label in term_preds.labels:
+    vals = term_preds.terms[label]
+    print(f"  {label}: range [{vals.min():.3f}, {vals.max():.3f}]")
+```
+
+The result is a `TermsPredictionResult` with:
+
+- `.terms`: a dict mapping each term label to its contribution array (shape `(n,)`)
+- `.se`: a dict mapping each term label to its standard error array (or `None` if `se=False`)
+- `.labels`: term labels in formula order
+
+### Visualizing term contributions
+
+```{python}
+import altair as alt
+
+# Build data for both terms
+charts = []
+
+for label in term_preds.labels:
+    vals = term_preds.terms[label]
+    ses = term_preds.se[label]
+    z = 1.96
+
+    # Determine the x-axis values based on the term label
+    if "x1" in label:
+        x_vals = x1_grid
+        x_label = "x1"
+    else:
+        x_vals = x2_grid
+        x_label = "x2"
+
+    term_data = [
+        {
+            "x": float(x_vals[i]),
+            "effect": float(vals[i]),
+            "lower": float(vals[i] - z * ses[i]),
+            "upper": float(vals[i] + z * ses[i]),
+        }
+        for i in range(len(x_vals))
+    ]
+
+    line = alt.Chart({"values": term_data}).mark_line(
+        color="firebrick", strokeWidth=2
+    ).encode(
+        x=alt.X("x:Q", title=x_label),
+        y=alt.Y("effect:Q", title=f"f({x_label})"),
+    )
+
+    band = alt.Chart({"values": term_data}).mark_area(
+        opacity=0.2, color="firebrick"
+    ).encode(x="x:Q", y="lower:Q", y2="upper:Q")
+
+    zero = alt.Chart({"values": [{}]}).mark_rule(
+        color="gray", strokeDash=[3, 3]
+    ).encode(y=alt.datum(0))
+
+    chart = (band + line + zero).properties(
+        width=280, height=220, title=label
+    )
+    charts.append(chart)
+
+charts[0] | charts[1]
+```
+
+Each panel shows one smooth term's estimated effect $\hat{f}_j(x_j)$ with a 95% confidence band. The
+dashed horizontal line at zero is the reference: values above zero indicate a positive contribution
+to the linear predictor at that covariate value.
+
+## In-sample fitted values and residuals
+
+After fitting, the model stores in-sample quantities as properties:
+
+```{python}
+# Fitted values on the response scale
+fitted = model.fitted_values
+print(f"Fitted values shape: {fitted.shape}")
+print(f"First 5 fitted values: {fitted[:5].round(4)}")
+```
+
+```{python}
+# Response residuals (y - mu)
+resid = model.residuals
+print(f"Residuals shape: {resid.shape}")
+print(f"First 5 residuals: {resid[:5].round(4)}")
+print(f"Mean residual: {resid.mean():.6f}")
+```
+
+The `.residuals` property returns **response residuals** ($y - \hat\mu$). For other residual types,
+use the `get_residuals()` method:
+
+```{python}
+# Deviance residuals (default)
+dev_resid = model.get_residuals(type="deviance")
+
+# Pearson residuals: (y - mu) / sqrt(V(mu))
+pear_resid = model.get_residuals(type="pearson")
+
+# Working residuals: used internally by P-IRLS
+work_resid = model.get_residuals(type="working")
+
+print(f"Deviance residual range: [{dev_resid.min():.3f}, {dev_resid.max():.3f}]")
+print(f"Pearson residual range:  [{pear_resid.min():.3f}, {pear_resid.max():.3f}]")
+print(f"Working residual range:  [{work_resid.min():.3f}, {work_resid.max():.3f}]")
+```
+
+::: {.callout-note}
+For Gaussian models with the identity link, response, deviance, Pearson, and working residuals are
+all proportional to each other. The differences become meaningful for non-Gaussian families where the
+variance function $V(\mu)$ is not constant.
+:::
+
+## Prediction for non-Gaussian models
+
+For non-Gaussian families, the **link function** creates a distinction between the linear predictor
+scale and the response scale. Understanding this distinction is essential for correct interpretation.
+
+### Poisson example
+
+With a log link, the model is $\log(\mu) = \eta = X\beta$. Predictions on the response scale are
+exponentiated: $\hat\mu = \exp(\hat\eta)$.
+
+```{python}
+# Generate Poisson count data
+rng = np.random.default_rng(42)
+n = 300
+x = np.linspace(0, 2 * np.pi, n)
+true_rate = np.exp(0.5 + 0.8 * np.sin(x))
+y_counts = rng.poisson(true_rate).astype(float)
+
+# Fit a Poisson GAM
+model_pois = wk.GAM("y ~ s(x)", family=wk.Poisson())
+model_pois.fit({"x": x, "y": y_counts}, method="REML")
+
+# Predict on a grid
+x_grid = np.linspace(0, 2 * np.pi, 100)
+preds_pois = model_pois.predict({"x": x_grid}, se=True)
+
+# Compare scales
+print(f"Response scale (counts): {preds_pois.values[:5].round(3)}")
+print(f"Link scale (log counts): {preds_pois.linear_predictor[:5].round(3)}")
+print(f"exp(link) = response:    {np.exp(preds_pois.linear_predictor[:5]).round(3)}")
+```
+
+### Confidence intervals for non-Gaussian models
+
+Intervals are constructed on the linear predictor scale and then transformed via the inverse link.
+This ensures the bounds respect the natural constraints of the response distribution:
+
+```{python}
+# Poisson predictions with confidence intervals
+preds_pois_ci = model_pois.predict(
+    {"x": x_grid}, interval="confidence", level=0.95
+)
+
+# All bounds are positive (as expected for counts)
+print(f"Lower bound range: [{preds_pois_ci.lower.min():.3f}, {preds_pois_ci.lower.max():.3f}]")
+print(f"Upper bound range: [{preds_pois_ci.upper.min():.3f}, {preds_pois_ci.upper.max():.3f}]")
+```
+
+::: {.callout-tip}
+Because the interval is constructed as $\exp(\hat\eta \pm z \cdot \text{SE})$, the resulting band on
+the response scale is **asymmetric** around $\hat\mu$. This asymmetry is a feature: it prevents
+impossible negative predictions for Poisson and gamma models, and keeps binomial probabilities within
+$[0, 1]$.
+:::
+
+### Binomial example
+
+For binary outcomes with a logit link, response-scale predictions are probabilities:
+
+```{python}
+# Generate binary data
+rng = np.random.default_rng(42)
+n = 400
+x = np.sort(rng.uniform(-3, 3, n))
+prob = 1 / (1 + np.exp(-(0.5 + 1.5 * np.sin(x))))
+y_bin = rng.binomial(1, prob).astype(float)
+
+# Fit a binomial GAM
+model_bin = wk.GAM("y ~ s(x)", family=wk.Binomial())
+model_bin.fit({"x": x, "y": y_bin}, method="REML")
+
+# Predictions are probabilities
+preds_bin = model_bin.predict({"x": x_grid}, se=True)
+print(f"Probability range: [{preds_bin.values.min():.3f}, {preds_bin.values.max():.3f}]")
+print(f"Log-odds range: [{preds_bin.linear_predictor.min():.3f}, {preds_bin.linear_predictor.max():.3f}]")
+```
+
+## Prediction type summary
+
+The `type=` argument to `predict()` controls what is returned:
+
+| `type=` | Result class | `.values` contains | Use case |
+|---|---|---|---|
+| `"response"` (default) | `PredictionResult` | $\hat\mu = g^{-1}(\hat\eta)$ | Interpretable predictions |
+| `"link"` | `PredictionResult` | $\hat\eta = X\hat\beta$ | Building custom intervals |
+| `"terms"` | `TermsPredictionResult` | Per-term $\hat{f}_j(x_j)$ | Decomposing the fit |
+
+All prediction types support `se=True` for standard errors. The `interval=` argument is available for
+`"response"` and `"link"` types but not for `"terms"`.
+
+## Complete practical example
+
+This example brings together fitting, prediction, term-level decomposition, and visualization for a
+two-predictor Gaussian model:
+
+```{python}
+import altair as alt
+
+# Simulate data with two smooth effects
+rng = np.random.default_rng(99)
+n = 400
+x1 = np.linspace(0, 4 * np.pi, n)
+x2 = rng.uniform(0, 5, n)
+y = 2 * np.cos(x1) + 0.3 * x2**1.5 + rng.normal(0, 0.5, n)
+
+data = {"x1": x1, "x2": x2, "y": y}
+
+# Fit with REML
+model = wk.GAM("y ~ s(x1, k=15) + s(x2)")
+model.fit(data, method="REML")
+
+print(model.summary())
+```
+
+```{python}
+# Predict on a grid for x1, holding x2 at its mean
+x1_grid = np.linspace(0, 4 * np.pi, 200)
+x2_mean = np.full(200, x2.mean())
+
+preds = model.predict(
+    {"x1": x1_grid, "x2": x2_mean},
+    interval="confidence",
+    level=0.95,
+)
+
+# Plot predictions with confidence band
+fit_data = [
+    {
+        "x1": float(x1_grid[i]),
+        "fit": float(preds.values[i]),
+        "lower": float(preds.lower[i]),
+        "upper": float(preds.upper[i]),
+    }
+    for i in range(len(x1_grid))
+]
+
+obs_data = [{"x1": float(x1[i]), "y": float(y[i])} for i in range(n)]
+
+points = alt.Chart({"values": obs_data}).mark_circle(
+    size=10, opacity=0.15, color="steelblue"
+).encode(
+    x=alt.X("x1:Q", title="x1"),
+    y=alt.Y("y:Q", title="y"),
+)
+
+line = alt.Chart({"values": fit_data}).mark_line(
+    color="firebrick", strokeWidth=2
+).encode(x="x1:Q", y="fit:Q")
+
+band = alt.Chart({"values": fit_data}).mark_area(
+    opacity=0.2, color="firebrick"
+).encode(x="x1:Q", y="lower:Q", y2="upper:Q")
+
+(band + points + line).properties(
+    width=550, height=320,
+    title="Predictions at mean(x2) with 95% CI"
+)
+```
+
+```{python}
+# Term-level decomposition for the same model
+term_preds = model.predict(
+    {"x1": x1_grid, "x2": np.linspace(0, 5, 200)},
+    type="terms",
+    se=True,
+)
+
+# Show the s(x1) term
+label_x1 = term_preds.labels[0]
+f1 = term_preds.terms[label_x1]
+se1 = term_preds.se[label_x1]
+
+term_data = [
+    {
+        "x1": float(x1_grid[i]),
+        "effect": float(f1[i]),
+        "lower": float(f1[i] - 1.96 * se1[i]),
+        "upper": float(f1[i] + 1.96 * se1[i]),
+    }
+    for i in range(len(x1_grid))
+]
+
+line_t = alt.Chart({"values": term_data}).mark_line(
+    color="firebrick", strokeWidth=2
+).encode(
+    x=alt.X("x1:Q", title="x1"),
+    y=alt.Y("effect:Q", title=f"f(x1)"),
+)
+
+band_t = alt.Chart({"values": term_data}).mark_area(
+    opacity=0.2, color="firebrick"
+).encode(x="x1:Q", y="lower:Q", y2="upper:Q")
+
+zero_t = alt.Chart({"values": [{}]}).mark_rule(
+    color="gray", strokeDash=[3, 3]
+).encode(y=alt.datum(0))
+
+(band_t + line_t + zero_t).properties(
+    width=550, height=320,
+    title=f"Term contribution: {label_x1}"
+)
+```
+
+## Where to go next
+
+- **[Diagnostics](07-diagnostics.qmd)**: residual plots, `gam_check()`, and basis dimension checks.
+- **[Model fitting](05-fitting.qmd)**: how P-IRLS works, GCV vs. REML, and convergence settings.
+- **[Response families](04-families.qmd)**: all supported distributions and their link functions.

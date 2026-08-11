@@ -1,0 +1,491 @@
+---
+title: "Conformal prediction"
+guide-section: "Advanced features"
+---
+
+```{python}
+#| echo: false
+#| output: false
+import great_docs as gd
+
+gd.enable_tbl_preview(n_head=8, n_tail=3)
+```
+
+Standard confidence intervals from a GAM rely on distributional assumptions -- Gaussian errors,
+correctly specified variance functions, and a well-calibrated Bayesian posterior covariance. When
+those assumptions are suspect, or when you need a hard coverage guarantee regardless of the true
+data-generating process, **conformal prediction** offers an alternative: distribution-free prediction
+intervals with finite-sample coverage guarantees.
+
+This page covers the three conformal methods available in Whittaker, shows how to fit and visualize
+them, and explains when to reach for conformal intervals instead of (or alongside) the classical
+Bayesian intervals from `predict()`.
+
+## What conformal prediction is
+
+Conformal prediction constructs prediction intervals that satisfy a **marginal coverage guarantee**:
+
+$$P\bigl(Y_{\text{new}} \in \hat{C}(X_{\text{new}})\bigr) \geq 1 - \alpha$$
+
+for any distribution $P_{X,Y}$, any sample size $n$, and any base model. The only assumption is
+**exchangeability** of the data -- a weaker condition than independence that allows mild temporal
+structure but excludes adversarial distribution shift.
+
+The core idea is simple: instead of relying on a parametric model for the error distribution, you
+calibrate the interval width using the empirical distribution of **conformity scores** (typically
+absolute residuals) on held-out data. This lets the data itself tell you how wide the interval
+needs to be.
+
+## Why conformal prediction matters
+
+Classical GAM confidence intervals have excellent properties when the model is well specified, but
+they can undercover in several common situations:
+
+- **Model misspecification**: the true variance function does not match the assumed family.
+- **Heavy-tailed errors**: Gaussian-based intervals are too narrow for heavy-tailed data.
+- **Small samples**: the asymptotic approximation underlying Bayesian CIs may be loose.
+- **Non-standard smooths**: for complex tensor-product or adaptive smooths, the posterior covariance
+  approximation may be inaccurate.
+
+Conformal prediction sidesteps all of these concerns. The coverage guarantee holds for any base
+model -- even a badly misspecified one. A better model produces tighter intervals, but coverage
+is guaranteed regardless.
+
+::: {.callout-note}
+Conformal prediction provides **marginal** coverage, meaning the guarantee is averaged over the
+randomness in both $X$ and $Y$. It does not guarantee **conditional** coverage at every individual
+$x$ value. In practice, the intervals tend to be wider where the model is less accurate, which
+provides reasonable conditional behavior.
+:::
+
+## Split conformal prediction
+
+Split conformal is the simplest and fastest method. It works in three steps:
+
+1. **Split** the data into a training set and a calibration set.
+2. **Fit** the GAM on the training set.
+3. **Calibrate**: compute absolute residuals on the calibration set, then take the
+   $\lceil(1-\alpha)(1 + n_{\text{cal}})\rceil / n_{\text{cal}}$ quantile as the interval half-width.
+
+The resulting interval is $\hat{y}(x) \pm q$, where $q$ is the calibrated quantile. This is fast
+(only one model fit) but uses less data for fitting than the full dataset.
+
+```{python}
+import numpy as np
+import whittaker as wk
+
+# Generate data with a nonlinear trend and heteroscedastic noise
+rng = np.random.default_rng(42)
+n = 400
+x = np.linspace(0, 2 * np.pi, n)
+y = np.sin(x) + 0.3 * (1 + 0.5 * np.abs(np.sin(x))) * rng.normal(0, 1, n)
+
+data = {"x": x, "y": y}
+
+# Fit a split conformal predictor
+predictor_split = wk.conformal_fit(
+    "y ~ s(x)",
+    data,
+    method="split",
+    level=0.95,
+    cal_fraction=0.25,
+    seed=42,
+)
+
+# Predict on a fine grid
+x_new = np.linspace(0, 2 * np.pi, 200)
+result_split = predictor_split.predict({"x": x_new})
+
+print(f"Prediction level: {result_split.level}")
+print(f"Interval width (constant): {(result_split.upper[0] - result_split.lower[0]):.4f}")
+print(f"Values shape: {result_split.values.shape}")
+```
+
+The `ConformalResult` has four attributes:
+
+- `.values` -- point predictions (the GAM fitted values).
+- `.lower` -- lower bound of the prediction interval.
+- `.upper` -- upper bound of the prediction interval.
+- `.level` -- the nominal coverage level (e.g., 0.95).
+
+Notice that split conformal produces **constant-width** intervals: the half-width $q$ is the same
+everywhere. This is a known limitation -- the intervals do not adapt to regions of higher or lower
+noise.
+
+### Visualizing split conformal intervals
+
+```{python}
+import altair as alt
+
+# Observed data
+obs_data = [{"x": float(x[i]), "y": float(y[i])} for i in range(n)]
+
+points = alt.Chart({"values": obs_data}).mark_circle(
+    size=12, opacity=0.2, color="steelblue"
+).encode(
+    x=alt.X("x:Q", title="x"),
+    y=alt.Y("y:Q", title="y"),
+)
+
+# Conformal band
+fit_data = [
+    {
+        "x": float(x_new[i]),
+        "fit": float(result_split.values[i]),
+        "lower": float(result_split.lower[i]),
+        "upper": float(result_split.upper[i]),
+    }
+    for i in range(len(x_new))
+]
+
+line = alt.Chart({"values": fit_data}).mark_line(
+    color="firebrick", strokeWidth=2
+).encode(x="x:Q", y="fit:Q")
+
+band = alt.Chart({"values": fit_data}).mark_area(
+    opacity=0.15, color="firebrick"
+).encode(x="x:Q", y="lower:Q", y2="upper:Q")
+
+# True function
+true_data = [
+    {"x": float(x_new[i]), "true": float(np.sin(x_new[i]))}
+    for i in range(len(x_new))
+]
+true_line = alt.Chart({"values": true_data}).mark_line(
+    color="gray", strokeDash=[4, 4], strokeWidth=1.5
+).encode(x="x:Q", y="true:Q")
+
+(band + points + line + true_line).properties(
+    width=550, height=320,
+    title="Split conformal prediction (95% level)"
+)
+```
+
+The constant-width band is clearly visible. It covers the true function (gray dashed line) and the
+vast majority of observations, but is wider than necessary in low-noise regions and potentially
+too narrow in high-noise regions.
+
+::: {.callout-tip}
+The `cal_fraction` parameter controls the train/calibration split. A larger calibration set
+produces a more precise quantile estimate (less variability in interval width across random seeds)
+but leaves less data for fitting the GAM. The default of `0.25` is a reasonable starting point.
+:::
+
+## CV+ conformal prediction
+
+**Cross-validation+** (CV+), introduced by Barber et al. (2021), improves on split conformal by
+using all the data for both fitting and calibration. It works as follows:
+
+1. **Fold** the data into $K$ folds (default $K = 5$).
+2. For each fold $k$, fit the GAM on the remaining $K - 1$ folds and compute leave-fold-out
+   residuals for the held-out observations.
+3. For a new test point $x$, aggregate the $K$ models' predictions and the cross-validated residuals
+   to construct an interval.
+
+CV+ produces **tighter** intervals than split conformal because it uses the full dataset for
+fitting. The coverage guarantee is slightly weaker in theory (coverage $\geq 1 - 2\alpha$ in the
+worst case) but is typically close to the nominal level in practice.
+
+```{python}
+# Fit a CV+ conformal predictor
+predictor_cv = wk.conformal_fit(
+    "y ~ s(x)",
+    data,
+    method="cv+",
+    level=0.95,
+    n_folds=5,
+    seed=42,
+)
+
+# Predict on the same grid
+result_cv = predictor_cv.predict({"x": x_new})
+
+print(f"CV+ interval width (mean): {(result_cv.upper - result_cv.lower).mean():.4f}")
+print(f"Split interval width:      {(result_split.upper - result_split.lower).mean():.4f}")
+```
+
+CV+ intervals are **not** constant-width. Because the residuals from different folds vary in
+magnitude, the interval adapts somewhat to the local difficulty of prediction.
+
+```{python}
+# Compare interval widths across the domain
+cv_data = [
+    {
+        "x": float(x_new[i]),
+        "fit": float(result_cv.values[i]),
+        "lower": float(result_cv.lower[i]),
+        "upper": float(result_cv.upper[i]),
+    }
+    for i in range(len(x_new))
+]
+
+line_cv = alt.Chart({"values": cv_data}).mark_line(
+    color="darkorange", strokeWidth=2
+).encode(x="x:Q", y="fit:Q")
+
+band_cv = alt.Chart({"values": cv_data}).mark_area(
+    opacity=0.15, color="darkorange"
+).encode(x="x:Q", y="lower:Q", y2="upper:Q")
+
+(band_cv + points + line_cv + true_line).properties(
+    width=550, height=320,
+    title="CV+ conformal prediction (95% level)"
+)
+```
+
+## Jackknife+ conformal prediction
+
+**Jackknife+** is the most expensive method. It refits the GAM $n$ times, each time leaving out one
+observation (leave-one-out). This produces the most precise residual distribution and typically
+yields the tightest intervals with the best empirical coverage.
+
+The computational cost scales linearly in $n$ (one model refit per observation), which makes
+jackknife+ impractical for very large datasets. For moderate-sized data ($n < 2000$), it is often
+the best choice.
+
+```{python}
+# Use a smaller dataset for jackknife+ (LOO refits are expensive)
+n_small = 150
+x_small = np.linspace(0, 2 * np.pi, n_small)
+y_small = np.sin(x_small) + 0.3 * rng.normal(0, 1, n_small)
+
+predictor_jk = wk.conformal_fit(
+    "y ~ s(x)",
+    {"x": x_small, "y": y_small},
+    method="jackknife+",
+    level=0.95,
+    seed=42,
+)
+
+result_jk = predictor_jk.predict({"x": x_new})
+
+print(f"Jackknife+ interval width (mean): {(result_jk.upper - result_jk.lower).mean():.4f}")
+```
+
+::: {.callout-warning}
+Jackknife+ requires $n$ model refits, where $n$ is the number of observations. For large datasets,
+consider CV+ with a moderate number of folds as a practical compromise between interval quality and
+computation time.
+:::
+
+## Comparing methods
+
+The three conformal methods trade off computation, interval width, and theoretical coverage
+guarantees:
+
+| Method | Model refits | Coverage guarantee | Interval width | Adaptivity |
+|---|---|---|---|---|
+| Split | 1 | $\geq 1 - \alpha$ | Widest | Constant width |
+| CV+ | $K$ (default 5) | $\geq 1 - 2\alpha$ | Moderate | Partially adaptive |
+| Jackknife+ | $n$ | $\geq 1 - 2\alpha$ | Tightest | Most adaptive |
+
+In practice, all three methods typically achieve coverage close to the nominal $1 - \alpha$ level.
+The theoretical worst-case bounds for CV+ and jackknife+ ($1 - 2\alpha$) are conservative and rarely
+observed.
+
+```{python}
+# Side-by-side comparison of interval widths
+comparison_data = []
+for i in range(len(x_new)):
+    comparison_data.append({
+        "x": float(x_new[i]),
+        "method": "Split",
+        "width": float(result_split.upper[i] - result_split.lower[i]),
+    })
+    comparison_data.append({
+        "x": float(x_new[i]),
+        "method": "CV+",
+        "width": float(result_cv.upper[i] - result_cv.lower[i]),
+    })
+
+width_chart = alt.Chart({"values": comparison_data}).mark_line(strokeWidth=2).encode(
+    x=alt.X("x:Q", title="x"),
+    y=alt.Y("width:Q", title="Interval width"),
+    color=alt.Color("method:N", title="Method"),
+).properties(
+    width=550, height=280,
+    title="Conformal interval width by method"
+)
+
+width_chart
+```
+
+## Coverage verification
+
+After constructing conformal intervals, you can verify the empirical coverage on held-out data using
+`wk.conformal_coverage()`. This function computes the fraction of test observations that fall within
+the predicted intervals:
+
+```{python}
+# Generate a fresh test set from the same process
+x_test = rng.uniform(0, 2 * np.pi, 500)
+y_test = np.sin(x_test) + 0.3 * (1 + 0.5 * np.abs(np.sin(x_test))) * rng.normal(0, 1, 500)
+test_data = {"x": x_test, "y": y_test}
+
+# Check coverage for each method
+cov_split = wk.conformal_coverage(predictor_split, test_data, response="y")
+cov_cv = wk.conformal_coverage(predictor_cv, test_data, response="y")
+
+print(f"Nominal level:    0.95")
+print(f"Split coverage:   {cov_split:.4f}")
+print(f"CV+ coverage:     {cov_cv:.4f}")
+```
+
+::: {.callout-note}
+Empirical coverage on any single test set will fluctuate around the nominal level due to sampling
+variability. The conformal guarantee is that coverage is **at least** $1 - \alpha$ in expectation
+over the randomness in the calibration data. A single test set may show coverage slightly below the
+nominal level; averaging over many random splits would confirm the guarantee.
+:::
+
+## Using with non-Gaussian families
+
+Conformal prediction works with any response family supported by Whittaker. For non-Gaussian models,
+conformal intervals are particularly valuable because the parametric assumptions underlying standard
+confidence intervals are harder to verify.
+
+Here is an example with Poisson count data:
+
+```{python}
+# Generate Poisson count data with a smooth rate function
+rng = np.random.default_rng(99)
+n = 400
+x_pois = np.linspace(0, 2 * np.pi, n)
+true_rate = np.exp(1.0 + 0.8 * np.sin(x_pois))
+y_pois = rng.poisson(true_rate).astype(float)
+
+pois_data = {"x": x_pois, "y": y_pois}
+
+# Fit conformal predictor with Poisson family
+predictor_pois = wk.conformal_fit(
+    "y ~ s(x)",
+    pois_data,
+    method="cv+",
+    level=0.95,
+    family=wk.Poisson(),
+    n_folds=5,
+    seed=42,
+)
+
+# Predict on a grid
+x_pois_new = np.linspace(0, 2 * np.pi, 200)
+result_pois = predictor_pois.predict({"x": x_pois_new})
+
+print(f"Predicted rate range: [{result_pois.values.min():.2f}, {result_pois.values.max():.2f}]")
+print(f"Lower bound range:   [{result_pois.lower.min():.2f}, {result_pois.lower.max():.2f}]")
+print(f"Upper bound range:   [{result_pois.upper.min():.2f}, {result_pois.upper.max():.2f}]")
+```
+
+```{python}
+# Visualize Poisson conformal intervals
+obs_pois = [{"x": float(x_pois[i]), "y": float(y_pois[i])} for i in range(n)]
+
+points_pois = alt.Chart({"values": obs_pois}).mark_circle(
+    size=12, opacity=0.2, color="steelblue"
+).encode(
+    x=alt.X("x:Q", title="x"),
+    y=alt.Y("y:Q", title="Count"),
+)
+
+fit_pois = [
+    {
+        "x": float(x_pois_new[i]),
+        "fit": float(result_pois.values[i]),
+        "lower": float(result_pois.lower[i]),
+        "upper": float(result_pois.upper[i]),
+    }
+    for i in range(len(x_pois_new))
+]
+
+line_pois = alt.Chart({"values": fit_pois}).mark_line(
+    color="firebrick", strokeWidth=2
+).encode(x="x:Q", y="fit:Q")
+
+band_pois = alt.Chart({"values": fit_pois}).mark_area(
+    opacity=0.15, color="firebrick"
+).encode(x="x:Q", y="lower:Q", y2="upper:Q")
+
+true_pois = [
+    {"x": float(x_pois_new[i]), "true": float(np.exp(1.0 + 0.8 * np.sin(x_pois_new[i])))}
+    for i in range(len(x_pois_new))
+]
+true_pois_line = alt.Chart({"values": true_pois}).mark_line(
+    color="gray", strokeDash=[4, 4], strokeWidth=1.5
+).encode(x="x:Q", y="true:Q")
+
+(band_pois + points_pois + line_pois + true_pois_line).properties(
+    width=550, height=320,
+    title="CV+ conformal prediction for Poisson counts"
+)
+```
+
+::: {.callout-tip}
+For Poisson and binomial models, conformal intervals on the response scale can extend below zero.
+This is a consequence of the additive residual-based construction. If you need intervals that
+respect the natural constraints of the response, clip the lower bound:
+`np.maximum(result.lower, 0)`.
+:::
+
+## Coverage verification for Poisson
+
+```{python}
+# Test set for Poisson data
+x_pois_test = rng.uniform(0, 2 * np.pi, 500)
+y_pois_test = rng.poisson(np.exp(1.0 + 0.8 * np.sin(x_pois_test))).astype(float)
+
+cov_pois = wk.conformal_coverage(
+    predictor_pois,
+    {"x": x_pois_test, "y": y_pois_test},
+    response="y",
+)
+
+print(f"Poisson CV+ coverage: {cov_pois:.4f} (nominal: 0.95)")
+```
+
+## Practical guidance: conformal vs. Bayesian intervals
+
+Whittaker provides two fundamentally different kinds of prediction intervals. Choosing between them
+depends on your goals and the reliability of your model assumptions.
+
+**Use Bayesian confidence intervals** (`predict(interval="confidence")`) when:
+
+- You trust the assumed response family and link function.
+- You want intervals for the **mean** response $\mu(x)$, not for individual observations.
+- You need **conditional** intervals that are valid at each specific $x$.
+- You are interested in term-level uncertainty decomposition.
+- Computational cost matters and you want intervals from a single model fit.
+
+**Use conformal prediction intervals** (`conformal_fit()`) when:
+
+- You want intervals for **individual future observations**, not the mean.
+- You need a finite-sample coverage guarantee without distributional assumptions.
+- The response distribution may be misspecified, heavy-tailed, or heteroscedastic.
+- You want a sanity check on your parametric intervals.
+- You are comfortable with marginal (not conditional) coverage.
+
+::: {.callout-important}
+Conformal and Bayesian intervals answer different questions. A Bayesian confidence interval targets
+the **mean** $\mu(x)$ and shrinks toward zero width as $n \to \infty$. A conformal prediction
+interval targets an **individual observation** $Y$ and converges to the width of the noise
+distribution, which does not shrink with sample size. Comparing the two directly is not meaningful
+unless you are clear about which quantity you are trying to cover.
+:::
+
+The two approaches are complementary. In practice, a good workflow is:
+
+1. Fit a GAM and examine the Bayesian confidence intervals for the mean response.
+2. Run `conformal_fit()` with the same formula and family to get prediction intervals for individual
+   observations.
+3. Use `conformal_coverage()` on a held-out test set to verify that the intervals have the expected
+   coverage.
+
+If the conformal intervals are much wider than expected, it may indicate model misspecification or
+unexplained heterogeneity that the parametric model is not capturing.
+
+## Where to go next
+
+- **[Prediction and inference](06-prediction.qmd)**: Bayesian confidence intervals, standard errors,
+  and term-level decomposition.
+- **[Diagnostics](07-diagnostics.qmd)**: residual plots and model checking to assess whether
+  parametric intervals are trustworthy.
+- **[Response families](04-families.qmd)**: all supported distributions and their link functions.

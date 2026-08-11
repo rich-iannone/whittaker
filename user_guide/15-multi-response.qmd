@@ -1,0 +1,220 @@
+---
+title: Multi-response models
+guide-section: "Advanced features"
+---
+
+```{python}
+#| echo: false
+#| output: false
+import great_docs as gd
+
+gd.enable_tbl_preview(n_head=8, n_tail=3)
+```
+
+When multiple outcomes are measured on the same observations (for example, blood pressure and
+cholesterol, or multiple pollutant concentrations at the same monitoring stations), fitting them
+jointly can capture shared structure and estimate residual correlations. Whittaker's
+`MultiResponseGAM` fits a separate GAM per response but provides a unified interface for prediction,
+diagnostics, and correlation estimation.
+
+## Basic multi-response model
+
+```{python}
+import numpy as np
+import whittaker as wk
+
+# Generate two correlated responses driven by the same smooth
+rng = np.random.default_rng(42)
+n = 300
+x = np.linspace(0, 2 * np.pi, n)
+
+e1 = rng.normal(0, 0.3, n)
+e2 = 0.7 * e1 + rng.normal(0, 0.2, n)  # correlated errors
+
+y1 = np.sin(x) + e1
+y2 = 0.5 * np.sin(x) + 1.5 + e2
+
+data = {"x": x, "y1": y1, "y2": y2}
+```
+
+The two responses share the same smooth predictor `x` but have different signal strengths and
+correlated residuals. We fit them jointly:
+
+```{python}
+# Fit a multi-response GAM with a shared smooth formula
+model = wk.MultiResponseGAM(["y1", "y2"], "s(x)")
+model.fit(data, method="REML")
+
+print(f"Responses: {model.responses}")
+print(f"N responses: {model.n_responses}")
+print(f"Is fitted: {model.is_fitted}")
+```
+
+The first argument lists the response column names. The second is the shared formula (covariates
+only, no response side). Each response gets its own GAM with the same smooth structure.
+
+## Predictions
+
+```{python}
+# Predict both responses on new data
+x_new = np.linspace(0, 2 * np.pi, 100)
+result = model.predict({"x": x_new})
+
+# Access predictions by response name
+print(f"y1 predictions shape: {result['y1'].values.shape}")
+print(f"y2 predictions shape: {result['y2'].values.shape}")
+```
+
+```{python}
+import altair as alt
+
+# Plot both response fits
+plot_data = []
+for i in range(len(x_new)):
+    plot_data.append({"x": float(x_new[i]), "y": float(result["y1"].values[i]), "response": "y1"})
+    plot_data.append({"x": float(x_new[i]), "y": float(result["y2"].values[i]), "response": "y2"})
+
+alt.Chart({"values": plot_data}).mark_line(strokeWidth=2).encode(
+    x=alt.X("x:Q"),
+    y=alt.Y("y:Q"),
+    color=alt.Color("response:N"),
+).properties(width=500, height=300, title="Multi-response GAM predictions")
+```
+
+## Predictions with standard errors
+
+```{python}
+# Standard errors for each response
+result_se = model.predict({"x": x_new}, se=True)
+
+print(f"y1 SE mean: {result_se['y1'].se.mean():.4f}")
+print(f"y2 SE mean: {result_se['y2'].se.mean():.4f}")
+```
+
+## Residual correlation
+
+When responses are modeled jointly, the residuals often carry shared information that the smooth
+terms do not capture. Estimating this residual correlation is useful for understanding the
+unexplained association between outcomes.
+
+```{python}
+# Fit with unstructured residual correlation
+model_corr = wk.MultiResponseGAM(
+    ["y1", "y2"], "s(x)",
+    correlation="unstructured",
+)
+model_corr.fit(data, method="REML")
+
+# Estimate residual correlation
+rc = model_corr.residual_correlation()
+print(rc)
+```
+
+The residual correlation matrix shows how much the residuals of each response pair co-vary after
+accounting for the smooth terms. A strong positive correlation means the unexplained variation in
+one response tends to go in the same direction as the other.
+
+```{python}
+# Access the raw matrices
+print(f"Covariance matrix:\n{rc.covariance.round(4)}")
+print(f"\nCorrelation matrix:\n{rc.correlation.round(4)}")
+```
+
+## Joint prediction
+
+For applications that need all responses in a single matrix (e.g., multivariate downstream
+analysis), use `joint_predict()`:
+
+```{python}
+# Joint prediction returns (n x k) matrix and optional covariance
+preds_matrix, cov_matrix = model_corr.joint_predict({"x": x_new})
+
+print(f"Joint predictions shape: {preds_matrix.shape}")
+print(f"Covariance matrix shape: {cov_matrix.shape}")
+```
+
+## Per-response model access
+
+You can extract the fitted GAM for any individual response for further inspection:
+
+```{python}
+# Get the individual GAM for y1
+gam_y1 = model.response_model("y1")
+print(f"y1 GAM fitted: {gam_y1.is_fitted}")
+print(f"y1 EDF: {gam_y1.edf_total:.1f}")
+```
+
+## EDF and deviance per response
+
+```{python}
+# Effective degrees of freedom per response
+edfs = model.edf()
+print(f"EDF: {edfs}")
+
+# Deviance per response
+devs = model.deviance()
+print(f"Deviance: {devs}")
+```
+
+## Response-specific formulas
+
+Sometimes different responses need different covariates. Use `response_formulas` to add
+response-specific terms on top of the shared formula:
+
+```{python}
+# Add an extra covariate z that only affects y1
+rng = np.random.default_rng(42)
+z = rng.uniform(0, 1, n)
+data_extra = {"x": x, "z": z, "y1": y1 + 2 * z, "y2": y2}
+
+model_specific = wk.MultiResponseGAM(
+    ["y1", "y2"],
+    "s(x)",
+    response_formulas={"y1": "s(z)"},  # y1 gets an extra smooth for z
+)
+model_specific.fit(data_extra, method="REML")
+
+# y1 should have higher EDF because it has an extra smooth
+print(f"y1 EDF: {model_specific.edf()['y1']:.1f}")
+print(f"y2 EDF: {model_specific.edf()['y2']:.1f}")
+```
+
+## Three or more responses
+
+`MultiResponseGAM` works with any number of responses (minimum 2):
+
+```{python}
+# Three responses
+y3 = np.cos(x) + rng.normal(0, 0.3, n)
+data_three = {"x": x, "y1": y1, "y2": y2, "y3": y3}
+
+model_three = wk.MultiResponseGAM(
+    ["y1", "y2", "y3"], "s(x)",
+    correlation="unstructured",
+)
+model_three.fit(data_three, method="REML")
+
+# 3x3 correlation matrix
+rc3 = model_three.residual_correlation()
+print(rc3)
+```
+
+## Summary
+
+```{python}
+print(model_corr.summary())
+```
+
+::: {.callout-tip}
+## When to use MultiResponseGAM
+
+Use `MultiResponseGAM` when:
+
+- You want to fit multiple outcomes with shared covariates in a single call
+- You need to estimate residual correlations between outcomes
+- You want a unified prediction interface for multiple responses
+- Different responses may need different additional terms via `response_formulas`
+
+If the responses are truly independent and you do not need correlation estimates, fitting separate
+`GAM` objects is equivalent and may be simpler.
+:::

@@ -1,0 +1,270 @@
+---
+title: Functional regression
+guide-section: "Advanced features"
+---
+
+```{python}
+#| echo: false
+#| output: false
+import great_docs as gd
+
+gd.enable_tbl_preview(n_head=8, n_tail=3)
+```
+
+In many applications, the predictor is not a single number but a whole curve observed over a domain:
+a spectrum over wavelengths, a temperature profile over time, an fMRI signal over brain regions.
+**Functional regression** models how a scalar response depends on these functional covariates.
+
+Whittaker's `FunctionalGAM` implements scalar-on-function regression, where the response $y$ is
+scalar and one or more predictors $X_i(t)$ are functions. The model is:
+
+$$y_i = \beta_0 + \int X_i(t)\,\beta(t)\,dt + \varepsilon_i$$
+
+where $\beta(t)$ is a smooth coefficient function that describes how each point along the functional
+domain contributes to the response. The integral is approximated by numerical quadrature, and
+$\beta(t)$ is expanded in a B-spline or Fourier basis with a roughness penalty to ensure smoothness.
+
+## Generating functional data
+
+To illustrate, we simulate data where the coefficient function is a sine wave: points along the
+curve where the true $\beta(t) > 0$ increase the response, and points where $\beta(t) < 0$ decrease
+it.
+
+```{python}
+import numpy as np
+import whittaker as wk
+
+rng = np.random.default_rng(42)
+n = 200        # number of observations
+T = 50         # number of grid points per curve
+t_grid = np.linspace(0, 1, T)
+
+# True coefficient function: a sine wave
+beta_true = np.sin(2 * np.pi * t_grid)
+
+# Each observation is a random walk (smooth curve)
+X_func = np.zeros((n, T))
+for i in range(n):
+    X_func[i, :] = rng.normal(0, 1, T).cumsum() / np.sqrt(T)
+
+# Response: integral of X(t)*beta(t) + noise
+dt = 1.0 / (T - 1)
+w = np.full(T, dt)
+w[0] = dt / 2
+w[-1] = dt / 2
+y = X_func @ (beta_true * w) + rng.normal(0, 0.3, n)
+
+print(f"Functional covariate shape: {X_func.shape}")
+print(f"Response shape: {y.shape}")
+```
+
+Each row of `X_func` is one observation's curve, sampled at `T` equally-spaced grid points over the
+domain $[0, 1]$. The data dictionary stores the functional covariate as a 2-D array and the response
+as a 1-D array.
+
+## Fitting the model
+
+```{python}
+# Specify the functional term
+model = wk.FunctionalGAM(
+    response="y",
+    functional_terms=[
+        wk.FunctionalTerm(name="curves", domain=(0, 1), n_basis=15),
+    ],
+)
+
+# Fit the model
+model.fit({"curves": X_func, "y": y}, method="REML")
+
+print(f"EDF total:  {model.edf_total:.1f}")
+print(f"Scale:      {model.scale:.4f}")
+print(f"Deviance:   {model.deviance:.2f}")
+```
+
+The `FunctionalTerm` specifies:
+
+- `name`: the key in the data dictionary (must be a 2-D array)
+- `domain`: the endpoints of the functional argument (here $[0, 1]$)
+- `n_basis`: number of basis functions for expanding $\beta(t)$ (default 15)
+- `basis`: `"bspline"` (default) or `"fourier"`
+
+## Extracting the coefficient function
+
+The estimated $\hat\beta(t)$ tells you how each point along the functional domain influences the
+response. Positive values at time $t$ mean that higher values of the curve at $t$ increase the
+response; negative values mean they decrease it.
+
+```{python}
+# Extract the estimated coefficient function with confidence intervals
+cf = model.coefficient_function("curves", n_grid=200, level=0.95)
+
+print(f"Grid shape:   {cf.grid.shape}")
+print(f"Values shape: {cf.values.shape}")
+print(f"SE shape:     {cf.se.shape}")
+```
+
+```{python}
+import altair as alt
+
+# Plot the estimated coefficient function against the truth
+cf_data = [
+    {"t": float(cf.grid[i]), "beta": float(cf.values[i]),
+     "lower": float(cf.lower[i]), "upper": float(cf.upper[i])}
+    for i in range(len(cf.grid))
+]
+true_data = [
+    {"t": float(cf.grid[i]), "beta": float(np.sin(2 * np.pi * cf.grid[i]))}
+    for i in range(len(cf.grid))
+]
+
+# Confidence band
+band = alt.Chart({"values": cf_data}).mark_area(opacity=0.2, color="steelblue").encode(
+    x=alt.X("t:Q", title="t (functional domain)"),
+    y="lower:Q", y2="upper:Q",
+)
+
+# Estimated beta(t)
+estimate = alt.Chart({"values": cf_data}).mark_line(color="steelblue", strokeWidth=2).encode(
+    x="t:Q", y=alt.Y("beta:Q", title="beta(t)"),
+)
+
+# True beta(t)
+truth = alt.Chart({"values": true_data}).mark_line(
+    color="firebrick", strokeDash=[4, 4], strokeWidth=1.5
+).encode(x="t:Q", y="beta:Q")
+
+(band + estimate + truth).properties(
+    width=500, height=300,
+    title="Estimated coefficient function (blue) vs. truth (red dashed)"
+)
+```
+
+The blue curve is $\hat\beta(t)$, the shaded band is the 95% pointwise confidence interval, and the
+red dashed line is the true $\beta(t) = \sin(2\pi t)$. The GAM recovers the shape of the
+coefficient function, showing that the functional predictor's contribution to the response varies
+sinusoidally across the domain.
+
+## Prediction
+
+```{python}
+# Predict on the first 10 observations
+pred = model.predict({"curves": X_func[:10], "y": y[:10]})
+print(f"Predictions: {pred[:5].round(3)}")
+
+# With standard errors
+mu, se = model.predict({"curves": X_func[:10], "y": y[:10]}, se=True)
+print(f"SEs: {se[:5].round(4)}")
+```
+
+## Using a Fourier basis
+
+For functional covariates with periodic structure (e.g., spectral data, seasonal patterns), a
+Fourier basis may be more natural than B-splines:
+
+```{python}
+model_fourier = wk.FunctionalGAM(
+    response="y",
+    functional_terms=[
+        wk.FunctionalTerm(name="curves", basis="fourier", domain=(0, 1), n_basis=15),
+    ],
+)
+model_fourier.fit({"curves": X_func, "y": y}, method="REML")
+
+cf_fourier = model_fourier.coefficient_function("curves")
+print(f"Fourier basis EDF: {model_fourier.edf_total:.1f}")
+```
+
+::: {.callout-tip}
+## Choosing the basis
+
+- **B-splines** (`basis="bspline"`, default): flexible, no periodicity assumption, good for most
+  applications.
+- **Fourier** (`basis="fourier"`): natural for periodic signals, where $\beta(t)$ is expected to be
+  a sum of sines and cosines. The penalty shrinks higher frequencies, giving a smooth estimate.
+:::
+
+## Multiple functional terms
+
+You can include more than one functional covariate:
+
+```{python}
+# Two functional predictors
+rng = np.random.default_rng(42)
+T2 = 30
+t2 = np.linspace(0, 2, T2)
+beta2 = t2**2 - t2  # quadratic coefficient function on [0, 2]
+
+X2 = rng.normal(0, 1, (n, T2)).cumsum(axis=1) / np.sqrt(T2)
+
+dt2 = 2.0 / (T2 - 1)
+w2 = np.full(T2, dt2)
+w2[0] = w2[-1] = dt2 / 2
+
+y2 = X_func @ (beta_true * w) + X2 @ (beta2 * w2) + rng.normal(0, 0.3, n)
+
+model_two = wk.FunctionalGAM(
+    response="y",
+    functional_terms=[
+        wk.FunctionalTerm(name="f1", domain=(0, 1), n_basis=15),
+        wk.FunctionalTerm(name="f2", domain=(0, 2), n_basis=12),
+    ],
+)
+model_two.fit({"f1": X_func, "f2": X2, "y": y2}, method="REML")
+
+print(model_two.summary())
+```
+
+## Mixed models: functional + scalar terms
+
+Often you have both functional and scalar predictors. The `scalar_terms` parameter adds standard GAM
+smooth terms alongside the functional terms:
+
+```{python}
+# Add a scalar covariate
+x_scalar = np.linspace(0, 2 * np.pi, n)
+y_mixed = X_func @ (beta_true * w) + np.sin(x_scalar) + rng.normal(0, 0.3, n)
+
+model_mixed = wk.FunctionalGAM(
+    response="y",
+    functional_terms=[wk.FunctionalTerm(name="curves", domain=(0, 1))],
+    scalar_terms="s(temp)",
+)
+model_mixed.fit({"curves": X_func, "temp": x_scalar, "y": y_mixed}, method="REML")
+
+print(model_mixed.summary())
+```
+
+The scalar terms use the standard GAM smooth machinery (TPRS, P-splines, etc.) while the functional
+terms use basis expansion and numerical integration.
+
+## Specifying terms as dictionaries
+
+For convenience, functional terms can also be specified as plain dictionaries:
+
+```{python}
+model_dict = wk.FunctionalGAM(
+    response="y",
+    functional_terms=[
+        {"name": "curves", "basis": "bspline", "domain": (0, 1), "n_basis": 20},
+    ],
+)
+model_dict.fit({"curves": X_func, "y": y}, method="REML")
+print(f"EDF: {model_dict.edf_total:.1f}")
+```
+
+::: {.callout-note}
+## Data format for functional covariates
+
+Functional covariates must be 2-D NumPy arrays of shape `(n, T)` where `n` is the number of
+observations and `T` is the number of grid points. The grid points are assumed equally spaced over
+the `domain`. Scalar covariates and the response are 1-D arrays as usual.
+:::
+
+## Summary
+
+```{python}
+print(model.summary())
+```
+
+The summary reports the functional terms with their basis type, number of basis functions, domain,
+and effective degrees of freedom.

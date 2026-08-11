@@ -3,92 +3,715 @@ title: Smooth terms
 guide-section: "Fitting models"
 ---
 
-::: {.callout-note}
-This page is a work in progress. Content is added as each smooth type is implemented.
-:::
+```{python}
+#| echo: false
+#| output: false
+import great_docs as gd
 
-A GAM replaces a linear term $\beta x$ with a smooth function $f(x)$, where the shape of $f$ is
-estimated from the data subject to a roughness penalty. The **basis** determines which family of
-functions $f$ can belong to, and the **penalty** controls how wiggly the fit is allowed to be.
-
-## Thin plate regression splines (TPRS): `bs="tp"`
-
-TPRS is the default basis in Whittaker, as it is in mgcv. It is an optimal smoother in the sense
-that it minimizes a global measure of roughness for a given fit quality, with no need to place knots
-manually.
-
-```python
-model = wk.GAM("y ~ s(x)")              # TPRS, default k=10
-model = wk.GAM("y ~ s(x, k=20)")        # increase basis dimension
-model = wk.GAM("y ~ s(x, bs='tp')")     # explicit
+gd.enable_tbl_preview(n_head=8, n_tail=3)
 ```
 
-**Penalty**: integrated squared second derivative (for 1D), or the thin plate spline penalty (for 2D
-and higher).
+A GAM replaces the linear term $\beta x$ with a smooth function $f(x)$, allowing the data to
+determine the shape of each predictor's effect. This page covers every smooth type available in
+Whittaker, with runnable examples showing when and how to use each one.
+
+## What smooth functions are
+
+In a standard linear model, each predictor enters as a straight line: $y = \beta_0 + \beta_1 x$.
+A GAM relaxes this to
+
+$$y = \beta_0 + f(x)$$
+
+where $f$ is an unknown smooth function estimated from the data. The key idea is to represent $f$ as
+a weighted sum of known **basis functions** $b_k$:
+
+$$f(x) = \sum_{k=1}^{K} \beta_k \, b_k(x)$$
+
+The coefficients $\beta_k$ are estimated by penalized likelihood. The **penalty** controls
+smoothness; without it, the model would interpolate the noise. The standard roughness penalty is
+
+$$\lambda \int \left[ f''(x) \right]^2 dx$$
+
+where $\lambda$ is the **smoothing parameter**. Large $\lambda$ produces a smoother (less wiggly)
+curve; $\lambda \to 0$ reproduces an unpenalized fit; $\lambda \to \infty$ shrinks $f$ toward a
+straight line. Whittaker selects $\lambda$ automatically by REML (or GCV), so you rarely need to
+set it by hand.
+
+::: {.callout-tip}
+## The basis dimension is an upper bound, not the fit complexity
+
+The number of basis functions `k` sets the **maximum** possible complexity of the smooth. The
+actual complexity (reported as the effective degrees of freedom, EDF) is determined by $\lambda$.
+Setting `k` too low truncates the function space and can cause underfitting, but setting it somewhat
+too high is harmless because the penalty takes care of the rest.
+:::
+
+## Thin plate regression splines (TPRS): `bs="tp"` {#tprs}
+
+TPRS is the default basis in Whittaker, as it is in mgcv. It is an **optimal** smoother: for a
+given number of basis functions, TPRS minimizes a global measure of roughness without requiring you
+to choose knot locations. This makes it an excellent default for exploratory work.
+
+**Penalty**: integrated squared second derivative (1D) or the thin plate spline penalty (2D+).
 
 **When to use**: the safe default for any univariate or low-dimensional smooth.
 
-## Cubic regression splines: `bs="cr"`
+```{python}
+import numpy as np
+import whittaker as wk
+import altair as alt
 
-Cubic splines are piecewise cubic polynomials joined at knots with continuous first and second
-derivatives. They are slightly cheaper to compute than TPRS and are the best choice when you need an
-interpretable, knot-based basis.
+# Generate data from a noisy sine curve
+rng = np.random.default_rng(42)
+n = 200
+x = np.linspace(0, 2 * np.pi, n)
+y = np.sin(x) + rng.normal(0, 0.3, n)
 
-```python
-model = wk.GAM("y ~ s(x, bs='cr')")
-model = wk.GAM("y ~ s(x, bs='cr', k=15)")
+# Fit a GAM with the default TPRS basis
+model_tp = wk.GAM("y ~ s(x)")
+model_tp.fit({"x": x, "y": y}, method="REML")
+
+# Print summary to see the EDF
+print(model_tp.summary())
 ```
+
+The summary shows the effective degrees of freedom (EDF) for the smooth. An EDF near 1 means the
+smooth is approximately linear; higher values indicate more curvature. For a sine wave, expect an
+EDF around 5--7.
+
+```{python}
+# Predict on a fine grid with standard errors
+x_grid = np.linspace(0, 2 * np.pi, 300)
+preds = model_tp.predict({"x": x_grid}, se=True)
+
+# Compute 95% confidence band
+z = 1.96
+lower = preds.values - z * preds.se
+upper = preds.values + z * preds.se
+
+# Build the plot data
+obs_data = [{"x": float(x[i]), "y": float(y[i])} for i in range(n)]
+fit_data = [
+    {"x": float(x_grid[i]), "fit": float(preds.values[i]),
+     "lower": float(lower[i]), "upper": float(upper[i])}
+    for i in range(len(x_grid))
+]
+true_data = [
+    {"x": float(x_grid[i]), "true": float(np.sin(x_grid[i]))}
+    for i in range(len(x_grid))
+]
+
+# Observed points
+points = alt.Chart({"values": obs_data}).mark_circle(
+    size=15, opacity=0.3, color="steelblue"
+).encode(
+    x=alt.X("x:Q", title="x"),
+    y=alt.Y("y:Q", title="y"),
+)
+
+# Fitted curve
+line = alt.Chart({"values": fit_data}).mark_line(
+    color="firebrick", strokeWidth=2
+).encode(x="x:Q", y="fit:Q")
+
+# Confidence band
+band = alt.Chart({"values": fit_data}).mark_area(
+    opacity=0.2, color="firebrick"
+).encode(x="x:Q", y="lower:Q", y2="upper:Q")
+
+# True function
+true_line = alt.Chart({"values": true_data}).mark_line(
+    color="gray", strokeDash=[4, 4], strokeWidth=1.5
+).encode(x="x:Q", y="true:Q")
+
+# Combine layers
+(band + points + line + true_line).properties(
+    width=550, height=320,
+    title="TPRS smooth (default): y ~ s(x)"
+)
+```
+
+The red curve is the estimated smooth $\hat{f}(x)$, the shaded band is the 95% pointwise confidence
+interval, and the gray dashed line is the true $\sin(x)$. The TPRS basis recovers the shape closely
+with only 10 basis functions.
+
+### Increasing the basis dimension
+
+If the true function is more complex, increase `k`:
+
+```{python}
+# A more complex function needs more basis functions
+rng = np.random.default_rng(42)
+n = 400
+x = np.linspace(0, 4 * np.pi, n)
+y = np.sin(x) + 0.5 * np.sin(3 * x) + rng.normal(0, 0.3, n)
+
+# k=10 (default) vs k=25
+model_k10 = wk.GAM("y ~ s(x)").fit({"x": x, "y": y}, method="REML")
+model_k25 = wk.GAM("y ~ s(x, k=25)").fit({"x": x, "y": y}, method="REML")
+
+# Compare predictions
+x_grid = np.linspace(0, 4 * np.pi, 400)
+preds_k10 = model_k10.predict({"x": x_grid})
+preds_k25 = model_k25.predict({"x": x_grid})
+
+# Build comparison data
+comp_data = [
+    {"x": float(x_grid[i]), "fit": float(preds_k10.values[i]), "model": "k=10"}
+    for i in range(len(x_grid))
+] + [
+    {"x": float(x_grid[i]), "fit": float(preds_k25.values[i]), "model": "k=25"}
+    for i in range(len(x_grid))
+]
+
+alt.Chart({"values": comp_data}).mark_line(strokeWidth=2).encode(
+    x=alt.X("x:Q", title="x"),
+    y=alt.Y("fit:Q", title="f(x)"),
+    color=alt.Color("model:N", title="Basis dimension"),
+).properties(width=550, height=300, title="Effect of basis dimension k")
+```
+
+With `k=10`, the smooth cannot fully capture the higher-frequency component, but `k=25` captures
+both harmonics. Use `model.check()` (see [Diagnostics](07-diagnostics.qmd)) to decide if `k` is
+large enough.
+
+## Cubic regression splines: `bs="cr"` {#crs}
+
+Cubic regression splines are piecewise cubic polynomials joined at **knots** with continuous first
+and second derivatives. They are slightly cheaper to compute than TPRS and provide an interpretable,
+knot-based representation.
 
 **Penalty**: integrated squared second derivative.
 
 **When to use**: when computational speed matters, or when you want explicit control over knot
 placement.
 
-## P-splines: `bs="ps"`
+```{python}
+# Generate data
+rng = np.random.default_rng(42)
+n = 200
+x = np.linspace(0, 1, n)
+y = np.exp(2 * x) * np.sin(6 * x) + rng.normal(0, 0.5, n)
 
-P-splines combine a B-spline basis with a difference penalty on adjacent coefficients. They are
-highly efficient and well-suited to regularly-spaced data.
+# Fit with cubic regression spline basis
+model_cr = wk.GAM("y ~ s(x, bs='cr', k=15)")
+model_cr.fit({"x": x, "y": y}, method="REML")
 
-```python
-model = wk.GAM("y ~ s(x, bs='ps')")
-model = wk.GAM("y ~ s(x, bs='ps', k=20, m=2)")  # order-2 difference penalty
+# Print summary
+print(model_cr.summary())
 ```
 
-**Penalty**: $m$-th order difference penalty on adjacent B-spline coefficients.
+```{python}
+# Predict and plot
+x_grid = np.linspace(0, 1, 300)
+preds_cr = model_cr.predict({"x": x_grid}, se=True)
 
-**When to use**: large datasets, time series, or when you want a penalty that does not depend on the
-data locations.
+# Build plot data
+obs_data = [{"x": float(x[i]), "y": float(y[i])} for i in range(n)]
+fit_data = [
+    {"x": float(x_grid[i]), "fit": float(preds_cr.values[i]),
+     "lower": float(preds_cr.values[i] - 1.96 * preds_cr.se[i]),
+     "upper": float(preds_cr.values[i] + 1.96 * preds_cr.se[i])}
+    for i in range(len(x_grid))
+]
 
-## Tensor product smooths: `te()` and `ti()`
+points = alt.Chart({"values": obs_data}).mark_circle(
+    size=15, opacity=0.3, color="steelblue"
+).encode(x=alt.X("x:Q"), y=alt.Y("y:Q"))
 
-For smooth interactions between two or more variables, use tensor products. Unlike `s(x1, x2)`
-(which applies a single isotropic penalty), `te()` applies a separate penalty to each margin
-(appropriate when the predictors are measured on different scales).
+line = alt.Chart({"values": fit_data}).mark_line(
+    color="darkgreen", strokeWidth=2
+).encode(x="x:Q", y="fit:Q")
 
-```python
-model = wk.GAM("y ~ te(x1, x2)")            # tensor product smooth
-model = wk.GAM("y ~ ti(x1) + ti(x2) + ti(x1, x2)")  # main effects + interaction
+band = alt.Chart({"values": fit_data}).mark_area(
+    opacity=0.2, color="darkgreen"
+).encode(x="x:Q", y="lower:Q", y2="upper:Q")
+
+(band + points + line).properties(
+    width=550, height=320,
+    title="Cubic regression spline: s(x, bs='cr', k=15)"
+)
 ```
 
-**When to use**: modelling spatial data, time × space interactions, or any smooth interaction
-between predictors on different scales.
+## P-splines: `bs="ps"` {#psplines}
 
-## Choosing the basis dimension `k`
+P-splines combine a **B-spline basis** with a **difference penalty** on adjacent coefficients.
+Instead of penalizing the integrated squared second derivative, the penalty acts on finite
+differences of the coefficients $\beta_k$:
 
-The basis dimension `k` is the maximum complexity of the smooth. Whittaker selects the actual
-smoothness via REML, so `k` is an upper bound, not the effective degrees of freedom.
+$$\lambda \sum_k (\Delta^m \beta_k)^2$$
 
-Rules of thumb:
+where $\Delta^m$ is the $m$-th order difference operator. The default is $m = 2$ (second-order
+differences).
 
-- start with the default (`k=10`)
-- if `model.check()` reports a low k-index (< 1) with a significant p-value, increase `k`
-- `k` cannot exceed the number of unique covariate values
+**When to use**: large datasets, time series, or evenly-spaced data. P-splines are very efficient
+because the B-spline basis is banded.
 
-## Cyclic splines: `bs="cc"`
+```{python}
+# Generate evenly-spaced data (typical for time series)
+rng = np.random.default_rng(42)
+n = 300
+x = np.linspace(0, 10, n)
+y = 2 * np.sin(x) + 0.3 * x + rng.normal(0, 0.5, n)
 
-For periodic predictors (time of day, day of year, angle), use a cyclic cubic spline. The basis is
-constrained so that the function and its first derivative match at the endpoints.
+# Fit with P-spline basis
+model_ps = wk.GAM("y ~ s(x, bs='ps', k=20)")
+model_ps.fit({"x": x, "y": y}, method="REML")
+
+# Print summary
+print(model_ps.summary())
+```
+
+::: {.callout-note}
+## Changing the penalty order
+
+Pass `m` to control the difference penalty order. `m=1` penalizes first differences (piecewise
+linear tendency), `m=2` penalizes second differences (piecewise quadratic tendency, the default),
+and `m=3` penalizes third differences. For example: `s(x, bs='ps', k=20, m=3)`.
+:::
+
+## Cyclic splines: `bs="cc"` and `bs="cp"` {#cyclic}
+
+For **periodic** predictors---time of day, day of year, angle---use a cyclic spline. The basis is
+constrained so that $f$ and its first derivative match at the endpoints of the covariate range.
+
+- `bs="cc"`: cyclic cubic regression spline
+- `bs="cp"`: cyclic P-spline
+
+**When to use**: any predictor that wraps around (hours, months, compass bearing, etc.).
+
+```{python}
+# Simulate periodic data: temperature over a year
+rng = np.random.default_rng(42)
+n = 365
+day = np.linspace(0, 365, n, endpoint=False)
+# True seasonal pattern: warm in summer, cold in winter
+temp = 15 + 10 * np.sin(2 * np.pi * (day - 80) / 365) + rng.normal(0, 2, n)
+
+# Fit a cyclic cubic spline
+model_cc = wk.GAM("y ~ s(x, bs='cc', k=12)")
+model_cc.fit({"x": day, "y": temp}, method="REML")
+
+# Predict on a full cycle
+day_grid = np.linspace(0, 365, 365)
+preds_cc = model_cc.predict({"x": day_grid}, se=True)
+
+# Build plot data
+obs_data = [{"day": float(day[i]), "temp": float(temp[i])} for i in range(n)]
+fit_data = [
+    {"day": float(day_grid[i]), "fit": float(preds_cc.values[i]),
+     "lower": float(preds_cc.values[i] - 1.96 * preds_cc.se[i]),
+     "upper": float(preds_cc.values[i] + 1.96 * preds_cc.se[i])}
+    for i in range(len(day_grid))
+]
+
+points = alt.Chart({"values": obs_data}).mark_circle(
+    size=10, opacity=0.2, color="steelblue"
+).encode(
+    x=alt.X("day:Q", title="Day of year"),
+    y=alt.Y("temp:Q", title="Temperature (C)"),
+)
+
+line = alt.Chart({"values": fit_data}).mark_line(
+    color="darkorange", strokeWidth=2
+).encode(x="day:Q", y="fit:Q")
+
+band = alt.Chart({"values": fit_data}).mark_area(
+    opacity=0.2, color="darkorange"
+).encode(x="day:Q", y="lower:Q", y2="upper:Q")
+
+(band + points + line).properties(
+    width=550, height=320,
+    title="Cyclic cubic spline: temperature by day of year"
+)
+```
+
+The cyclic basis forces the smooth to wrap seamlessly from day 365 back to day 0. Without `bs="cc"`,
+the endpoints would be unconstrained, producing a discontinuity in the fitted seasonal pattern.
+
+## Tensor product smooths: `te()` and `ti()` {#tensor}
+
+When you need a smooth function of **two or more** predictors measured on **different scales** (e.g.,
+latitude and time, or temperature and pressure), use tensor product smooths. Unlike `s(x1, x2)`
+(which applies a single isotropic penalty treating all dimensions equally), `te()` applies a
+**separate marginal penalty** to each variable.
+
+$$f(x_1, x_2) = \sum_j \sum_k \beta_{jk} \, b_j^{(1)}(x_1) \, b_k^{(2)}(x_2)$$
+
+The key distinction between `te()` and `ti()`:
+
+- **`te(x1, x2)`**: the full tensor product smooth, including main effects and interaction.
+- **`ti(x1, x2)`**: the tensor product **interaction only**. Use `ti()` to decompose the surface
+  into interpretable pieces: `ti(x1) + ti(x2) + ti(x1, x2)`.
+
+```{python}
+# Generate 2D data: f(x1, x2) = sin(x1) * cos(x2)
+rng = np.random.default_rng(42)
+n = 500
+x1 = rng.uniform(0, 2 * np.pi, n)
+x2 = rng.uniform(0, 2 * np.pi, n)
+y = np.sin(x1) * np.cos(x2) + rng.normal(0, 0.3, n)
+
+# Fit a tensor product smooth
+model_te = wk.GAM("y ~ te(x1, x2)")
+model_te.fit({"x1": x1, "x2": x2, "y": y}, method="REML")
+
+# Print summary
+print(model_te.summary())
+```
+
+```{python}
+# Predict on a grid for visualization
+n_grid = 40
+x1_grid = np.linspace(0, 2 * np.pi, n_grid)
+x2_grid = np.linspace(0, 2 * np.pi, n_grid)
+x1_mesh, x2_mesh = np.meshgrid(x1_grid, x2_grid)
+x1_flat = x1_mesh.ravel()
+x2_flat = x2_mesh.ravel()
+
+preds_te = model_te.predict({"x1": x1_flat, "x2": x2_flat})
+
+# Heatmap of the fitted surface
+grid_data = [
+    {"x1": float(x1_flat[i]), "x2": float(x2_flat[i]),
+     "f_hat": float(preds_te.values[i])}
+    for i in range(len(x1_flat))
+]
+
+alt.Chart({"values": grid_data}).mark_rect().encode(
+    x=alt.X("x1:Q", bin=alt.Bin(maxbins=n_grid), title="x1"),
+    y=alt.Y("x2:Q", bin=alt.Bin(maxbins=n_grid), title="x2"),
+    color=alt.Color("mean(f_hat):Q", scale=alt.Scale(scheme="viridis"), title="f(x1, x2)"),
+).properties(width=400, height=400, title="Tensor product surface: te(x1, x2)")
+```
+
+::: {.callout-tip}
+## Decomposing with `ti()`
+
+To test whether the interaction is significant, decompose the surface:
 
 ```python
-model = wk.GAM("y ~ s(doy, bs='cc', k=12)")   # day of year, 12 basis functions
+model_ti = wk.GAM("y ~ ti(x1) + ti(x2) + ti(x1, x2)")
+model_ti.fit(data, method="REML")
+print(model_ti.summary())
 ```
+
+The p-value on the `ti(x1, x2)` term tells you whether the interaction is needed beyond the
+additive main effects.
+:::
+
+## Shrinkage splines: `bs="ts"` and `bs="cs"` {#shrinkage}
+
+Standard smooth penalties have a **null space**---a set of functions (typically linear) that are
+not penalized at all. This means that even with $\lambda \to \infty$, a standard smooth can never
+shrink to zero; it can only shrink to a straight line.
+
+**Shrinkage splines** add an extra penalty component that penalizes the null space, allowing the
+smooth to be penalized all the way to zero. This turns smoothing parameter selection into an
+automatic form of **variable selection**: if a predictor is uninformative, its smooth is driven to
+zero rather than to a residual linear trend.
+
+- `bs="ts"`: shrinkage version of TPRS (`bs="tp"`)
+- `bs="cs"`: shrinkage version of CRS (`bs="cr"`)
+
+```{python}
+# Generate data where x2 is uninformative
+rng = np.random.default_rng(42)
+n = 300
+x1 = np.linspace(0, 2 * np.pi, n)
+x2 = rng.uniform(0, 1, n)  # pure noise predictor
+y = np.sin(x1) + rng.normal(0, 0.3, n)
+
+# Fit with shrinkage splines
+model_shrink = wk.GAM("y ~ s(x1, bs='ts') + s(x2, bs='ts')")
+model_shrink.fit({"x1": x1, "x2": x2, "y": y}, method="REML")
+
+# Summary shows x2 shrunk toward zero
+print(model_shrink.summary())
+```
+
+In the summary, the EDF for `s(x2)` should be very close to zero, indicating that the shrinkage
+penalty has effectively removed this uninformative predictor from the model.
+
+::: {.callout-important}
+## When to prefer shrinkage splines
+
+Use `bs="ts"` or `bs="cs"` when you have many candidate predictors and want the model to
+automatically drop uninformative ones. For models where every predictor is known to be relevant,
+the standard bases (`bs="tp"`, `bs="cr"`) are preferred because the extra penalty adds slight
+computational cost without benefit.
+:::
+
+## Random effects: `bs="re"` {#random-effects}
+
+The random effect basis `bs="re"` represents a simple i.i.d. random effect: $\beta_j \sim N(0,
+\sigma^2)$. Each level of the grouping variable gets its own coefficient, and the penalty controls
+the variance $\sigma^2$.
+
+This lets you mix smooth terms with random intercepts (or slopes) in a single GAM, essentially
+fitting a generalized additive mixed model (GAMM) without switching to a different function.
+
+```{python}
+# Generate grouped data: 5 groups with different intercepts
+rng = np.random.default_rng(42)
+n_per_group = 50
+n_groups = 5
+n = n_per_group * n_groups
+
+# Group labels (repeated)
+group = np.repeat(np.arange(n_groups), n_per_group).astype(float)
+
+# Random intercepts for each group
+group_effects = rng.normal(0, 1.5, n_groups)
+x = rng.uniform(0, 2 * np.pi, n)
+y = np.sin(x) + group_effects[group.astype(int)] + rng.normal(0, 0.3, n)
+
+# Fit with a smooth for x and a random intercept for group
+model_re = wk.GAM("y ~ s(x) + s(group, bs='re')")
+model_re.fit({"x": x, "group": group, "y": y}, method="REML")
+
+# Summary shows estimated variance of the random intercepts
+print(model_re.summary())
+```
+
+The EDF for `s(group, bs='re')` reflects how much the group intercepts vary. If all groups have
+similar means, the EDF is shrunk toward zero; if groups differ substantially, the EDF approaches
+the number of groups minus one.
+
+## Shape-constrained smooths {#shape}
+
+Sometimes theory or domain knowledge tells you that a relationship should be monotone, convex, or
+concave. Shape-constrained smooths enforce these restrictions in the basis construction.
+
+- **`bs="mpi"`**: monotone increasing
+- **`bs="mpd"`**: monotone decreasing
+- **`bs="cx"`**: convex
+- **`bs="cv"`**: concave
+
+```{python}
+# Generate data from a monotone increasing function
+rng = np.random.default_rng(42)
+n = 200
+x = np.linspace(0, 5, n)
+y = np.log1p(x) + rng.normal(0, 0.2, n)
+
+# Fit monotone increasing smooth
+model_mono = wk.GAM("y ~ s(x, bs='mpi', k=10)")
+model_mono.fit({"x": x, "y": y}, method="REML")
+
+# Compare with unconstrained TPRS
+model_free = wk.GAM("y ~ s(x, k=10)")
+model_free.fit({"x": x, "y": y}, method="REML")
+
+# Predict from both models
+x_grid = np.linspace(0, 5, 200)
+preds_mono = model_mono.predict({"x": x_grid})
+preds_free = model_free.predict({"x": x_grid})
+
+# Build comparison data
+comp_data = [
+    {"x": float(x_grid[i]), "fit": float(preds_mono.values[i]), "model": "Monotone (mpi)"}
+    for i in range(len(x_grid))
+] + [
+    {"x": float(x_grid[i]), "fit": float(preds_free.values[i]), "model": "Unconstrained (tp)"}
+    for i in range(len(x_grid))
+]
+
+alt.Chart({"values": comp_data}).mark_line(strokeWidth=2).encode(
+    x=alt.X("x:Q", title="x"),
+    y=alt.Y("fit:Q", title="f(x)"),
+    color=alt.Color("model:N", title="Smooth type"),
+).properties(width=550, height=300, title="Shape-constrained vs. unconstrained smooth")
+```
+
+For this data, both models give similar results because the true function is monotone. The
+constrained smooth guarantees monotonicity even in regions with sparse data or noise, which can be
+important for dose-response curves, growth models, and calibration functions.
+
+## By-variable smooths {#by-variable}
+
+A **by-variable** smooth allows the shape of $f(x)$ to vary across levels of a factor, or to
+scale with a continuous modifier. This is specified with the `by=` argument inside `s()`.
+
+### Factor by-variable
+
+When `by=` names a categorical variable, Whittaker fits a **separate smooth** for each level:
+
+```{python}
+# Generate data where the smooth shape differs by group
+rng = np.random.default_rng(42)
+n_per = 150
+x_a = np.linspace(0, 2 * np.pi, n_per)
+x_b = np.linspace(0, 2 * np.pi, n_per)
+y_a = np.sin(x_a) + rng.normal(0, 0.3, n_per)
+y_b = 0.5 * np.cos(x_b) + rng.normal(0, 0.3, n_per)
+
+# Combine into a single dataset
+x = np.concatenate([x_a, x_b])
+y = np.concatenate([y_a, y_b])
+group = np.array(["A"] * n_per + ["B"] * n_per)
+
+# Fit with a by-variable smooth
+model_by = wk.GAM("y ~ s(x, by=group)")
+model_by.fit({"x": x, "y": y, "group": group}, method="REML")
+
+# Summary shows separate EDFs for each group
+print(model_by.summary())
+```
+
+The model estimates a different smooth $f_A(x)$ and $f_B(x)$, each with its own EDF and smoothing
+parameter. This is the GAM analogue of an interaction between a smooth and a factor.
+
+### Continuous by-variable
+
+When `by=` names a continuous variable, the smooth is **scaled** by that variable: $z \cdot f(x)$.
+This is useful for varying-coefficient models.
+
+```{python}
+# Varying-coefficient model: effect of x depends on z
+rng = np.random.default_rng(42)
+n = 300
+x = np.linspace(0, 2 * np.pi, n)
+z = rng.uniform(0.5, 2.0, n)
+y = z * np.sin(x) + rng.normal(0, 0.3, n)
+
+# Fit: the effect of x is scaled by z
+model_vc = wk.GAM("y ~ s(x, by=z)")
+model_vc.fit({"x": x, "z": z, "y": y}, method="REML")
+
+print(model_vc.summary())
+```
+
+## Choosing the basis dimension `k` {#choosing-k}
+
+The basis dimension `k` determines the maximum complexity of the smooth. It is **not** the number
+of effective degrees of freedom (EDF); the EDF is always less than or equal to `k - 1` (one
+degree of freedom is consumed by the identifiability constraint).
+
+### Rules of thumb
+
+1. **Start with the default** (`k=10`). This is enough for most smooth relationships.
+2. **Run `model.check()`** after fitting. If the residual pattern for a smooth shows structure, or
+   the k-index is below 1 with a significant p-value, increase `k`.
+3. **`k` cannot exceed the number of unique covariate values**. For a predictor with only 8 unique
+   values, `k` is capped at 8.
+4. **Doubling `k` is a safe strategy**: if `k=10` seems too low, try `k=20`. If `k=20` still
+   reports a low k-index, try `k=40`.
+5. **Computational cost scales with `k`**: for TPRS, the cost is $O(nk^2)$; for P-splines and
+   cubic splines, it is $O(nk)$ due to banded structure.
+
+```{python}
+# Checking basis dimension adequacy
+rng = np.random.default_rng(42)
+n = 300
+x = np.linspace(0, 4 * np.pi, n)
+y = np.sin(x) + 0.5 * np.sin(3 * x) + rng.normal(0, 0.3, n)
+
+# Fit with default k
+model_check = wk.GAM("y ~ s(x)")
+model_check.fit({"x": x, "y": y}, method="REML")
+
+# Check for basis dimension adequacy
+print(model_check.check())
+```
+
+::: {.callout-warning}
+## Do not set `k` too low
+
+If `model.check()` reports a k-index below 1 with a significant p-value, the basis is too
+restrictive. The smooth cannot capture the true complexity of the relationship, and the fit will
+be biased. Increase `k` until the k-index is no longer significant.
+:::
+
+## Comparison of basis types
+
+The table below summarizes all available basis types in Whittaker.
+
+| Basis | `bs=` | Penalty | Null space | Best for |
+|-------|-------|---------|------------|----------|
+| Thin plate regression spline | `"tp"` | Integrated $f''(x)^2$ | Linear | General default |
+| Cubic regression spline | `"cr"` | Integrated $f''(x)^2$ | Linear | Speed, explicit knots |
+| P-spline | `"ps"` | Differenced coefficients | Polynomial | Large/regular data |
+| Cyclic cubic | `"cc"` | Integrated $f''(x)^2$ | Constant | Periodic (time of day, etc.) |
+| Cyclic P-spline | `"cp"` | Differenced coefficients | Constant | Periodic, large data |
+| Shrinkage TPRS | `"ts"` | $f''(x)^2$ + null space | None | Variable selection |
+| Shrinkage CRS | `"cs"` | $f''(x)^2$ + null space | None | Variable selection |
+| Random effect | `"re"` | Ridge ($\sum \beta_j^2$) | None | Grouping factors |
+| Adaptive TPRS | `"ad"` | Spatially varying | Linear | Varying smoothness |
+| Soap film | `"so"` | Boundary-aware | Linear | Complex 2D domains |
+| Gaussian process | `"gp"` | GP covariance | Depends on kernel | Spatial correlation |
+| Duchon spline | `"ds"` | Generalized TPS | Polynomial | Generalized smoothness |
+| Markov random field | `"mrf"` | Neighborhood | None | Areal/graph data |
+| Factor smooth | `"fs"` | Group-level curves | None | Random smooth effects |
+| Monotone increasing | `"mpi"` | Shape-constrained | None | Dose-response |
+| Monotone decreasing | `"mpd"` | Shape-constrained | None | Decay curves |
+| Convex | `"cx"` | Shape-constrained | None | Convex relationships |
+| Concave | `"cv"` | Shape-constrained | None | Diminishing returns |
+
+## Other smooth types
+
+### Adaptive smooths: `bs="ad"` {#adaptive}
+
+Adaptive smooths allow the amount of smoothing to vary over the range of the predictor. This is
+useful when the function is smooth in some regions but wiggly in others.
+
+```python
+model = wk.GAM("y ~ s(x, bs='ad', k=20)")
+```
+
+### Soap film smooths: `bs="so"` {#soap}
+
+Soap film smooths are designed for 2D smoothing over complex domains with boundaries (e.g.,
+estuaries, lakes, or irregular geographic regions). The penalty respects the boundary, preventing
+smoothing across physical barriers.
+
+```python
+model = wk.GAM("y ~ s(x, z, bs='so', xt=boundary)")
+```
+
+### Gaussian process smooths: `bs="gp"` {#gp}
+
+A smooth specified as a Gaussian process with a chosen covariance function. Useful when you want to
+encode prior beliefs about correlation structure.
+
+```python
+model = wk.GAM("y ~ s(x, bs='gp')")
+```
+
+### Markov random field: `bs="mrf"` {#mrf}
+
+For areal data (counts by region, district-level outcomes), the MRF basis defines smoothing over a
+neighborhood graph. Adjacent regions are penalized toward similar values.
+
+```python
+model = wk.GAM("y ~ s(region, bs='mrf', xt=adjacency_matrix)")
+```
+
+### Factor smooth interaction: `bs="fs"` {#fs}
+
+Factor smooth interactions fit a separate smooth for each level of a factor, sharing a single
+smoothing parameter. This is the random-effects analogue of a by-variable smooth and is useful when
+you expect each group to have a similar (but not identical) functional form.
+
+```python
+model = wk.GAM("y ~ s(x, group, bs='fs')")
+```
+
+::: {.callout-tip}
+## `bs="fs"` vs. `s(x, by=group)`
+
+Use `bs="fs"` when the group-level curves should be shrunk toward a common shape (a random-effects
+perspective). Use `by=group` when each group's curve is treated as a fixed effect with its own
+smoothing parameter. In practice, `bs="fs"` is more parsimonious and better suited when you have
+many groups.
+:::
+
+## Where to go next
+
+- **[Response families](04-families.qmd)**: choosing the right distribution and link function for
+  your response variable.
+- **[Model fitting](05-fitting.qmd)**: details on REML vs. GCV, the P-IRLS algorithm, and
+  convergence diagnostics.
+- **[Prediction and inference](06-prediction.qmd)**: standard errors, confidence intervals, and
+  partial effect plots.
+- **[Diagnostics](07-diagnostics.qmd)**: residual checks, `model.check()`, and concurvity.

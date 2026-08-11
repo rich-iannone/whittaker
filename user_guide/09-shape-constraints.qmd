@@ -1,0 +1,558 @@
+---
+title: "Shape constraints"
+guide-section: "Advanced features"
+---
+
+```{python}
+#| echo: false
+#| output: false
+import great_docs as gd
+
+gd.enable_tbl_preview(n_head=8, n_tail=3)
+```
+
+Shape-constrained smooths let you incorporate domain knowledge directly into the model. When theory
+or experience tells you that a relationship must be monotone, convex, or concave, enforcing that
+constraint prevents the model from fitting spurious wiggles that violate known behavior. This page
+covers every shape-constrained basis in Whittaker, with worked examples and guidance on when each
+one is appropriate.
+
+## Why shape constraints matter
+
+An unconstrained smooth estimates any shape the data supports. That flexibility is a strength when
+you have no prior knowledge, but it becomes a liability when it produces fits that contradict
+established theory. Common situations where constraints help:
+
+- **Dose-response curves**: higher doses should not produce lower responses (monotone increasing).
+- **Decay processes**: concentration or activity decreases over time (monotone decreasing).
+- **Economies of scale**: average cost decreases then levels off, forming a convex curve.
+- **Diminishing returns**: each additional unit of input produces less additional output (concave).
+- **Age effects in growth**: height increases with age in children (monotone increasing).
+- **Calibration functions**: instrument readings should increase with the true value.
+
+Without a constraint, an unconstrained smooth may oscillate in regions where data are sparse or
+noisy, producing a fit that violates domain knowledge and reduces interpretability. A shape
+constraint eliminates these artifacts without forcing a specific parametric form---the smooth is
+still flexible within the constraint.
+
+::: {.callout-tip}
+## Constraints vs. parametric models
+
+Shape constraints offer a middle ground between fully parametric models (e.g., fitting a logistic
+curve) and unconstrained smooths. You get the flexibility of a nonparametric fit with the guarantee
+that the estimated function respects the qualitative behavior you expect.
+:::
+
+## Monotone increasing smooths: `bs="mpi"` {#monotone-increasing}
+
+A monotone increasing P-spline constrains $f(x)$ so that $f(x_1) \le f(x_2)$ whenever
+$x_1 < x_2$. The smooth can still curve, accelerate, or decelerate---it just cannot decrease.
+
+Mathematically, the monotone increasing smooth is constructed from a standard P-spline basis with
+coefficients $\beta_k$ constrained so that $\beta_1 \le \beta_2 \le \cdots \le \beta_K$. This
+ordering is enforced after each PIRLS (penalized iteratively re-weighted least squares) iteration
+using the **pool adjacent violators algorithm** (PAVA), which projects the coefficient vector onto
+the monotone cone.
+
+### Example: dose-response data
+
+A pharmacological experiment measures the response to increasing doses of a drug. Theory dictates
+that the response should not decrease as the dose rises.
+
+```{python}
+import numpy as np
+import whittaker as wk
+import altair as alt
+
+# Simulate a dose-response curve (Emax-like shape with noise)
+rng = np.random.default_rng(42)
+n = 150
+dose = np.sort(rng.uniform(0, 10, n))
+# True response: saturating Emax curve
+true_response = 100 * dose / (2 + dose)
+y = true_response + rng.normal(0, 8, n)
+
+data = {"dose": dose, "y": y}
+
+# Fit a monotone increasing smooth
+model_mpi = wk.GAM("y ~ s(dose, bs='mpi', k=15)")
+model_mpi.fit(data, method="REML")
+
+# Fit an unconstrained smooth for comparison
+model_free = wk.GAM("y ~ s(dose, k=15)")
+model_free.fit(data, method="REML")
+
+print("=== Monotone increasing model ===")
+print(model_mpi.summary())
+```
+
+```{python}
+# Predict from both models on a fine grid
+dose_grid = np.linspace(0, 10, 300)
+preds_mpi = model_mpi.predict({"dose": dose_grid})
+preds_free = model_free.predict({"dose": dose_grid})
+
+# Build data for the comparison plot
+obs_data = [
+    {"dose": float(dose[i]), "response": float(y[i])}
+    for i in range(n)
+]
+fit_data = [
+    {"dose": float(dose_grid[i]), "fit": float(preds_mpi.values[i]),
+     "model": "Monotone (mpi)"}
+    for i in range(len(dose_grid))
+] + [
+    {"dose": float(dose_grid[i]), "fit": float(preds_free.values[i]),
+     "model": "Unconstrained (tp)"}
+    for i in range(len(dose_grid))
+]
+
+# Observed points
+points = alt.Chart({"values": obs_data}).mark_circle(
+    size=20, opacity=0.3, color="steelblue"
+).encode(
+    x=alt.X("dose:Q", title="Dose"),
+    y=alt.Y("response:Q", title="Response"),
+)
+
+# Fitted curves from both models
+lines = alt.Chart({"values": fit_data}).mark_line(strokeWidth=2).encode(
+    x=alt.X("dose:Q", title="Dose"),
+    y=alt.Y("fit:Q", title="Response"),
+    color=alt.Color("model:N", title="Smooth type"),
+)
+
+(points + lines).properties(
+    width=550, height=320,
+    title="Dose-response: monotone increasing vs. unconstrained"
+)
+```
+
+Both fits track the saturating response, but the unconstrained smooth may dip slightly in sparse
+regions. The monotone constraint guarantees a non-decreasing fit, which is the scientifically
+credible result for a dose-response relationship.
+
+## Monotone decreasing smooths: `bs="mpd"` {#monotone-decreasing}
+
+The monotone decreasing basis is the mirror image of `bs="mpi"`: it constrains $f(x_1) \ge f(x_2)$
+whenever $x_1 < x_2$. This is enforced by requiring $\beta_1 \ge \beta_2 \ge \cdots \ge \beta_K$.
+
+### Example: radioactive decay
+
+The activity of a radioactive sample decreases over time. An unconstrained smooth might show small
+increases due to measurement noise, but the true process is strictly decreasing.
+
+```{python}
+# Simulate exponential decay with noise
+rng = np.random.default_rng(42)
+n = 120
+time = np.sort(rng.uniform(0, 10, n))
+# True decay: A(t) = 100 * exp(-0.3 * t)
+true_activity = 100 * np.exp(-0.3 * time)
+y_decay = true_activity + rng.normal(0, 5, n)
+
+data_decay = {"time": time, "y": y_decay}
+
+# Fit monotone decreasing smooth
+model_mpd = wk.GAM("y ~ s(time, bs='mpd', k=12)")
+model_mpd.fit(data_decay, method="REML")
+
+# Fit unconstrained smooth for comparison
+model_free_decay = wk.GAM("y ~ s(time, k=12)")
+model_free_decay.fit(data_decay, method="REML")
+
+print("=== Monotone decreasing model ===")
+print(model_mpd.summary())
+```
+
+```{python}
+# Predict and plot
+time_grid = np.linspace(0, 10, 300)
+preds_mpd = model_mpd.predict({"time": time_grid})
+preds_free_decay = model_free_decay.predict({"time": time_grid})
+
+obs_data = [
+    {"time": float(time[i]), "activity": float(y_decay[i])}
+    for i in range(n)
+]
+fit_data = [
+    {"time": float(time_grid[i]), "fit": float(preds_mpd.values[i]),
+     "model": "Monotone decreasing (mpd)"}
+    for i in range(len(time_grid))
+] + [
+    {"time": float(time_grid[i]), "fit": float(preds_free_decay.values[i]),
+     "model": "Unconstrained (tp)"}
+    for i in range(len(time_grid))
+]
+
+points = alt.Chart({"values": obs_data}).mark_circle(
+    size=20, opacity=0.3, color="steelblue"
+).encode(
+    x=alt.X("time:Q", title="Time"),
+    y=alt.Y("activity:Q", title="Activity"),
+)
+
+lines = alt.Chart({"values": fit_data}).mark_line(strokeWidth=2).encode(
+    x=alt.X("time:Q", title="Time"),
+    y=alt.Y("fit:Q", title="Activity"),
+    color=alt.Color("model:N", title="Smooth type"),
+)
+
+(points + lines).properties(
+    width=550, height=320,
+    title="Radioactive decay: monotone decreasing vs. unconstrained"
+)
+```
+
+The constrained smooth enforces the physically required monotone decrease. Any apparent upticks in
+the unconstrained fit are noise artifacts that the constraint eliminates.
+
+## Convex smooths: `bs="cx"` {#convex}
+
+A convex smooth constrains $f$ so that the second derivative is non-negative everywhere:
+$f''(x) \ge 0$. Geometrically, the curve always bends upward---it can be flat or U-shaped, but it
+cannot have a local maximum.
+
+The constraint is enforced by requiring the second-order differences of the coefficients to be
+non-negative: $\Delta^2 \beta_k = \beta_{k+2} - 2\beta_{k+1} + \beta_k \ge 0$. This is
+implemented by projecting the cumulative sum of the second differences onto the non-negative
+orthant after each PIRLS iteration.
+
+### Example: U-shaped cost curve
+
+Average cost per unit typically decreases at low production levels (spreading fixed costs) and
+increases at high levels (diminishing returns to scale), producing a convex function.
+
+```{python}
+# Simulate a U-shaped average cost curve
+rng = np.random.default_rng(42)
+n = 180
+quantity = np.sort(rng.uniform(1, 20, n))
+# True cost: quadratic with minimum around q=10
+true_cost = 0.5 * (quantity - 10)**2 + 20
+y_cost = true_cost + rng.normal(0, 3, n)
+
+data_cost = {"quantity": quantity, "y": y_cost}
+
+# Fit convex smooth
+model_cx = wk.GAM("y ~ s(quantity, bs='cx', k=12)")
+model_cx.fit(data_cost, method="REML")
+
+# Fit unconstrained smooth
+model_free_cost = wk.GAM("y ~ s(quantity, k=12)")
+model_free_cost.fit(data_cost, method="REML")
+
+print("=== Convex model ===")
+print(model_cx.summary())
+```
+
+```{python}
+# Predict and plot
+q_grid = np.linspace(1, 20, 300)
+preds_cx = model_cx.predict({"quantity": q_grid})
+preds_free_cost = model_free_cost.predict({"quantity": q_grid})
+
+obs_data = [
+    {"quantity": float(quantity[i]), "cost": float(y_cost[i])}
+    for i in range(n)
+]
+fit_data = [
+    {"quantity": float(q_grid[i]), "fit": float(preds_cx.values[i]),
+     "model": "Convex (cx)"}
+    for i in range(len(q_grid))
+] + [
+    {"quantity": float(q_grid[i]), "fit": float(preds_free_cost.values[i]),
+     "model": "Unconstrained (tp)"}
+    for i in range(len(q_grid))
+]
+
+points = alt.Chart({"values": obs_data}).mark_circle(
+    size=20, opacity=0.3, color="steelblue"
+).encode(
+    x=alt.X("quantity:Q", title="Production quantity"),
+    y=alt.Y("cost:Q", title="Average cost"),
+)
+
+lines = alt.Chart({"values": fit_data}).mark_line(strokeWidth=2).encode(
+    x=alt.X("quantity:Q", title="Production quantity"),
+    y=alt.Y("fit:Q", title="Average cost"),
+    color=alt.Color("model:N", title="Smooth type"),
+)
+
+(points + lines).properties(
+    width=550, height=320,
+    title="Average cost curve: convex vs. unconstrained"
+)
+```
+
+The convex constraint ensures the fitted curve has no local maxima, producing the U-shape expected
+from economic theory.
+
+## Concave smooths: `bs="cv"` {#concave}
+
+A concave smooth constrains $f''(x) \le 0$: the curve always bends downward. It can be flat,
+rise with decreasing slope, or decline with increasing slope, but it cannot have a local minimum.
+
+### Example: diminishing returns to fertilizer
+
+Crop yield increases with fertilizer application, but each additional unit produces less additional
+yield. The relationship is concave.
+
+```{python}
+# Simulate diminishing returns
+rng = np.random.default_rng(42)
+n = 160
+fertilizer = np.sort(rng.uniform(0, 100, n))
+# True yield: square root relationship (concave)
+true_yield = 10 * np.sqrt(fertilizer) + 5
+y_yield = true_yield + rng.normal(0, 4, n)
+
+data_yield = {"fertilizer": fertilizer, "y": y_yield}
+
+# Fit concave smooth
+model_cv = wk.GAM("y ~ s(fertilizer, bs='cv', k=12)")
+model_cv.fit(data_yield, method="REML")
+
+# Fit unconstrained smooth
+model_free_yield = wk.GAM("y ~ s(fertilizer, k=12)")
+model_free_yield.fit(data_yield, method="REML")
+
+print("=== Concave model ===")
+print(model_cv.summary())
+```
+
+```{python}
+# Predict and plot
+fert_grid = np.linspace(0, 100, 300)
+preds_cv = model_cv.predict({"fertilizer": fert_grid})
+preds_free_yield = model_free_yield.predict({"fertilizer": fert_grid})
+
+obs_data = [
+    {"fertilizer": float(fertilizer[i]), "yield": float(y_yield[i])}
+    for i in range(n)
+]
+fit_data = [
+    {"fertilizer": float(fert_grid[i]), "fit": float(preds_cv.values[i]),
+     "model": "Concave (cv)"}
+    for i in range(len(fert_grid))
+] + [
+    {"fertilizer": float(fert_grid[i]), "fit": float(preds_free_yield.values[i]),
+     "model": "Unconstrained (tp)"}
+    for i in range(len(fert_grid))
+]
+
+points = alt.Chart({"values": obs_data}).mark_circle(
+    size=20, opacity=0.3, color="steelblue"
+).encode(
+    x=alt.X("fertilizer:Q", title="Fertilizer (kg/ha)"),
+    y=alt.Y("yield:Q", title="Yield (tonnes/ha)"),
+)
+
+lines = alt.Chart({"values": fit_data}).mark_line(strokeWidth=2).encode(
+    x=alt.X("fertilizer:Q", title="Fertilizer (kg/ha)"),
+    y=alt.Y("fit:Q", title="Yield (tonnes/ha)"),
+    color=alt.Color("model:N", title="Smooth type"),
+)
+
+(points + lines).properties(
+    width=550, height=320,
+    title="Diminishing returns: concave vs. unconstrained"
+)
+```
+
+The concave constraint ensures the fitted curve never accelerates upward, matching the agronomic
+expectation that marginal returns diminish.
+
+## Combining constraints in one model {#combining}
+
+Different predictors in the same model can have different shape constraints. Whittaker handles this
+naturally: each smooth term's constraint is applied independently during the PIRLS iterations.
+
+### Example: drug efficacy depends on dose (monotone) and temperature (convex)
+
+Consider an experiment where drug efficacy increases monotonically with dose, while the degradation
+rate follows a convex function of storage temperature (faster degradation at both very low and very
+high temperatures).
+
+```{python}
+# Simulate two-predictor model with different constraints
+rng = np.random.default_rng(42)
+n = 250
+
+dose = np.sort(rng.uniform(0, 10, n))
+temperature = rng.uniform(5, 45, n)
+
+# True relationship:
+#   efficacy increases monotonically with dose (log-like)
+#   degradation is convex in temperature (U-shaped around 25C)
+true_efficacy = 20 * np.log1p(dose) - 0.02 * (temperature - 25)**2
+y_eff = true_efficacy + rng.normal(0, 3, n)
+
+data_combined = {"dose": dose, "temperature": temperature, "y": y_eff}
+
+# Fit model with monotone increasing dose and convex temperature
+model_combined = wk.GAM("y ~ s(dose, bs='mpi', k=10) + s(temperature, bs='cx', k=10)")
+model_combined.fit(data_combined, method="REML")
+
+print("=== Combined constraints model ===")
+print(model_combined.summary())
+```
+
+```{python}
+# Visualize the dose effect (holding temperature at its mean)
+dose_grid = np.linspace(0, 10, 200)
+temp_mean = np.full_like(dose_grid, np.mean(temperature))
+preds_dose = model_combined.predict({"dose": dose_grid, "temperature": temp_mean})
+
+# Visualize the temperature effect (holding dose at its mean)
+temp_grid = np.linspace(5, 45, 200)
+dose_mean = np.full_like(temp_grid, np.mean(dose))
+preds_temp = model_combined.predict({"dose": dose_mean, "temperature": temp_grid})
+
+# Build data for a two-panel comparison
+dose_plot_data = [
+    {"x": float(dose_grid[i]), "fit": float(preds_dose.values[i]),
+     "term": "Dose effect (monotone increasing)"}
+    for i in range(len(dose_grid))
+]
+temp_plot_data = [
+    {"x": float(temp_grid[i]), "fit": float(preds_temp.values[i]),
+     "term": "Temperature effect (convex)"}
+    for i in range(len(temp_grid))
+]
+
+chart_dose = alt.Chart({"values": dose_plot_data}).mark_line(
+    strokeWidth=2, color="firebrick"
+).encode(
+    x=alt.X("x:Q", title="Dose"),
+    y=alt.Y("fit:Q", title="Predicted efficacy"),
+).properties(width=270, height=250, title="Dose effect (mpi)")
+
+chart_temp = alt.Chart({"values": temp_plot_data}).mark_line(
+    strokeWidth=2, color="darkgreen"
+).encode(
+    x=alt.X("x:Q", title="Temperature (C)"),
+    y=alt.Y("fit:Q", title="Predicted efficacy"),
+).properties(width=270, height=250, title="Temperature effect (cx)")
+
+chart_dose | chart_temp
+```
+
+Each term respects its own constraint: the dose curve is guaranteed non-decreasing while the
+temperature curve is guaranteed convex. The constraints are applied independently, so they do not
+interfere with each other.
+
+## How the projection works {#projection}
+
+Shape constraints in Whittaker are enforced by a **projection step** inserted into the standard
+PIRLS algorithm. At each iteration, after solving the penalized least squares problem for the
+unconstrained coefficients, the coefficients are projected onto the constraint set.
+
+### Monotonicity: the PAVA algorithm
+
+For monotone increasing constraints, the projection uses the **pool adjacent violators algorithm**
+(PAVA). Given a coefficient vector $(\beta_1, \ldots, \beta_K)$ that may violate the ordering
+constraint, PAVA produces the closest vector (in the least-squares sense) that satisfies
+$\beta_1 \le \beta_2 \le \cdots \le \beta_K$.
+
+The algorithm works by scanning the coefficients from left to right. When it encounters a
+violation ($\beta_{k+1} < \beta_k$), it **pools** the two values by replacing both with their
+(weighted) average. This pooling cascades backward as needed until the ordering is restored. The
+result is the $L^2$-nearest point in the monotone cone.
+
+For monotone decreasing constraints, the same algorithm is applied to the negated coefficients.
+
+### Convexity and concavity: cumulative sums
+
+For convex constraints, the second-order differences of the coefficients
+$\Delta^2 \beta_k = \beta_{k+2} - 2\beta_{k+1} + \beta_k$ must be non-negative. The projection
+works in two steps:
+
+1. Compute the second differences of the current coefficient vector.
+2. Project the second differences onto the non-negative orthant (clamp negatives to zero).
+3. Reconstruct the coefficient vector via cumulative summation.
+
+For concave constraints, the second differences must be non-positive, so the projection clamps
+positive second differences to zero.
+
+::: {.callout-note}
+## Convergence behavior
+
+The projection step can slow convergence compared to unconstrained fitting because the constraint
+may be active at different knots across iterations. In practice, convergence is still fast---usually
+within 10--20 PIRLS iterations. If you encounter convergence warnings, try increasing `k` or
+reducing the complexity of the model.
+:::
+
+## Practical guidance {#guidance}
+
+### When to use shape constraints
+
+Use a shape constraint when:
+
+1. **Domain knowledge is strong.** You have clear theoretical or empirical reasons to believe the
+   relationship is monotone, convex, or concave. Dose-response curves, growth trajectories, and
+   thermodynamic relationships are classic examples.
+
+2. **Data are sparse in some regions.** An unconstrained smooth may oscillate where data are thin.
+   A constraint stabilizes the fit in these regions without requiring more data.
+
+3. **Interpretability matters.** Stakeholders expect a monotone or convex fit. A smooth that dips
+   or wiggles in unexpected ways can undermine trust in the model.
+
+4. **Extrapolation is needed.** Shape constraints improve the behavior of the smooth near the
+   boundaries of the data range, where unconstrained smooths are most prone to edge effects.
+
+### When not to use shape constraints
+
+Avoid constraints when:
+
+- The true relationship is not monotone or convex. A misspecified constraint will bias the fit.
+- You are in an exploratory phase and want the data to speak freely.
+- The sample size is large enough that the unconstrained smooth already captures the correct shape
+  without artifacts.
+
+### Checking whether a constraint helps
+
+Compare the constrained and unconstrained models by examining the predictions and, where
+applicable, an information criterion like AIC:
+
+```{python}
+# Reuse the dose-response data from above
+print("Monotone increasing model:")
+print(f"  AIC: {model_mpi.summary()}")
+print()
+print("Unconstrained model:")
+print(f"  AIC: {model_free.summary()}")
+```
+
+::: {.callout-warning}
+## Do not blindly compare AIC
+
+AIC comparisons between constrained and unconstrained models should be interpreted with caution.
+The effective degrees of freedom in a constrained model do not have the same meaning as in an
+unconstrained model, because the constraint reduces the effective parameter space. Use AIC as a
+rough guide, but rely primarily on domain knowledge and visual inspection of the fitted curves.
+:::
+
+### Summary of basis types
+
+| Basis | `bs=` | Constraint | Use case |
+|-------|-------|------------|----------|
+| Monotone increasing | `"mpi"` | $f'(x) \ge 0$ | Dose-response, growth, calibration |
+| Monotone decreasing | `"mpd"` | $f'(x) \le 0$ | Decay, depreciation, cooling |
+| Convex | `"cx"` | $f''(x) \ge 0$ | U-shaped costs, accelerating growth |
+| Concave | `"cv"` | $f''(x) \le 0$ | Diminishing returns, saturation |
+
+All four types are P-spline variants and accept the same arguments as `bs="ps"` (including `k` and
+`m`). They can be combined freely with each other and with unconstrained smooth types in the same
+model formula.
+
+## Where to go next
+
+- **[Smooth terms](03-smooths.qmd)**: the full catalog of basis types, including the unconstrained
+  variants that shape-constrained smooths build upon.
+- **[Model fitting](05-fitting.qmd)**: details on the PIRLS algorithm and how the projection step
+  integrates with it.
+- **[Diagnostics](07-diagnostics.qmd)**: residual checks and `model.check()` to verify that the
+  constraint is appropriate for your data.

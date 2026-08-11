@@ -1,0 +1,286 @@
+---
+title: Large datasets
+guide-section: "Scalability"
+---
+
+```{python}
+#| echo: false
+#| output: false
+import great_docs as gd
+
+gd.enable_tbl_preview(n_head=8, n_tail=3)
+```
+
+Standard GAM fitting builds the full $n \times p$ design matrix, which becomes memory-prohibitive
+when $n$ is in the millions. Whittaker provides three scalable backends that use discretised
+covariates and streaming aggregation to fit GAMs on large datasets without materialising the full
+matrix:
+
+| Class | Data source | Key feature |
+|-------|------------|-------------|
+| `BigGAM` | In-memory dict | Discretised P-IRLS on NumPy arrays |
+| `PolarsGAM` | Polars DataFrames, LazyFrames, or files | Lazy streaming via Polars |
+| `DuckDBGAM` | DuckDB tables or SQL queries | SQL-native streaming via Arrow |
+
+All three extend `GAM`, so prediction, summary, diagnostics, and serialization work the same way as
+a regular GAM once fitted.
+
+## BigGAM: discretised fitting
+
+`BigGAM` implements the discretised P-IRLS algorithm of Wood, Li & Shaddick (2017). Instead of
+storing one row per observation, each covariate is discretised into a grid of `n_discrete` unique
+values (default 200), and the sufficient statistics are accumulated over the grid. This reduces
+memory from $O(n \cdot p)$ to $O(d \cdot p)$ where $d \ll n$.
+
+```{python}
+import numpy as np
+import whittaker as wk
+
+# Simulate a dataset large enough to demonstrate discretised fitting
+rng = np.random.default_rng(42)
+n = 2_000
+x1 = rng.uniform(0, 2 * np.pi, n)
+x2 = rng.uniform(0, 1, n)
+y = np.sin(x1) + 2 * x2 + rng.normal(0, 0.3, n)
+
+data = {"x1": x1, "x2": x2, "y": y}
+
+# BigGAM uses the same formula syntax
+model = wk.BigGAM("y ~ s(x1) + s(x2)", n_discrete=200)
+model.fit(data, method="fREML")
+
+print(model.summary())
+```
+
+The `method="fREML"` (fast REML) is the default and recommended smoothing parameter selection method
+for `BigGAM`. It exploits the discretised structure for efficient computation of the REML criterion.
+
+### Controlling the discretisation grid
+
+The `n_discrete` parameter controls the resolution of the covariate grid. Larger values give a more
+faithful approximation but use more memory and time.
+
+```{python}
+# Compare discretisation resolutions
+for nd in [50, 200]:
+    m = wk.BigGAM("y ~ s(x1) + s(x2)", n_discrete=nd)
+    m.fit(data, method="fREML")
+    print(f"n_discrete={nd:3d}: EDF = {m.edf_total:.1f}, scale = {m.scale:.4f}")
+```
+
+::: {.callout-tip}
+## Choosing n_discrete
+
+For most datasets, the default of 200 is a good balance. You rarely need more than 500. If the true
+function is very smooth, even 50 can work well. Increase `n_discrete` if the model diagnostics
+suggest the discretisation is too coarse, but check `model.check()` first since basis dimension
+inadequacy is more common than discretisation error.
+:::
+
+### Predictions
+
+Predictions work exactly like a standard GAM:
+
+```{python}
+x_new = np.linspace(0, 2 * np.pi, 100)
+pred = model.predict({"x1": x_new, "x2": np.full(100, 0.5)})
+print(f"Prediction shape: {pred.values.shape}")
+```
+
+```{python}
+import altair as alt
+
+# Compare BigGAM fit with the true function
+true_vals = np.sin(x_new) + 2 * 0.5
+
+plot_data = [
+    {"x1": float(x_new[i]), "y": float(pred.values[i]), "source": "BigGAM"}
+    for i in range(len(x_new))
+] + [
+    {"x1": float(x_new[i]), "y": float(true_vals[i]), "source": "Truth"}
+    for i in range(len(x_new))
+]
+
+alt.Chart({"values": plot_data}).mark_line(strokeWidth=2).encode(
+    x=alt.X("x1:Q", title="x1"),
+    y=alt.Y("y:Q", title="f(x1) at x2=0.5"),
+    color=alt.Color("source:N"),
+    strokeDash=alt.condition(
+        alt.datum.source == "Truth", alt.value([4, 4]), alt.value([0])
+    ),
+).properties(width=500, height=300, title="BigGAM fit vs. truth (2,000 observations)")
+```
+
+## PolarsGAM: fitting from Polars and files
+
+`PolarsGAM` extends `BigGAM` to accept Polars DataFrames, LazyFrames, or file paths. Data is
+streamed in chunks, so the full dataset never needs to be in memory at once.
+
+### From a Polars DataFrame
+
+```{python}
+import polars as pl
+
+# Create a Polars DataFrame
+df = pl.DataFrame({"x1": x1, "x2": x2, "y": y})
+
+model_pl = wk.PolarsGAM("y ~ s(x1) + s(x2)", chunk_size=2_000)
+model_pl.fit(df, method="fREML")
+
+print(f"Rows processed: {model_pl.n_rows}")
+print(f"Chunk size:      {model_pl.chunk_size}")
+print(f"EDF:             {model_pl.edf_total:.1f}")
+```
+
+### From a LazyFrame or file
+
+`PolarsGAM` can scan Parquet, CSV, IPC (Arrow), and NDJSON files directly. The file is read lazily
+via Polars' streaming engine, so only one chunk is in memory at a time:
+
+```{python}
+# Save to Parquet for demonstration
+import tempfile, pathlib
+
+tmpdir = pathlib.Path(tempfile.mkdtemp())
+parquet_path = tmpdir / "data.parquet"
+df.write_parquet(parquet_path)
+
+# Fit directly from the file
+model_file = wk.PolarsGAM("y ~ s(x1) + s(x2)", chunk_size=2_000)
+model_file.fit(str(parquet_path), method="fREML")
+print(f"EDF from Parquet: {model_file.edf_total:.1f}")
+```
+
+::: {.callout-note}
+## Supported file formats
+
+| Extension | Reader |
+|-----------|--------|
+| `.parquet` | `pl.scan_parquet()` |
+| `.csv` | `pl.scan_csv()` |
+| `.ipc`, `.arrow` | `pl.scan_ipc()` |
+| `.ndjson` | `pl.scan_ndjson()` |
+
+The format is detected from the file extension.
+:::
+
+## DuckDBGAM: fitting from SQL
+
+`DuckDBGAM` streams data from DuckDB tables or SQL queries via DuckDB's Arrow interface. This is
+ideal when the data lives in a database or when you want to filter and transform data with SQL
+before fitting.
+
+```{python}
+import duckdb
+
+# Create a DuckDB connection and load data
+conn = duckdb.connect()
+conn.execute("CREATE TABLE obs AS SELECT * FROM read_parquet(?)", [str(parquet_path)])
+
+# Fit from a table name
+model_duck = wk.DuckDBGAM("y ~ s(x1) + s(x2)", chunk_size=2_000)
+model_duck.fit("obs", conn, method="fREML")
+
+print(f"EDF from DuckDB: {model_duck.edf_total:.1f}")
+
+del model_pl, model_file, df
+```
+
+### SQL queries
+
+Use `fit_query()` to fit from an arbitrary SQL query:
+
+```{python}
+# Fit on a filtered subset via SQL
+model_filtered = wk.DuckDBGAM("y ~ s(x1)", chunk_size=2_000)
+model_filtered.fit_query(
+    "SELECT x1, y FROM obs WHERE x2 > 0.5",
+    conn,
+    method="fREML",
+)
+print(f"EDF (filtered): {model_filtered.edf_total:.1f}")
+```
+
+::: {.callout-tip}
+## When to use DuckDBGAM
+
+Use `DuckDBGAM` when:
+
+- Your data is already in DuckDB (a common analytics stack)
+- You want to pre-filter or transform data with SQL before fitting
+- The dataset is too large for a Polars scan (DuckDB's out-of-core engine handles very large files)
+:::
+
+## Smoothing parameter selection
+
+All three scalable backends support the same selection methods:
+
+| Method | Description |
+|--------|-------------|
+| `"fREML"` | Fast REML (default, recommended for large data) |
+| `"REML"` | Restricted maximum likelihood |
+| `"ML"` | Maximum likelihood |
+| `"GCV"` | Generalised cross-validation |
+
+`fREML` is specifically optimised for discretised fitting and is significantly faster than standard
+REML on large datasets.
+
+## Smooth selection
+
+The `select=True` option enables double-penalty smooth selection, which can shrink entire terms to
+zero:
+
+```{python}
+# Add a noise variable
+noise = rng.uniform(0, 1, n)
+data_noise = {"x1": x1, "x2": x2, "noise": noise, "y": y}
+
+model_select = wk.BigGAM("y ~ s(x1) + s(x2) + s(noise)", n_discrete=200)
+model_select.fit(data_noise, method="fREML", select=True)
+
+print(model_select.summary())
+```
+
+The noise term should receive a very low EDF, effectively being selected out.
+
+## Non-Gaussian families
+
+Scalable backends work with all response families:
+
+```{python}
+# Poisson counts
+rng = np.random.default_rng(42)
+n_pois = 2_000
+x = rng.uniform(0, 2 * np.pi, n_pois)
+mu = np.exp(0.5 + 0.8 * np.sin(x))
+y_pois = rng.poisson(mu).astype(float)
+
+model_pois = wk.BigGAM("y ~ s(x)", family=wk.Poisson(), n_discrete=200)
+model_pois.fit({"x": x, "y": y_pois}, method="fREML")
+
+print(f"Poisson BigGAM EDF: {model_pois.edf_total:.1f}")
+```
+
+## Which backend to choose
+
+```{python}
+#| echo: false
+#| output: true
+```
+
+| Scenario | Backend | Why |
+|----------|---------|-----|
+| Data fits in memory | `BigGAM` | Simplest API, dict input |
+| Data in Polars or files | `PolarsGAM` | Lazy streaming, zero-copy |
+| Data in DuckDB / SQL | `DuckDBGAM` | SQL filtering, out-of-core |
+| Incremental batches | `StreamingGAM` | Online updates, decay |
+
+For datasets under ~100K rows, the standard `GAM` is usually fast enough. Above that, `BigGAM` or
+its streaming variants keep fitting times manageable without sacrificing accuracy.
+
+```{python}
+# Clean up
+conn.close()
+import shutil
+shutil.rmtree(tmpdir)
+```

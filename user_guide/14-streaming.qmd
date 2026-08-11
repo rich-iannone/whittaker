@@ -1,0 +1,290 @@
+---
+title: Streaming and online fitting
+guide-section: "Advanced features"
+---
+
+```{python}
+#| echo: false
+#| output: false
+import great_docs as gd
+
+gd.enable_tbl_preview(n_head=8, n_tail=3)
+```
+
+When data arrives in batches (sensor readings, web logs, financial ticks), refitting a full GAM
+from scratch after each batch is wasteful. Whittaker's `StreamingGAM` accumulates sufficient
+statistics incrementally and solves a penalized regression on the running totals, giving an
+approximate GAM fit that updates in constant time per batch.
+
+## The idea
+
+A standard GAM fit solves:
+
+$$(X^\top W X + \sum_j \lambda_j S_j)\,\hat\beta = X^\top W z$$
+
+The key insight is that $X^\top W X$ and $X^\top W z$ are additive over observations. If data
+arrives in batches $B_1, B_2, \ldots$, we can accumulate:
+
+$$X^\top W X = \sum_t (X_t^\top W_t X_t), \qquad X^\top W z = \sum_t (X_t^\top W_t z_t)$$
+
+and solve once on the accumulated statistics. This is the sufficient statistics approach to online
+learning.
+
+## Basic streaming fit
+
+```{python}
+import numpy as np
+import whittaker as wk
+
+# Generate data
+rng = np.random.default_rng(42)
+n = 600
+x = np.linspace(0, 2 * np.pi, n)
+y = np.sin(x) + rng.normal(0, 0.3, n)
+
+# Create a streaming GAM
+sgam = wk.StreamingGAM("y ~ s(x)")
+
+# Feed data in batches of 200
+batch_size = 200
+for i in range(0, n, batch_size):
+    batch = {
+        "x": x[i:i + batch_size],
+        "y": y[i:i + batch_size],
+    }
+    sgam.partial_fit(batch)
+
+# Solve the accumulated system
+sgam.solve()
+
+print(f"N obs:     {sgam.n_obs}")
+print(f"N batches: {sgam.n_batches}")
+print(f"EDF:       {sgam.edf_total:.1f}")
+print(f"Scale:     {sgam.scale:.4f}")
+```
+
+The first call to `partial_fit()` does a pilot GAM fit to establish the model structure (basis
+matrices, knot locations, initial smoothing parameters). Subsequent calls accumulate the sufficient
+statistics without re-fitting.
+
+## How it works step by step
+
+1. **First batch**: a full GAM is fitted (the pilot fit) to determine the basis matrices and initial
+   smoothing parameters. The sufficient statistics $X^\top W X$ and $X^\top W z$ are initialized.
+2. **Subsequent batches**: the basis matrix $X_t$ is computed for the new data, working weights and
+   pseudo-data are formed, and $X_t^\top W_t X_t$ and $X_t^\top W_t z_t$ are added to the running
+   totals.
+3. **Solve**: at any point, calling `solve()` performs a Cholesky factorization on the accumulated
+   system and returns updated coefficients, EDF, and scale.
+
+```{python}
+# Predictions work the same as a regular GAM
+x_test = np.linspace(0.5, 2 * np.pi - 0.5, 50)
+pred = sgam.predict({"x": x_test})
+
+print(f"Prediction shape: {pred.values.shape}")
+print(f"First 5 predictions: {pred.values[:5].round(3)}")
+```
+
+## Comparing with a full GAM
+
+A streaming GAM on all data at once should closely match a full GAM fit.
+
+```{python}
+# Full GAM for comparison
+gam = wk.GAM("y ~ s(x)")
+gam.fit({"x": x, "y": y}, method="REML")
+
+# Compare predictions
+x_test = np.linspace(0.5, 2 * np.pi - 0.5, 50)
+pred_stream = sgam.predict({"x": x_test}).values
+pred_full = gam.predict({"x": x_test}).values
+
+# Correlation between streaming and full GAM predictions
+corr = np.corrcoef(pred_stream, pred_full)[0, 1]
+print(f"Correlation with full GAM: {corr:.4f}")
+```
+
+```{python}
+import altair as alt
+
+# Plot both fits
+plot_data = []
+for i in range(len(x_test)):
+    plot_data.append({"x": float(x_test[i]), "y": float(pred_stream[i]), "model": "StreamingGAM"})
+    plot_data.append({"x": float(x_test[i]), "y": float(pred_full[i]), "model": "Full GAM"})
+
+true_data = [{"x": float(x_test[i]), "y": float(np.sin(x_test[i])), "model": "Truth"} for i in range(len(x_test))]
+
+alt.Chart({"values": plot_data + true_data}).mark_line().encode(
+    x=alt.X("x:Q"),
+    y=alt.Y("y:Q"),
+    color=alt.Color("model:N"),
+    strokeDash=alt.condition(
+        alt.datum.model == "Truth",
+        alt.value([4, 4]),
+        alt.value([0])
+    ),
+).properties(width=500, height=300, title="Streaming GAM vs. full GAM")
+```
+
+## Exponential decay for sliding windows
+
+In many streaming applications, recent data is more relevant than old data. The `decay` parameter
+applies exponential downweighting to older batches: each time a new batch arrives, the existing
+sufficient statistics are multiplied by `decay` before the new batch is added.
+
+```{python}
+# Simulate a distribution shift: first half is sin(x), second half is 2*sin(x)
+rng = np.random.default_rng(42)
+n = 400
+x = np.linspace(0, 2 * np.pi, n // 2)
+
+y1 = np.sin(x) + rng.normal(0, 0.2, n // 2)
+y2 = 2 * np.sin(x) + rng.normal(0, 0.2, n // 2)
+
+# Without decay: old and new data are weighted equally
+sgam_nodecay = wk.StreamingGAM("y ~ s(x)")
+sgam_nodecay.partial_fit({"x": x, "y": y1})
+sgam_nodecay.partial_fit({"x": x, "y": y2})
+sgam_nodecay.solve()
+
+# With decay=0.3: recent data dominates
+sgam_decay = wk.StreamingGAM("y ~ s(x)", decay=0.3)
+sgam_decay.partial_fit({"x": x, "y": y1})
+sgam_decay.partial_fit({"x": x, "y": y2})
+sgam_decay.solve()
+
+# Compare predictions at x = pi/2 (sin = 1)
+x_check = np.array([np.pi / 2])
+pred_nodecay = sgam_nodecay.predict({"x": x_check}).values[0]
+pred_decay = sgam_decay.predict({"x": x_check}).values[0]
+
+print(f"No decay (equal weighting):  {pred_nodecay:.2f}")
+print(f"Decay=0.3 (recent dominates): {pred_decay:.2f}")
+print(f"Expected (recent data):      {2 * np.sin(np.pi / 2):.2f}")
+```
+
+::: {.callout-note}
+## Choosing the decay rate
+
+A decay of 1.0 (the default) gives equal weight to all batches. Values closer to 0 give more weight
+to recent data. A decay of 0.5 means each batch halves the weight of all previous batches. Choose
+based on how quickly you expect the underlying relationship to change.
+:::
+
+## Monitoring and re-estimation
+
+### Smoothing history
+
+Each time you call `solve()`, the streaming GAM records a snapshot of the model state. You can
+inspect this history to monitor how the model evolves over time.
+
+```{python}
+# Build a longer history
+rng = np.random.default_rng(42)
+sgam = wk.StreamingGAM("y ~ s(x)")
+
+for batch_idx in range(10):
+    n_batch = 50
+    x_batch = rng.uniform(0, 2 * np.pi, n_batch)
+    y_batch = np.sin(x_batch) + rng.normal(0, 0.3, n_batch)
+    sgam.partial_fit({"x": x_batch, "y": y_batch})
+    sgam.solve()
+
+# Inspect the history
+history = sgam.smoothing_history()
+print(f"Number of snapshots: {len(history)}")
+for snap in history[:3]:
+    print(f"  n_obs={snap.n_obs}, batches={snap.n_batches}, edf={snap.edf_total:.1f}")
+```
+
+### Should I refit?
+
+The `should_refit()` method checks whether enough new batches have arrived since the last solve to
+warrant re-estimating smoothing parameters.
+
+```{python}
+# After many batches, smoothing params may need updating
+print(f"Should refit? {sgam.should_refit(min_batches=10)}")
+```
+
+### Re-estimating smoothing parameters
+
+By default, `solve()` uses the smoothing parameters from the pilot fit. To re-estimate them via
+GCV on the accumulated statistics, pass `reestimate_smoothing=True`:
+
+```{python}
+sgam.solve(reestimate_smoothing=True)
+print(f"Updated smoothing params: {sgam.smoothing_params}")
+```
+
+## Predictions with standard errors
+
+```{python}
+# Standard errors from the accumulated covariance
+x_test = np.linspace(0.5, 2 * np.pi - 0.5, 20)
+pred_se = sgam.predict({"x": x_test}, se=True)
+
+print(f"Prediction shape: {pred_se.values.shape}")
+print(f"SE shape:         {pred_se.se.shape}")
+print(f"Mean SE:          {pred_se.se.mean():.4f}")
+```
+
+## Resetting the accumulator
+
+To start fresh while keeping the model structure (basis matrices, smoothing parameters from the
+pilot fit), call `reset()`:
+
+```{python}
+sgam.reset()
+print(f"After reset: n_obs={sgam.n_obs}, n_batches={sgam.n_batches}")
+print(f"Model structure preserved: {sgam.is_initialised}")
+```
+
+## Multiple smooth terms
+
+Streaming GAMs support the same formula syntax as regular GAMs:
+
+```{python}
+# Two smooth terms
+rng = np.random.default_rng(42)
+n = 300
+x1 = np.linspace(0, 2 * np.pi, n)
+x2 = rng.uniform(0, 1, n)
+y = np.sin(x1) + 2 * x2 + rng.normal(0, 0.3, n)
+
+sgam2 = wk.StreamingGAM("y ~ s(x1) + s(x2)")
+batch_size = 100
+for i in range(0, n, batch_size):
+    batch = {"x1": x1[i:i + batch_size], "x2": x2[i:i + batch_size], "y": y[i:i + batch_size]}
+    sgam2.partial_fit(batch)
+sgam2.solve()
+
+print(sgam2.summary())
+```
+
+## Fixed smoothing parameters
+
+If you know the appropriate smoothing parameters (e.g., from a previous full fit), you can fix them
+to avoid the pilot fit's automatic selection:
+
+```{python}
+sgam_fixed = wk.StreamingGAM("y ~ s(x)", smoothing_params=[1.0])
+sgam_fixed.partial_fit({"x": x[:100], "y": y[:100]})
+sgam_fixed.solve()
+print(f"Fixed SP: {sgam_fixed.smoothing_params}")
+```
+
+::: {.callout-tip}
+## When to use StreamingGAM
+
+Use `StreamingGAM` when:
+
+- Data arrives in batches and you want to update the model without re-fitting from scratch
+- The full dataset is too large to hold in memory
+- You need to monitor model evolution over time
+- You want a sliding-window model with exponential decay
+
+For one-shot large-dataset fitting, consider [BigGAM or PolarsGAM](18-large-datasets.qmd) instead.
+:::

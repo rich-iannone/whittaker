@@ -3,80 +3,618 @@ title: Response families
 guide-section: "Fitting models"
 ---
 
-A GAM's **family** specifies the conditional distribution of the response $y$ and the **link
-function** $g$ that relates the linear predictor $\eta$ to the conditional mean $\mu$:
+```{python}
+#| echo: false
+#| output: false
+import great_docs as gd
+
+gd.enable_tbl_preview(n_head=8, n_tail=3)
+```
+
+A GAM's **family** specifies two things: the conditional distribution of the response $y$ given the
+predictors, and the **link function** $g$ that relates the conditional mean $\mu$ to the linear
+predictor $\eta$:
 
 $$g(\mu) = \eta = \beta_0 + f_1(x_1) + f_2(x_2) + \cdots$$
 
-Whittaker's family system mirrors mgcv's, with the same interface for all families.
+The choice of family determines how predictions are mapped back to the response scale, how variance
+changes with the mean, and which loss function (deviance) is optimized during fitting. Getting the
+family right is essential: a misspecified family can bias estimates, distort confidence intervals, and
+produce nonsensical predictions.
 
-## Gaussian: continuous responses
+## The exponential family framework
 
-The default family. Appropriate for unbounded continuous responses with approximately constant
-variance.
+All families in Whittaker belong to the exponential dispersion family, characterized by a density of
+the form:
+
+$$f(y \mid \theta, \phi) = a(y, \phi)\,\exp\!\left[\frac{y\theta - b(\theta)}{\phi}\right]$$
+
+where $\theta$ is the **canonical parameter**, $\phi$ is the **dispersion parameter**, and $b(\cdot)$
+is the **cumulant function**. From this formulation, four key ingredients follow:
+
+- **Mean**: $\mu = b'(\theta)$.
+- **Variance function**: $\text{Var}(Y) = \phi\, V(\mu)$, where $V(\mu) = b''(\theta)$. The shape
+  of $V(\mu)$ is what distinguishes one family from another.
+- **Link function**: $g(\mu) = \eta$. The **canonical link** sets $g(\mu) = \theta$; alternative
+  links are also supported.
+- **Deviance**: $D(y, \hat\mu) = 2\phi \sum_i \bigl[\ell(y_i; y_i) - \ell(y_i; \hat\mu_i)\bigr]$,
+  where $\ell$ is the log-likelihood. Deviance is the quantity minimized during P-IRLS fitting (see
+  [Model fitting](05-fitting.qmd)).
+
+::: {.callout-tip}
+## Canonical vs. non-canonical links
+
+Using the canonical link simplifies the score equations and guarantees concavity of the
+log-likelihood. Non-canonical links (e.g., `log` for Gamma instead of `inverse`) are often preferred
+for interpretability but may require more P-IRLS iterations to converge.
+:::
+
+## Quick reference table
+
+The table below summarizes every family available in Whittaker. GAMLSS families (for distributional
+regression) are covered in a [separate page](10-gamlss.qmd).
+
+| Family | String | Default link | $V(\mu)$ | Typical use |
+|---|---|---|---|---|
+| `Gaussian()` | `"gaussian"` | identity | $1$ | Continuous, unbounded |
+| `Poisson()` | `"poisson"` | log | $\mu$ | Event counts |
+| `Binomial()` | `"binomial"` | logit | $\mu(1-\mu)$ | Binary / proportions |
+| `Gamma()` | `"gamma"` | inverse | $\mu^2$ | Positive continuous (right-skewed) |
+| `NegativeBinomial()` | `"nb"` | log | $\mu + \mu^2/\theta$ | Overdispersed counts |
+| `Beta()` | `"beta"` | logit | $\mu(1-\mu)/(1+\phi)$ | Proportions on $(0,1)$ |
+| `Tweedie()` | `"tweedie"` | log | $\mu^p$ | Mixed zero/continuous |
+| `InverseGaussian()` | `"inverse.gaussian"` | $1/\mu^2$ | $\mu^3$ | Positive, heavy-tailed |
+| `CoxPH()` | `"coxph"` | log | | Survival / hazard |
+
+## Specifying a family
+
+There are two ways to set the family: a string shorthand or a family object. Use the string when the
+default link is what you want; use the object when you need a non-default link or want to set initial
+parameter values.
 
 ```python
-model = wk.GAM("y ~ s(x)")                        # Gaussian, identity link (default)
-model = wk.GAM("y ~ s(x)", family="gaussian")     # explicit
-model = wk.GAM("y ~ s(x)", family=wk.Gaussian())  # family object
+# String shorthand
+model = wk.GAM("y ~ s(x)", family="gaussian")
+
+# Family object
+model = wk.GAM("y ~ s(x)", family=wk.Gaussian())
 ```
 
-**Link functions**: `identity` (default), `log`, `inverse`.
+## Gaussian: continuous responses {#sec-gaussian}
 
-**Variance function**: $\text{Var}(\mu) = \phi$ (constant, estimated from data).
+The Gaussian family is the default. It assumes the response is continuous and unbounded, with
+constant variance:
 
-**When to use**: continuous data without a natural lower bound, or after a variance-stabilizing
-transformation.
+- **Link**: $g(\mu) = \mu$ (identity).
+- **Variance function**: $V(\mu) = 1$, so $\text{Var}(Y) = \phi$.
+- **Deviance**: $D = \sum_i (y_i - \hat\mu_i)^2$ (residual sum of squares).
 
-## Poisson: count responses
+This is the classical regression setting: the model minimizes penalized least squares and converges
+in a single step of P-IRLS.
 
-For non-negative integer count data where variance scales with the mean.
+**Supported links**: `identity` (default), `log`, `inverse`.
+
+### Example: noisy sine curve
+
+```{python}
+import numpy as np
+import whittaker as wk
+import altair as alt
+
+rng = np.random.default_rng(0)
+n = 200
+x = np.linspace(0, 2 * np.pi, n)
+y = np.sin(x) + rng.normal(0, 0.3, n)
+
+data = {"x": x, "y": y}
+
+model_gauss = wk.GAM("y ~ s(x)", family=wk.Gaussian())
+model_gauss.fit(data, method="REML")
+
+print(model_gauss.summary())
+```
+
+Because the identity link maps the linear predictor directly to the mean, predictions are on the
+original scale without any back-transformation.
+
+### Visualizing the Gaussian fit
+
+```{python}
+x_grid = np.linspace(0, 2 * np.pi, 300)
+preds = model_gauss.predict({"x": x_grid}, se=True)
+
+z = 1.96
+lower = preds.values - z * preds.se
+upper = preds.values + z * preds.se
+
+points = alt.Chart(
+    {"values": [{"x": float(x[i]), "y": float(y[i])} for i in range(n)]}
+).mark_circle(size=15, opacity=0.3, color="steelblue").encode(
+    x=alt.X("x:Q", title="x"),
+    y=alt.Y("y:Q", title="y"),
+)
+
+fit_data = [
+    {"x": float(x_grid[i]), "fit": float(preds.values[i]),
+     "lower": float(lower[i]), "upper": float(upper[i])}
+    for i in range(len(x_grid))
+]
+
+line = alt.Chart({"values": fit_data}).mark_line(
+    color="firebrick", strokeWidth=2
+).encode(x="x:Q", y="fit:Q")
+
+band = alt.Chart({"values": fit_data}).mark_area(
+    opacity=0.2, color="firebrick"
+).encode(x="x:Q", y="lower:Q", y2="upper:Q")
+
+(band + points + line).properties(
+    width=550, height=300,
+    title="Gaussian GAM: y ~ s(x)"
+)
+```
+
+## Poisson: count responses {#sec-poisson}
+
+The Poisson family is the standard choice for non-negative integer counts. Its key assumption is that
+the variance equals the mean (equidispersion).
+
+- **Link**: $g(\mu) = \log(\mu)$ (log link).
+- **Variance function**: $V(\mu) = \mu$.
+- **Deviance**: $D = 2\sum_i \bigl[y_i \log(y_i / \hat\mu_i) - (y_i - \hat\mu_i)\bigr]$.
+
+The log link ensures that predicted counts are always non-negative.
+
+**Supported links**: `log` (default), `identity`, `sqrt`.
+
+::: {.callout-tip}
+## Exposure and offsets
+
+When counts are observed over varying durations or areas, include an offset term to model the
+**rate** rather than the raw count:
 
 ```python
-model = wk.GAM("count ~ s(x)", family="poisson")
 model = wk.GAM("count ~ s(x) + offset(log_exposure)", family="poisson")
 ```
 
-**Default link**: `log`.
+Here `log_exposure` is the natural log of the exposure variable.
+:::
 
-## Binomial: binary / proportion responses
+### Example: species counts along a transect
 
-For binary outcomes (0/1) or proportions with a known denominator.
+```{python}
+rng = np.random.default_rng(1)
+n = 250
 
-```python
-model = wk.GAM("y ~ s(x)", family="binomial")           # binary
-model = wk.GAM("cbind(y, n) ~ s(x)", family="binomial") # proportion
+x = np.linspace(0, 6, n)
+eta = 0.8 + 1.2 * np.sin(x)   # log-scale linear predictor
+mu = np.exp(eta)               # true rate
+y_counts = rng.poisson(mu).astype(float)
+
+data_pois = {"x": x, "y": y_counts}
+
+model_pois = wk.GAM("y ~ s(x, k=15)", family=wk.Poisson())
+model_pois.fit(data_pois, method="REML")
+
+print(model_pois.summary())
 ```
 
-**Default link**: `logit`. Alternatives: `probit`, `cloglog`, `cauchit`.
+### Visualizing the Poisson fit
 
-## Gamma: positive continuous responses
+```{python}
+x_grid = np.linspace(0, 6, 300)
+preds_pois = model_pois.predict({"x": x_grid}, se=True)
 
-For positive continuous data where variance scales with the square of the mean (e.g., costs,
-rainfall amounts).
+# Confidence intervals on the response (count) scale
+z = 1.96
+lower_pois = np.exp(np.log(preds_pois.values) - z * preds_pois.se)
+upper_pois = np.exp(np.log(preds_pois.values) + z * preds_pois.se)
 
-```python
-model = wk.GAM("y ~ s(x)", family="gamma")
+points_pois = alt.Chart(
+    {"values": [{"x": float(x[i]), "y": float(y_counts[i])} for i in range(n)]}
+).mark_circle(size=15, opacity=0.3, color="teal").encode(
+    x=alt.X("x:Q", title="x"),
+    y=alt.Y("y:Q", title="Count"),
+)
+
+fit_data_pois = [
+    {"x": float(x_grid[i]), "fit": float(preds_pois.values[i]),
+     "lower": float(lower_pois[i]), "upper": float(upper_pois[i])}
+    for i in range(len(x_grid))
+]
+
+line_pois = alt.Chart({"values": fit_data_pois}).mark_line(
+    color="darkorange", strokeWidth=2
+).encode(x="x:Q", y="fit:Q")
+
+band_pois = alt.Chart({"values": fit_data_pois}).mark_area(
+    opacity=0.15, color="darkorange"
+).encode(x="x:Q", y="lower:Q", y2="upper:Q")
+
+true_pois = [{"x": float(x_grid[i]), "mu": float(np.exp(0.8 + 1.2 * np.sin(x_grid[i])))}
+             for i in range(len(x_grid))]
+true_line_pois = alt.Chart({"values": true_pois}).mark_line(
+    color="gray", strokeDash=[4, 4], strokeWidth=1.5
+).encode(x="x:Q", y="mu:Q")
+
+(band_pois + points_pois + line_pois + true_line_pois).properties(
+    width=550, height=300,
+    title="Poisson GAM: count ~ s(x)"
+)
 ```
 
-**Default link**: `inverse`. Alternatives are `log` and `identity`.
+The orange curve is the estimated rate $\hat\mu(x)$, the gray dashed line is the true generating
+rate, and each blue-green point is an observed count.
 
-## Negative Binomial: overdispersed counts
+## Binomial: binary and proportion responses {#sec-binomial}
 
-An extension of Poisson that allows the variance to exceed the mean.
+The Binomial family handles two types of response: binary outcomes (0/1) and proportions with a
+known denominator. The logit link maps probabilities from $(0,1)$ to the real line.
 
-```python
-model = wk.GAM("y ~ s(x)", family="nb")
+- **Link**: $g(\mu) = \log\!\bigl(\mu / (1 - \mu)\bigr)$ (logit).
+- **Variance function**: $V(\mu) = \mu(1 - \mu)$.
+- **Deviance**: $D = -2\sum_i \bigl[y_i \log(\hat\mu_i) + (1 - y_i)\log(1 - \hat\mu_i)\bigr]$
+  (for binary data).
+
+**Supported links**: `logit` (default), `probit`, `cloglog`, `cauchit`.
+
+### Example: probability of occurrence
+
+```{python}
+rng = np.random.default_rng(2)
+n = 300
+
+x = np.linspace(-3, 3, n)
+eta = -1.0 + 1.5 * x - 0.3 * x**2   # logit-scale predictor
+prob = 1 / (1 + np.exp(-eta))         # true probability
+y_bin = rng.binomial(1, prob).astype(float)
+
+data_bin = {"x": x, "y": y_bin}
+
+model_bin = wk.GAM("y ~ s(x)", family=wk.Binomial())
+model_bin.fit(data_bin, method="REML")
+
+print(model_bin.summary())
 ```
 
-## Specifying families programmatically
+### Visualizing the Binomial fit
 
-Each family is also available as a class for full control over link functions and initial parameter
-values:
+```{python}
+x_grid = np.linspace(-3, 3, 300)
+preds_bin = model_bin.predict({"x": x_grid}, se=True)
+
+# Confidence intervals via the logit transform
+logit_hat = np.log(preds_bin.values / (1 - preds_bin.values))
+lower_bin = 1 / (1 + np.exp(-(logit_hat - 1.96 * preds_bin.se)))
+upper_bin = 1 / (1 + np.exp(-(logit_hat + 1.96 * preds_bin.se)))
+
+points_bin = alt.Chart(
+    {"values": [{"x": float(x[i]), "y": float(y_bin[i])} for i in range(n)]}
+).mark_circle(size=12, opacity=0.15, color="purple").encode(
+    x=alt.X("x:Q", title="x"),
+    y=alt.Y("y:Q", title="P(y = 1)"),
+)
+
+fit_data_bin = [
+    {"x": float(x_grid[i]), "fit": float(preds_bin.values[i]),
+     "lower": float(lower_bin[i]), "upper": float(upper_bin[i])}
+    for i in range(len(x_grid))
+]
+
+line_bin = alt.Chart({"values": fit_data_bin}).mark_line(
+    color="darkviolet", strokeWidth=2
+).encode(x="x:Q", y="fit:Q")
+
+band_bin = alt.Chart({"values": fit_data_bin}).mark_area(
+    opacity=0.15, color="darkviolet"
+).encode(x="x:Q", y="lower:Q", y2="upper:Q")
+
+(band_bin + points_bin + line_bin).properties(
+    width=550, height=300,
+    title="Binomial GAM: binary outcome ~ s(x)"
+)
+```
+
+::: {.callout-note}
+## Proportion data
+
+For grouped binomial data (successes out of $n$ trials), use the `cbind` syntax:
 
 ```python
-from whittaker.families import Gaussian, Binomial, Poisson
-
-model = wk.GAM("y ~ s(x)", family=Gaussian(link="log"))
-model = wk.GAM("y ~ s(x)", family=Binomial(link="probit"))
+model = wk.GAM("cbind(successes, failures) ~ s(x)", family="binomial")
 ```
+
+This is more efficient than expanding to individual binary rows and correctly accounts for the
+denominator.
+:::
+
+## Gamma: positive continuous responses {#sec-gamma}
+
+The Gamma family is appropriate for strictly positive, right-skewed continuous data where the
+variance increases with the mean. Insurance claims, precipitation amounts, and response times are
+classic use cases.
+
+- **Link**: $g(\mu) = 1/\mu$ (inverse, canonical) or $g(\mu) = \log(\mu)$ (log).
+- **Variance function**: $V(\mu) = \mu^2$.
+- **Deviance**: $D = 2\sum_i \bigl[-\log(y_i / \hat\mu_i) + (y_i - \hat\mu_i)/\hat\mu_i\bigr]$.
+
+The Gamma family uses a **log link** by default, which guarantees positive fitted values.
+
+### Example: reaction time data
+
+```{python}
+rng = np.random.default_rng(3)
+n = 250
+
+x = np.linspace(0.5, 5, n)
+mu = np.exp(1.0 + 0.4 * np.sin(2 * x))   # true mean (always positive)
+shape = 10.0
+y_gamma = rng.gamma(shape, scale=mu / shape, size=n)
+
+data_gamma = {"x": x, "y": y_gamma}
+
+model_gamma = wk.GAM("y ~ s(x)", family=wk.Gamma())
+model_gamma.fit(data_gamma, method="REML")
+
+print(model_gamma.summary())
+```
+
+With the log link the model is $\log(\mu) = \beta_0 + f(x)$, so coefficients are interpretable as
+multiplicative effects on the response.
+
+## Negative Binomial: overdispersed counts {#sec-nb}
+
+When count data exhibit more variability than the Poisson model allows (i.e., the variance exceeds
+the mean), the Negative Binomial family provides extra flexibility via an overdispersion parameter
+$\theta$:
+
+- **Link**: $g(\mu) = \log(\mu)$.
+- **Variance function**: $V(\mu) = \mu + \mu^2 / \theta$. As $\theta \to \infty$, this reduces to
+  the Poisson.
+- **Deviance**:
+  $D = 2\sum_i \bigl[\theta\,\log\!\bigl(\theta / (\theta + \hat\mu_i)\bigr)
+  + y_i \log\!\bigl(y_i(\theta + \hat\mu_i) / (\hat\mu_i(\theta + y_i))\bigr)\bigr]$.
+
+The overdispersion parameter $\theta$ is estimated alongside the smoothing parameters during REML
+optimization.
+
+**Supported links**: `log` (default), `identity`, `sqrt`.
+
+### Example: overdispersed species counts
+
+```{python}
+rng = np.random.default_rng(4)
+n = 300
+
+x = np.linspace(0, 5, n)
+mu = np.exp(1.5 + 0.8 * np.sin(1.5 * x))
+theta = 3.0  # overdispersion parameter
+
+# Generate NB data: Poisson-Gamma mixture
+lam = rng.gamma(theta, scale=mu / theta, size=n)
+y_nb = rng.poisson(lam).astype(float)
+
+data_nb = {"x": x, "y": y_nb}
+
+model_nb = wk.GAM("y ~ s(x, k=15)", family=wk.NegativeBinomial())
+model_nb.fit(data_nb, method="REML")
+
+print(model_nb.summary())
+```
+
+```{python}
+# Compare observed variance to mean (overdispersion check)
+print(f"Observed mean:     {y_nb.mean():.2f}")
+print(f"Observed variance: {y_nb.var():.2f}")
+print(f"Variance / mean:   {y_nb.var() / y_nb.mean():.2f}")
+```
+
+A ratio of variance to mean substantially greater than 1 is the hallmark of overdispersion. The
+Poisson assumption ($\text{Var} = \mu$) would underestimate standard errors here, leading to
+overconfident inference. The Negative Binomial family handles this correctly.
+
+## Beta: proportions on (0, 1) {#sec-beta}
+
+When the response is a continuous proportion (e.g., vegetation cover, exam scores as fractions), the
+Beta family is the appropriate choice. Unlike the Binomial family (which models counts out of a
+known total), the Beta family handles continuous values strictly between 0 and 1.
+
+- **Link**: $g(\mu) = \log\!\bigl(\mu / (1 - \mu)\bigr)$ (logit).
+- **Variance function**: $V(\mu) = \mu(1 - \mu) / (1 + \phi)$, where $\phi$ is a precision
+  parameter.
+- **Deviance**: based on the Beta log-likelihood with parameters $\alpha = \mu\phi$ and
+  $\beta = (1-\mu)\phi$.
+
+**Supported links**: `logit` (default), `probit`, `cloglog`, `cauchit`.
+
+### Example: proportion of canopy cover
+
+```{python}
+rng = np.random.default_rng(5)
+n = 200
+
+x = np.linspace(0, 4, n)
+mu = 1 / (1 + np.exp(-(0.5 + 0.8 * np.sin(1.5 * x))))  # true proportion
+phi = 20.0  # precision
+
+alpha = mu * phi
+beta_param = (1 - mu) * phi
+y_beta = rng.beta(alpha, beta_param)
+
+data_beta = {"x": x, "y": y_beta}
+
+model_beta = wk.GAM("y ~ s(x)", family=wk.Beta())
+model_beta.fit(data_beta, method="REML")
+
+print(model_beta.summary())
+```
+
+::: {.callout-warning}
+## Boundary values
+
+The Beta distribution is defined on the open interval $(0, 1)$. If your data contain exact 0s or
+1s, you must transform them slightly (e.g., $(y(n-1) + 0.5)/n$) or consider a zero/one-inflated
+model.
+:::
+
+## Tweedie: mixed continuous-discrete responses {#sec-tweedie}
+
+The Tweedie family generalizes several distributions through a **power parameter** $p$:
+
+- $p = 0$: Gaussian
+- $p = 1$: Poisson
+- $1 < p < 2$: compound Poisson-Gamma (a point mass at zero plus a continuous distribution on the
+  positives)
+- $p = 2$: Gamma
+- $p = 3$: inverse Gaussian
+
+The most common use is $1 < p < 2$, which naturally handles data with exact zeros and a continuous
+positive tail (e.g., insurance claims, daily rainfall).
+
+- **Link**: $g(\mu) = \log(\mu)$.
+- **Variance function**: $V(\mu) = \mu^p$.
+
+**Supported links**: `log` (default), `identity`.
+
+### Example: insurance claims
+
+```{python}
+rng = np.random.default_rng(6)
+n = 300
+
+x = np.linspace(0, 5, n)
+mu = np.exp(0.5 + 0.6 * np.sin(x))
+
+# Simulate Tweedie-like data (compound Poisson-Gamma)
+p_tw = 1.5
+phi_tw = 1.0
+poisson_rate = mu**(2 - p_tw) / ((2 - p_tw) * phi_tw)
+gamma_shape = (2 - p_tw) / (p_tw - 1)
+gamma_scale = phi_tw * (p_tw - 1) * mu**(p_tw - 1)
+
+n_events = rng.poisson(poisson_rate)
+y_tw = np.array([
+    rng.gamma(gamma_shape, scale=gamma_scale[i], size=n_events[i]).sum()
+    if n_events[i] > 0 else 0.0
+    for i in range(n)
+])
+
+data_tw = {"x": x, "y": y_tw}
+
+model_tw = wk.GAM("y ~ s(x)", family=wk.Tweedie())
+model_tw.fit(data_tw, method="REML")
+
+print(model_tw.summary())
+```
+
+```{python}
+# Proportion of exact zeros
+print(f"Proportion of zeros: {(y_tw == 0).mean():.2%}")
+```
+
+::: {.callout-tip}
+## Estimating the power parameter
+
+If you are unsure what value of $p$ to use, the `tw()` shorthand lets Whittaker estimate the power
+parameter from the data:
+
+```python
+model = wk.GAM("y ~ s(x)", family=wk.tw())
+```
+
+This adds $p$ to the set of parameters estimated during REML optimization.
+:::
+
+## Inverse Gaussian: positive heavy-tailed responses {#sec-invgauss}
+
+The Inverse Gaussian family is appropriate for positive continuous data with a heavier right tail
+than the Gamma. It arises naturally as the distribution of first passage times in Brownian motion.
+
+- **Link**: $g(\mu) = 1/\mu^2$ (canonical).
+- **Variance function**: $V(\mu) = \mu^3$.
+- **Deviance**: $D = \sum_i (y_i - \hat\mu_i)^2 / (\hat\mu_i^2 \, y_i)$.
+
+**Supported links**: `1/mu^2` (default), `log`, `inverse`, `identity`.
+
+### Example
+
+```{python}
+from scipy.stats import invgauss as invgauss_dist
+
+rng = np.random.default_rng(7)
+n = 200
+
+x = np.linspace(0.5, 4, n)
+mu = np.exp(0.5 + 0.3 * x)
+
+y_ig = np.array([invgauss_dist.rvs(mu=m, scale=1.0, random_state=rng) for m in mu])
+
+data_ig = {"x": x, "y": y_ig}
+
+model_ig = wk.GAM("y ~ s(x)", family=wk.InverseGaussian())
+model_ig.fit(data_ig, method="REML")
+
+print(model_ig.summary())
+```
+
+The Inverse Gaussian is less commonly used than the Gamma but should be considered when the
+coefficient of variation increases more steeply with the mean (since $V(\mu) = \mu^3$ vs. $\mu^2$
+for Gamma).
+
+## Cox proportional hazards: survival data {#sec-coxph}
+
+The `CoxPH()` family supports semiparametric survival analysis via the Cox proportional hazards
+model. Unlike the other families above, this is not a member of the exponential dispersion family in
+the traditional sense; instead, it uses a partial likelihood formulation.
+
+```python
+model = wk.GAM("survival_object ~ s(age) + s(biomarker)", family=wk.CoxPH())
+model.fit(data, method="REML")
+```
+
+See the full CoxPH documentation in the API reference for details on constructing the survival
+response object and interpreting hazard ratios.
+
+## Choosing the right family
+
+Selecting a family involves matching the distribution to three characteristics of your response
+variable:
+
+1. **Support**: what values can $y$ take?
+   - Unbounded real numbers → Gaussian
+   - Non-negative integers → Poisson or Negative Binomial
+   - Binary (0/1) → Binomial
+   - Strictly positive reals → Gamma, Inverse Gaussian
+   - Proportions in $(0, 1)$ → Beta
+   - Non-negative with point mass at zero → Tweedie ($1 < p < 2$)
+
+2. **Mean-variance relationship**: how does the spread change with the level?
+   - Constant variance → Gaussian
+   - Variance $\propto$ mean → Poisson
+   - Variance $\propto$ mean$^2$ → Gamma
+   - Variance $>$ mean (overdispersion) → Negative Binomial
+
+3. **Domain knowledge**: what does the scientific context suggest?
+   - Rates and counts → Poisson or Negative Binomial
+   - Times, costs, concentrations → Gamma or Inverse Gaussian
+   - Survival analysis → CoxPH
+
+::: {.callout-tip}
+## Diagnostic checks
+
+After fitting, use [model diagnostics](07-diagnostics.qmd) to verify your family choice. The key
+checks are:
+
+- **Residual plots**: residuals vs. fitted values should show no systematic pattern.
+- **QQ plot**: quantile-quantile plot of deviance residuals should be approximately linear.
+- **Overdispersion**: for Poisson models, check that the estimated scale parameter is close to 1.
+  If it is much larger, switch to Negative Binomial.
+:::
+
+## Where to go next
+
+- **[Smooth terms](03-smooths.qmd)**: basis types, tensor products, and choosing `k`.
+- **[Model fitting](05-fitting.qmd)**: P-IRLS, REML vs. GCV, and convergence settings.
+- **[Prediction and inference](06-prediction.qmd)**: standard errors, confidence intervals, and
+  term-level predictions.
+- **[Diagnostics](07-diagnostics.qmd)**: residual plots, QQ plots, and model checking.

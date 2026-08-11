@@ -1,0 +1,402 @@
+---
+title: Quantile regression
+guide-section: "Advanced features"
+---
+
+```{python}
+#| echo: false
+#| output: false
+import great_docs as gd
+
+gd.enable_tbl_preview(n_head=8, n_tail=3)
+```
+
+Standard GAMs model the **conditional mean** $E(y \mid x)$. This is the right target when the
+distribution of $y$ is roughly symmetric and homoscedastic. But in many real problems the variance,
+skewness, or tail behavior of the response changes with the predictors. In those settings a single
+mean curve is an incomplete summary. **Quantile regression** fills the gap by estimating any
+conditional quantile $Q_\tau(y \mid x)$ --- the value below which a fraction $\tau$ of the response
+distribution falls, given the covariates.
+
+Whittaker's `QuantileGAM` fits one or more conditional quantiles simultaneously using smooth additive
+functions, producing a full picture of how the response distribution shifts and stretches across the
+predictor space.
+
+## Why quantiles matter
+
+### Heteroscedastic data
+
+When variance grows (or shrinks) with a predictor, a mean-only model hides the most interesting
+story. A fan of quantile curves reveals exactly how the spread changes.
+
+### Risk quantification
+
+In finance, environmental science, and engineering, the tails of the distribution carry the most
+consequence. Estimating the 5th or 95th percentile directly answers questions like "what is the
+worst-case flood level?" or "what return should an investor expect in the bottom decile?"
+
+### Adaptive prediction intervals
+
+Classical confidence intervals assume a fixed error distribution (typically Gaussian). Quantile-based
+intervals adapt automatically to local variance and skewness, without distributional assumptions.
+
+::: {.callout-note}
+## Quantile regression vs. distributional regression (GAMLSS)
+
+GAMLSS (covered in the [distributional regression page](10-gamlss.qmd)) models the full
+conditional distribution by parameterizing location, scale, and shape. Quantile regression is
+**distribution-free**: it targets individual quantiles without assuming any parametric form. This
+makes it more robust when the true distribution is unknown, but it does not yield a full density
+estimate.
+:::
+
+## Fitting multiple quantiles
+
+The core workflow is straightforward: specify the quantiles you want, write a formula, and call
+`.fit()`.
+
+```{python}
+import whittaker as wk
+import numpy as np
+import altair as alt
+
+# --- Simulate heteroscedastic data ---
+rng = np.random.default_rng(42)
+n = 400
+x = rng.uniform(0, 6, n)
+# Variance increases linearly with x
+sigma_x = 0.3 + 0.4 * x
+y = np.sin(x) + sigma_x * rng.normal(size=n)
+
+data = {"x": x, "y": y}
+
+# --- Fit quantile GAM at five levels ---
+quantiles = [0.1, 0.25, 0.5, 0.75, 0.9]
+
+qgam = wk.QuantileGAM(
+    formula="y ~ s(x)",
+    quantiles=quantiles,
+).fit(data)
+```
+
+The fitted model stores a separate smooth for each requested quantile. Use `.predict()` to evaluate
+them on a prediction grid:
+
+```{python}
+x_grid = np.linspace(0, 6, 200)
+new_data = {"x": x_grid}
+
+preds = qgam.predict(new_data)  # dict: quantile -> PredictionResult
+```
+
+`preds` is a dictionary whose keys are the quantile levels and whose values are the predicted arrays.
+Let's visualize all five curves together.
+
+```{python}
+# Build a long-form data list for Altair
+fan_records = []
+for tau, vals in preds.items():
+    for i in range(len(x_grid)):
+        fan_records.append({"x": float(x_grid[i]), "y_hat": float(vals.values[i]), "quantile": str(tau)})
+
+# Scatter of raw data
+scatter = alt.Chart({"values": [{"x": float(x[i]), "y": float(y[i])} for i in range(n)]}).mark_circle(
+    size=12, opacity=0.20, color="steelblue"
+).encode(
+    x=alt.X("x:Q", title="x"),
+    y=alt.Y("y:Q", title="y"),
+)
+
+# Quantile curves
+q_lines = alt.Chart({"values": fan_records}).mark_line(strokeWidth=2).encode(
+    x="x:Q",
+    y=alt.Y("y_hat:Q", title="y"),
+    color=alt.Color(
+        "quantile:N",
+        scale=alt.Scale(
+            domain=["0.1", "0.25", "0.5", "0.75", "0.9"],
+            range=["#4575b4", "#91bfdb", "#d73027", "#91bfdb", "#4575b4"],
+        ),
+        legend=alt.Legend(title="Quantile"),
+    ),
+    strokeDash=alt.condition(
+        alt.datum.quantile == "0.5",
+        alt.value([1, 0]),       # solid for median
+        alt.value([5, 3]),       # dashed for others
+    ),
+)
+
+(scatter + q_lines).properties(
+    width=550, height=320,
+    title="Quantile GAM fan chart: heteroscedastic data",
+)
+```
+
+The fan of curves widens as $x$ increases, faithfully tracking the growing variance. The solid red
+line is the median ($\tau = 0.5$); the dashed curves are the 10th/90th and 25th/75th percentiles.
+
+## The ELF loss function
+
+Classical quantile regression minimizes the **check function** (also called the pinball loss),
+which has a kink at zero. This creates difficulties for penalized likelihood methods because the
+gradient is discontinuous.
+
+Whittaker uses the **expectile-like family (ELF)** loss instead. The ELF loss smooths the kink with
+a bandwidth parameter $\sigma$, producing a twice-differentiable objective that integrates cleanly
+into P-IRLS fitting. As $\sigma \to 0$, ELF converges to the true check function, so the quantile
+interpretation is preserved.
+
+::: {.callout-tip}
+## You rarely need to set sigma by hand
+
+The default $\sigma$ is chosen to balance bias and smoothness. Use `calibrate_sigma()` (described
+below) when you need to verify the default or tighten the approximation for very sharp quantile
+estimates.
+:::
+
+## The non-crossing problem
+
+When quantiles are estimated independently, nothing prevents the fitted curves from crossing. For
+instance, the predicted 25th percentile might exceed the 75th percentile at some covariate values.
+Crossings are an artifact of separate estimation---they violate the monotonicity property that
+$Q_{\tau_1}(y \mid x) \le Q_{\tau_2}(y \mid x)$ whenever $\tau_1 < \tau_2$.
+
+In practice, crossings are most common when:
+
+- The sample size is small relative to the number of quantiles.
+- The quantiles are close together (e.g., 0.48 and 0.52).
+- The underlying relationship is highly nonlinear.
+
+### Detecting crossings
+
+The `.crossing_fraction()` method reports the fraction of the prediction grid where at least one
+pair of quantile curves crosses:
+
+```{python}
+frac = qgam.crossing_fraction()
+print(f"Crossing fraction: {frac:.4f}")
+```
+
+A value of zero means the curves are properly ordered everywhere. Any positive value indicates
+violations.
+
+### Enforcing non-crossing with isotonic projection
+
+Set `non_crossing=True` to enforce monotonicity across quantile levels. Whittaker uses an isotonic
+regression projection after each P-IRLS update: at every evaluation point, the predicted quantiles
+are sorted so that lower quantile levels always produce lower fitted values.
+
+```{python}
+# Fit with the non-crossing constraint
+qgam_nc = wk.QuantileGAM(
+    formula="y ~ s(x)",
+    quantiles=quantiles,
+    non_crossing=True,
+).fit(data)
+
+frac_nc = qgam_nc.crossing_fraction()
+print(f"Crossing fraction (constrained): {frac_nc:.4f}")
+```
+
+Let's compare the unconstrained and constrained fits side by side to see the effect.
+
+```{python}
+preds_nc = qgam_nc.predict(new_data)
+
+# Build records for both models
+compare_records = []
+for tau, vals in preds.items():
+    for i in range(len(x_grid)):
+        compare_records.append({
+            "x": float(x_grid[i]), "y_hat": float(vals.values[i]),
+            "quantile": str(tau), "model": "unconstrained",
+        })
+for tau, vals in preds_nc.items():
+    for i in range(len(x_grid)):
+        compare_records.append({
+            "x": float(x_grid[i]), "y_hat": float(vals.values[i]),
+            "quantile": str(tau), "model": "constrained",
+        })
+
+compare_chart = alt.Chart({"values": compare_records}).mark_line(strokeWidth=1.5).encode(
+    x=alt.X("x:Q", title="x"),
+    y=alt.Y("y_hat:Q", title="y"),
+    color=alt.Color("quantile:N", legend=alt.Legend(title="Quantile")),
+    strokeDash=alt.StrokeDash("model:N", legend=alt.Legend(title="Model")),
+).facet(
+    column=alt.Column("model:N", title=None),
+).properties(
+    title="Unconstrained vs. non-crossing quantile GAM",
+)
+
+compare_chart
+```
+
+In the constrained panel, every quantile curve sits strictly below the one above it across the
+entire range of $x$.
+
+::: {.callout-warning}
+## Non-crossing adds a small bias
+
+The isotonic projection guarantees monotonicity but introduces a small amount of bias because it
+shifts fitted values. In most applications the bias is negligible compared to the variance of the
+estimates, but for very closely spaced quantiles (e.g., 0.49 and 0.51) it can matter. Check the
+model summary to verify that the bias is acceptable.
+:::
+
+## Prediction intervals from quantile regression
+
+A natural use of quantile regression is to build prediction intervals. The `.predict_interval()`
+method returns the lower and upper bounds defined by the outermost pair of fitted quantiles:
+
+```{python}
+lower, upper = qgam_nc.predict_interval(new_data)
+```
+
+For a model fitted at quantiles `[0.1, 0.25, 0.5, 0.75, 0.9]`, this returns the 10th and 90th
+percentile curves as the bounds of an 80% prediction interval.
+
+### Comparison with Gaussian confidence intervals
+
+A standard GAM produces symmetric intervals that assume Gaussian errors. When the data are
+heteroscedastic, these intervals are too narrow in high-variance regions and too wide in low-variance
+regions. Quantile-based intervals adapt automatically.
+
+```{python}
+# Fit a standard GAM for comparison
+gam = wk.GAM(formula="y ~ s(x)").fit(data, method="REML")
+pred_gam = gam.predict(new_data, se=True)
+
+# 80% Gaussian CI: mean +/- 1.28 * SE
+z80 = 1.2816
+g_lower = pred_gam.values - z80 * pred_gam.se
+g_upper = pred_gam.values + z80 * pred_gam.se
+
+# Build Altair data
+interval_records = []
+for i in range(len(x_grid)):
+    interval_records.append({
+        "x": float(x_grid[i]),
+        "q_lower": float(lower[i]),
+        "q_upper": float(upper[i]),
+        "g_lower": float(g_lower[i]),
+        "g_upper": float(g_upper[i]),
+    })
+
+base = alt.Chart({"values": interval_records})
+
+# Quantile interval band
+q_band = base.mark_area(opacity=0.25, color="#d73027").encode(
+    x=alt.X("x:Q", title="x"),
+    y=alt.Y("q_lower:Q", title="y"),
+    y2="q_upper:Q",
+)
+
+# Gaussian interval band
+g_band = base.mark_area(opacity=0.20, color="#4575b4").encode(
+    x="x:Q",
+    y=alt.Y("g_lower:Q", title="y"),
+    y2="g_upper:Q",
+)
+
+# Scatter
+pts = alt.Chart(
+    {"values": [{"x": float(x[i]), "y": float(y[i])} for i in range(n)]}
+).mark_circle(size=10, opacity=0.15, color="gray").encode(
+    x="x:Q", y="y:Q",
+)
+
+(g_band + q_band + pts).properties(
+    width=550, height=320,
+    title="80% prediction intervals: Gaussian (blue) vs. quantile (red)",
+)
+```
+
+The red (quantile) band fans out to the right, matching the increasing noise, while the blue
+(Gaussian) band maintains roughly constant width and under-covers in the high-variance region.
+
+## Sigma calibration
+
+The ELF loss bandwidth $\sigma$ controls how closely the smooth surrogate approximates the true
+check function. A smaller $\sigma$ gives a tighter approximation (less bias toward expectiles) but
+can make optimization harder. The `calibrate_sigma` utility evaluates several candidate $\sigma$
+values and reports the bias--variance trade-off for each.
+
+```{python}
+best_sigma = wk.calibrate_sigma(
+    formula="y ~ s(x)",
+    data=data,
+    tau=0.5,
+    seed=42,
+)
+
+print(f"Best sigma for tau=0.5: {best_sigma:.4f}")
+```
+
+The function returns the $\sigma$ value that minimises the out-of-sample pinball loss via
+cross-validation. In most cases, the default $\sigma$ is adequate.
+
+::: {.callout-note}
+## When to calibrate sigma
+
+Calibration is most useful when:
+
+- You are estimating extreme quantiles ($\tau < 0.05$ or $\tau > 0.95$) where the ELF approximation
+  matters most.
+- You observe that the fitted quantile curves do not align well with the empirical quantiles of the
+  residuals.
+- You need to report formal quantile coverage and want to minimize the ELF-induced bias.
+
+For exploratory work at moderate quantiles (0.1--0.9), the default is usually fine.
+:::
+
+## Model summary
+
+Like other Whittaker models, `QuantileGAM` provides a `.summary()` method:
+
+```{python}
+print(qgam_nc.summary())
+```
+
+The summary reports, for each quantile level, the effective degrees of freedom, the smoothing
+parameter $\lambda$, and the ELF loss at convergence. It also notes whether the non-crossing
+constraint was active.
+
+## Practical guidance
+
+### Choosing quantiles
+
+- **Five-number summary** `[0.1, 0.25, 0.5, 0.75, 0.9]` is a good default for exploratory work.
+  It captures the center, the interquartile range, and the tails.
+- **Prediction intervals** only need two quantiles. Use `[0.05, 0.95]` for a 90% interval or
+  `[0.025, 0.975]` for a 95% interval. Add the median `0.5` if you also need a point prediction.
+- **Extreme quantiles** ($\tau < 0.05$ or $\tau > 0.95$) require larger sample sizes. As a rough
+  rule, you need at least $10 / \min(\tau, 1 - \tau)$ observations to estimate a quantile reliably.
+
+### When to prefer quantile regression over Gaussian intervals
+
+| Scenario | Better approach |
+|---|---|
+| Symmetric, constant variance | Gaussian GAM (simpler, efficient) |
+| Heteroscedastic but symmetric | Quantile GAM or GAMLSS with log-link on $\sigma$ |
+| Skewed or heavy-tailed | Quantile GAM (no distributional assumption) |
+| Need full density estimate | GAMLSS |
+| Need specific tail quantiles for risk | Quantile GAM |
+| Outlier-robust central estimate | Quantile GAM at $\tau = 0.5$ (median regression) |
+
+::: {.callout-tip}
+## Median regression as a robust alternative
+
+When outliers are a concern but you only need a central estimate, fitting a single quantile at
+$\tau = 0.5$ (the median) gives a smooth that is much less sensitive to extreme values than the
+least-squares mean. This is because the check function for the median penalizes absolute deviations
+rather than squared deviations.
+:::
+
+### Combining with other Whittaker features
+
+- **Multiple smooths**: `"y ~ s(x1) + s(x2)"` works exactly as with `GAM`. Each quantile gets its
+  own smooth surface.
+- **Linear terms**: `"y ~ x1 + s(x2)"` combines parametric and smooth terms.
+- **Factor-by smooths**: `"y ~ s(x, by=group)"` fits separate quantile curves per group level,
+  useful for comparing distributional differences across categories.

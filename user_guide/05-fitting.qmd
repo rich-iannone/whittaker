@@ -3,67 +3,548 @@ title: Model fitting
 guide-section: "Fitting models"
 ---
 
+```{python}
+#| echo: false
+#| output: false
+import great_docs as gd
+
+gd.enable_tbl_preview(n_head=8, n_tail=3)
+```
+
 Whittaker fits GAMs by **penalized iteratively reweighted least squares (P-IRLS)**, a generalization
 of weighted least squares that handles non-Gaussian responses by iterating over a sequence of
-penalized weighted regression problems.
+penalized weighted regression problems. This page describes the fitting algorithm, smoothness
+selection criteria, and the practical controls you have over the fitting process.
 
 ## The P-IRLS algorithm
 
 For a given set of smoothing parameters $\boldsymbol{\lambda} = (\lambda_1, \ldots, \lambda_J)$,
-fitting proceeds as follows:
+fitting proceeds in five steps:
 
-1. **Initialize**: set $\mu = $ `family.initialize(y)`, $\eta = g(\mu)$.
-2. **Pseudo-data**: $z = \eta + (y - \mu)\, g'(\mu)$ (a linearized response).
-3. **Working weights**: $W = \bigl[g'(\mu)\bigr]^2 \,/\, V(\mu)$.
-4. **Penalized WLS**: solve
-   $$\bigl(X^\top W X + \textstyle\sum_j \lambda_j S_j\bigr)\,\hat\beta = X^\top W z$$
-5. **Update**: $\eta = X\hat\beta$, $\mu = g^{-1}(\eta)$.
-6. **Repeat** steps 2–5 until the relative change in penalized deviance falls below
-   $10^{-7}$.
+1. **Initialize**: set $\mu = $ `family.initialize(y)`, $\eta = g(\mu)$. The initialization is
+   family-specific: for Gaussian data $\mu = y$; for Poisson $\mu = y + 0.1$; for binomial
+   $\mu = (y + 0.5)/2$.
+2. **Pseudo-data**: compute the working response
+   $$z = \eta + (y - \mu)\, g'(\mu)$$
+   This is a first-order Taylor expansion of the link function around the current $\mu$, converting
+   the non-Gaussian problem into a weighted least-squares problem.
+3. **Working weights**: compute
+   $$W = \frac{1}{\bigl[g'(\mu)\bigr]^2 \, V(\mu)}$$
+   where $V(\mu)$ is the variance function of the family. These weights account for both the
+   link function and the heteroscedasticity of the response.
+4. **Penalized WLS**: solve the penalized weighted least-squares system
+   $$\bigl(X^\top W X + \textstyle\sum_{j=1}^{J} \lambda_j S_j\bigr)\,\hat\beta = X^\top W z$$
+   where $S_j$ is the penalty matrix for the $j$-th smooth term. This is the core computational
+   step. The penalty matrices $S_j$ are positive semi-definite and penalize the roughness of each
+   smooth, pulling $f_j$ toward the penalty null space (typically low-order polynomials).
+5. **Update**: compute $\eta = X\hat\beta$ and $\mu = g^{-1}(\eta)$.
 
-For the Gaussian family with an identity link, P-IRLS reduces to a single penalized least-squares
-solve (no iteration is required).
+Repeat steps 2--5 until the relative change in penalized deviance falls below $10^{-7}$.
+
+### The Gaussian identity-link special case
+
+For the Gaussian family with an identity link, P-IRLS reduces to a **single** penalized
+least-squares solve. The link function is the identity ($g(\mu) = \mu$), so $g'(\mu) = 1$, and
+the variance function is constant ($V(\mu) = 1$). The working weights become $W = I$ and the
+pseudo-data become $z = y$, so the system collapses to:
+
+$$\bigl(X^\top X + \textstyle\sum_j \lambda_j S_j\bigr)\,\hat\beta = X^\top y$$
+
+No iteration is required. This makes Gaussian GAMs substantially faster to fit than their
+non-Gaussian counterparts.
 
 ## Smoothness selection
 
 The roughness of each smooth is controlled by a non-negative smoothing parameter $\lambda_j$. Larger
-$\lambda_j$ → smoother $f_j$; $\lambda_j = 0$ → no penalty (interpolating spline).
+$\lambda_j$ produces a smoother $f_j$; $\lambda_j = 0$ removes the penalty entirely (interpolating
+spline). Rather than setting $\lambda_j$ by hand, Whittaker selects it automatically by optimizing
+one of three criteria.
 
-### GCV
+### GCV (generalized cross-validation)
 
-Generalized cross-validation selects $\boldsymbol\lambda$ by minimizing:
+GCV selects $\boldsymbol\lambda$ by minimizing:
 
 $$\text{GCV}(\boldsymbol\lambda) = \frac{n\, D(y,\hat\mu)}{[n - \text{tr}(\mathbf{A})]^2}$$
 
 where $D$ is the deviance and $\mathbf{A} = X(X^\top W X + \sum_j \lambda_j S_j)^{-1}X^\top W$ is
-the influence (hat) matrix.
+the influence (hat) matrix. The trace $\text{tr}(\mathbf{A})$ is the effective degrees of freedom
+of the model.
 
-GCV is minimized over $\log\boldsymbol\lambda$ using a Newton method with analytical gradient.
+GCV is an approximation to leave-one-out cross-validation that avoids refitting the model $n$ times.
+It is minimized over $\log\boldsymbol\lambda$ using a Newton method with analytical gradient and
+Hessian.
 
-### REML
+**Properties**:
 
-Restricted maximum likelihood (REML) treats the smooth terms as random effects and maximizes the
-restricted log-likelihood over $\boldsymbol\lambda$. It has better finite-sample properties than GCV
-and is the recommended default.
-
-## Solver strategy
-
-| Model matrix size | Solver |
-|---|---|
-| $k < 500$ | Dense Cholesky (LAPACK via SciPy) |
-| $k \geq 500$ | Sparse Cholesky (SciPy sparse) |
-
-## Convergence settings
+- GCV is well-understood theoretically and widely used.
+- It tends to undersmooth in finite samples --- occasional fits with too many effective degrees of
+  freedom.
+- It can be sensitive to influential observations because it weights all residuals equally.
 
 ```python
-model = wk.GAM(
-    "y ~ s(x1) + s(x2)",
-    tol=1e-7,          # relative change in penalized deviance
-    max_iter=200,      # maximum P-IRLS iterations
-    method="gcv",      # smoothness selection method
-)
-model.fit(data)
+model = wk.GAM("y ~ s(x)")
+model.fit(data, method="GCV")
 ```
 
-After fitting, `model.converged` is `True` if the inner P-IRLS loop converged, and `model.n_iter`
-reports the number of iterations taken.
+### REML (restricted maximum likelihood)
+
+REML treats the smooth coefficients as random effects and maximizes the restricted log-likelihood:
+
+$$\ell_{\text{REML}}(\boldsymbol\lambda, \phi) = -\frac{1}{2}\Bigl[
+  n \log(2\pi\phi) + \frac{D}{\phi} +
+  \log\bigl|X^\top W X + \textstyle\sum_j \lambda_j S_j\bigr| -
+  \log\bigl|\textstyle\sum_j \lambda_j S_j^{+}\bigr|
+\Bigr]$$
+
+where $S_j^{+}$ denotes the pseudoinverse restricted to the range space of $S_j$, and $\phi$ is
+the scale parameter.
+
+**Advantages over GCV**:
+
+- REML has better finite-sample properties: it is less prone to undersmoothing.
+- It is more stable when the true function is close to the penalty null space.
+- REML accounts for the uncertainty in $\hat\beta$ when estimating $\phi$, producing better
+  variance estimates.
+- It is the recommended default in both Whittaker and mgcv.
+
+```python
+model = wk.GAM("y ~ s(x)")
+model.fit(data, method="REML")     # recommended default
+```
+
+### ML (maximum likelihood)
+
+ML maximizes the full marginal log-likelihood rather than the restricted version:
+
+$$\ell_{\text{ML}}(\boldsymbol\lambda, \phi) = -\frac{1}{2}\Bigl[
+  n \log(2\pi\phi) + \frac{D}{\phi} +
+  \log\bigl|X^\top W X + \textstyle\sum_j \lambda_j S_j\bigr|
+\Bigr]$$
+
+The key difference from REML is the absence of the $\log|\sum_j \lambda_j S_j^{+}|$ term. This
+means ML does not adjust for the degrees of freedom consumed by the fixed effects, which can lead
+to slight undersmoothing relative to REML --- the same bias that makes ML variance estimates
+biased downward in classical linear models.
+
+**When to use ML**: ML is appropriate when you need to compare models with different fixed-effect
+structures using likelihood ratio tests, because REML likelihoods are not comparable across
+models with different fixed effects.
+
+```python
+model = wk.GAM("y ~ s(x)")
+model.fit(data, method="ML")
+```
+
+### Comparing GCV, REML, and ML
+
+```{python}
+import numpy as np
+import whittaker as wk
+
+# Generate noisy data with a smooth underlying function
+rng = np.random.default_rng(42)
+n = 150
+x = np.linspace(0, 2 * np.pi, n)
+y_true = np.sin(x) + 0.3 * np.cos(3 * x)
+y = y_true + rng.normal(0, 0.4, n)
+
+data = {"x": x, "y": y}
+
+# Fit with each method
+model_gcv = wk.GAM("y ~ s(x, k=20)")
+model_gcv.fit(data, method="GCV")
+
+model_reml = wk.GAM("y ~ s(x, k=20)")
+model_reml.fit(data, method="REML")
+
+model_ml = wk.GAM("y ~ s(x, k=20)")
+model_ml.fit(data, method="ML")
+
+# Compare EDF and smoothing parameters
+print("Method  | EDF total | Smoothing param")
+print("--------|-----------|----------------")
+print(f"GCV     | {model_gcv.edf_total:9.3f} | {model_gcv.smoothing_params[0]:.4f}")
+print(f"REML    | {model_reml.edf_total:9.3f} | {model_reml.smoothing_params[0]:.4f}")
+print(f"ML      | {model_ml.edf_total:9.3f} | {model_ml.smoothing_params[0]:.4f}")
+```
+
+GCV typically selects the smallest smoothing parameter (largest EDF), REML the largest (fewest
+EDF), and ML falls between the two.
+
+```{python}
+import altair as alt
+
+# Build predictions for each method
+x_plot = np.linspace(0, 2 * np.pi, 200)
+
+preds_gcv = model_gcv.predict({"x": x_plot})
+preds_reml = model_reml.predict({"x": x_plot})
+preds_ml = model_ml.predict({"x": x_plot})
+
+# Assemble plot data
+plot_records = []
+for i in range(len(x_plot)):
+    plot_records.append({"x": float(x_plot[i]), "fit": float(preds_gcv.values[i]), "Method": "GCV"})
+    plot_records.append({"x": float(x_plot[i]), "fit": float(preds_reml.values[i]), "Method": "REML"})
+    plot_records.append({"x": float(x_plot[i]), "fit": float(preds_ml.values[i]), "Method": "ML"})
+
+# Observed data
+obs_records = [{"x": float(x[i]), "y": float(y[i])} for i in range(n)]
+
+# True function (recomputed on the plot grid)
+y_true_plot = np.sin(x_plot) + 0.3 * np.cos(3 * x_plot)
+true_records = [{"x": float(x_plot[i]), "y": float(y_true_plot[i])} for i in range(len(x_plot))]
+
+points = alt.Chart({"values": obs_records}).mark_circle(
+    size=12, opacity=0.25, color="gray"
+).encode(
+    x=alt.X("x:Q", title="x"),
+    y=alt.Y("y:Q", title="y"),
+)
+
+lines = alt.Chart({"values": plot_records}).mark_line(strokeWidth=2).encode(
+    x="x:Q",
+    y="fit:Q",
+    color=alt.Color("Method:N", scale=alt.Scale(
+        domain=["GCV", "REML", "ML"],
+        range=["#e45756", "#4c78a8", "#72b7b2"]
+    )),
+    strokeDash=alt.StrokeDash("Method:N", scale=alt.Scale(
+        domain=["GCV", "REML", "ML"],
+        range=[[0], [0], [4, 4]]
+    )),
+)
+
+true_line = alt.Chart({"values": true_records}).mark_line(
+    color="black", strokeDash=[2, 2], strokeWidth=1, opacity=0.5
+).encode(x="x:Q", y="y:Q")
+
+(points + true_line + lines).properties(
+    width=550, height=300,
+    title="Smoothness selection: GCV vs REML vs ML"
+)
+```
+
+The black dashed line is the true function. REML (blue) tends to produce the smoothest fit, GCV
+(red) the most flexible, and ML (teal, dashed) sits in between.
+
+::: {.callout-tip}
+## When in doubt, use REML
+REML is the recommended default for nearly all applications. It is less prone to overfitting than
+GCV and produces more reliable confidence intervals. Switch to GCV only if you have a specific
+reason (e.g., reproducing a legacy analysis) or to ML when you need comparable likelihoods across
+models with different fixed effects.
+:::
+
+## Fixed smoothing parameters
+
+Sometimes you want to bypass automatic smoothness selection and fix $\lambda_j$ at known values.
+This is useful for:
+
+- **Reproducing results** from another analysis where $\lambda$ was determined externally.
+- **Sensitivity analysis**: checking how the fit changes as you vary $\lambda$.
+- **Simulation studies**: fitting at a known truth.
+
+Pass a list of smoothing parameters to `fit()` in the same order as the smooth terms appear in the
+formula:
+
+```{python}
+# Fix the smoothing parameter for s(x)
+model_fixed = wk.GAM("y ~ s(x, k=20)")
+model_fixed.fit(data, smoothing_params=[1.0])
+
+print(f"Fixed lambda: {model_fixed.smoothing_params}")
+print(f"EDF: {model_fixed.edf_total:.3f}")
+```
+
+When `smoothing_params` is provided, the `method` argument is ignored --- no optimization over
+$\lambda$ takes place.
+
+```{python}
+# Multiple smooths: one lambda per smooth
+rng = np.random.default_rng(0)
+n = 200
+x1 = np.linspace(0, 1, n)
+x2 = rng.uniform(0, 1, n)
+y2 = np.sin(4 * x1) + 0.5 * x2**2 + rng.normal(0, 0.3, n)
+
+data2 = {"x1": x1, "x2": x2, "y": y2}
+
+model_two = wk.GAM("y ~ s(x1) + s(x2)")
+model_two.fit(data2, smoothing_params=[1.0, 0.5])
+
+print(f"Lambda for s(x1): {model_two.smoothing_params[0]:.2f}")
+print(f"Lambda for s(x2): {model_two.smoothing_params[1]:.2f}")
+```
+
+::: {.callout-warning}
+Fixing smoothing parameters at inappropriate values can produce severely under- or overfit models.
+Use automatic selection (REML) unless you have a compelling reason to fix $\lambda$.
+:::
+
+## Variable selection with `select=True`
+
+Standard penalized regression cannot shrink a smooth term to zero --- the penalty null space (the
+space of functions not penalized, usually polynomials up to a given order) always survives. The
+**double penalty** approach adds an extra penalty on the null space, allowing the entire smooth to
+be penalized toward zero:
+
+$$\text{penalty}_j = \lambda_j \boldsymbol\beta^\top S_j \boldsymbol\beta +
+  \lambda_j^{*} \boldsymbol\beta^\top S_j^{*} \boldsymbol\beta$$
+
+where $S_j^{*}$ penalizes the null space of $S_j$ and $\lambda_j^{*}$ is an additional smoothing
+parameter estimated alongside $\lambda_j$.
+
+When `select=True`, Whittaker adds this extra penalty for every smooth term. If a predictor has
+no effect, both $\lambda_j$ and $\lambda_j^{*}$ can grow large enough to drive the smooth's EDF
+to approximately zero, effectively removing it from the model.
+
+```{python}
+# Variable selection example: x3 is pure noise
+rng = np.random.default_rng(42)
+n = 300
+x1 = np.linspace(0, 2 * np.pi, n)
+x2 = rng.uniform(0, 1, n)
+x3 = rng.normal(0, 1, n)  # noise predictor
+
+y_sel = np.sin(x1) + x2**2 + rng.normal(0, 0.3, n)
+
+data_sel = {"x1": x1, "x2": x2, "x3": x3, "y": y_sel}
+
+# Without variable selection
+model_nosel = wk.GAM("y ~ s(x1) + s(x2) + s(x3)")
+model_nosel.fit(data_sel, method="REML")
+
+# With variable selection
+model_sel = wk.GAM("y ~ s(x1) + s(x2) + s(x3)")
+model_sel.fit(data_sel, method="REML", select=True)
+
+print("Without select=True:")
+print(model_nosel.summary())
+print("\nWith select=True:")
+print(model_sel.summary())
+```
+
+With `select=True`, the EDF for `s(x3)` should be driven close to zero, confirming that Whittaker
+identified the noise predictor. The EDF values for `s(x1)` and `s(x2)` remain largely unchanged.
+
+::: {.callout-tip}
+## When to use variable selection
+Use `select=True` when you have many candidate predictors and want the model to automatically
+determine which ones have a nonlinear effect. It is especially useful in exploratory analysis
+where you are unsure which predictors are relevant. For confirmatory analysis where the model
+structure is known, standard fitting (without `select=True`) is appropriate.
+:::
+
+## Observation weights
+
+Observation weights enter the penalized WLS system by modifying the weight matrix. If you supply
+a weight vector $w_i$, the working weight matrix becomes $\tilde{W} = \text{diag}(w_i) \cdot W$,
+and the penalized WLS system is:
+
+$$\bigl(X^\top \tilde{W} X + \textstyle\sum_j \lambda_j S_j\bigr)\,\hat\beta =
+  X^\top \tilde{W} z$$
+
+This allows you to:
+
+- **Downweight outliers**: set $w_i < 1$ for observations you suspect are contaminated.
+- **Account for known precision**: when observations have different known variances, set
+  $w_i = 1 / \sigma_i^2$.
+- **Handle aggregated data**: when each row represents $n_i$ observations, set $w_i = n_i$.
+
+```{python}
+# Weights example: downweight outlier observations
+rng = np.random.default_rng(42)
+n = 100
+x = np.linspace(0, 2 * np.pi, n)
+y_w = np.sin(x) + rng.normal(0, 0.3, n)
+
+# Add some outliers
+outlier_idx = [10, 30, 50, 70, 90]
+y_w[outlier_idx] += rng.choice([-3, 3], size=len(outlier_idx))
+
+# Create weights: 1.0 for normal observations, 0.1 for outliers
+w = np.ones(n)
+w[outlier_idx] = 0.1
+
+data_w = {"x": x, "y": y_w}
+
+# Fit without weights
+model_unweighted = wk.GAM("y ~ s(x)")
+model_unweighted.fit(data_w, method="REML")
+
+# Fit with weights
+model_weighted = wk.GAM("y ~ s(x)")
+model_weighted.fit(data_w, method="REML", weights=w)
+
+print(f"Unweighted scale: {model_unweighted.scale:.4f}")
+print(f"Weighted scale:   {model_weighted.scale:.4f}")
+print(f"Unweighted EDF:   {model_unweighted.edf_total:.3f}")
+print(f"Weighted EDF:     {model_weighted.edf_total:.3f}")
+```
+
+The weighted fit should produce a lower scale estimate and fewer effective degrees of freedom
+because it is not distorted by the outliers.
+
+## Convergence
+
+### What convergence means
+
+The P-IRLS algorithm converges when the relative change in penalized deviance between successive
+iterations falls below the tolerance threshold ($10^{-7}$ by default). Specifically, the algorithm
+stops when:
+
+$$\frac{|D^{(k)} - D^{(k-1)}|}{|D^{(k-1)}| + 0.1} < \text{tol}$$
+
+The $0.1$ in the denominator prevents numerical issues when the deviance is near zero.
+
+### Checking the fit
+
+After fitting, inspect the model to verify the fit is reasonable:
+
+```{python}
+model_check = wk.GAM("y ~ s(x)")
+model_check.fit({"x": x, "y": np.sin(x) + rng.normal(0, 0.3, n)}, method="REML")
+
+print(f"EDF total: {model_check.edf_total:.1f}")
+print(f"Scale:     {model_check.scale:.4f}")
+print(f"Deviance:  {model_check.deviance:.2f}")
+```
+
+For Gaussian models with an identity link, the P-IRLS algorithm converges in a single step. For
+non-Gaussian models, convergence typically occurs within 5--15 iterations.
+
+::: {.callout-warning}
+## What to do if the fit looks wrong
+
+1. **Check the data**: fitting problems are often caused by complete separation (in logistic
+   regression), extreme outliers, or a poor choice of family.
+2. **Reduce `k`**: an overly flexible model can be unstable. Reducing the basis dimension can help.
+3. **Try a different method**: GCV and REML can behave differently on ill-conditioned problems.
+4. **Run `model.check()`**: the basis dimension adequacy test can reveal underfitting (see
+   [Diagnostics](07-diagnostics.qmd)).
+:::
+
+## Effective degrees of freedom (EDF)
+
+The effective degrees of freedom measures the complexity of each smooth term. It is defined as:
+
+$$\text{EDF}_j = \text{tr}(\mathbf{A}_j)$$
+
+where $\mathbf{A}_j$ is the block of the hat matrix corresponding to the $j$-th smooth. The total
+model EDF is $\text{EDF}_{\text{total}} = \sum_j \text{EDF}_j + p$, where $p$ is the number of
+parametric (unpenalized) coefficients including the intercept.
+
+**Interpreting EDF**:
+
+| EDF value | Interpretation |
+|-----------|----------------|
+| $\approx 1$ | The smooth is approximately linear |
+| $\approx 2$ | The smooth is approximately quadratic |
+| $3$--$5$ | Moderate curvature |
+| $> 5$ | High complexity; consider checking the data for artifacts |
+| $\approx k - 1$ | The smooth is using nearly all available basis functions; increase `k` |
+
+```{python}
+# EDF interpretation
+model_edf = wk.GAM("y ~ s(x, k=20)")
+model_edf.fit({"x": x, "y": np.sin(x) + rng.normal(0, 0.3, n)}, method="REML")
+
+print(f"Total EDF: {model_edf.edf_total:.3f}")
+print(f"Scale estimate: {model_edf.scale:.4f}")
+```
+
+::: {.callout-note}
+EDF is not the same as the basis dimension `k`. The parameter `k` sets an upper bound on
+complexity, while the smoothing parameter $\lambda$ (selected by REML or GCV) determines how much
+of that capacity is actually used. Setting `k=20` does not mean the smooth uses 20 degrees of
+freedom --- it may use only 4 or 5 if the data support a simpler shape. See the
+[smooth terms](03-smooths.qmd) page for guidance on choosing `k`.
+:::
+
+## Scale estimation
+
+The scale parameter $\hat\phi$ measures the residual variability after accounting for the smooth
+effects. For the Gaussian family, $\hat\phi = \hat\sigma^2$ is the residual variance. It is
+estimated by:
+
+$$\hat\phi = \frac{D(y, \hat\mu)}{n - \text{EDF}_{\text{total}}}$$
+
+where $D$ is the deviance and $\text{EDF}_{\text{total}}$ is the total effective degrees of freedom.
+This is the analogue of $s^2 = \text{RSS} / (n - p)$ in ordinary least squares, replacing $p$ with
+the (fractional) EDF.
+
+For families with a known scale (Poisson, binomial), $\phi$ is fixed at 1 and is not estimated.
+
+```{python}
+# Scale estimation
+print(f"Scale (phi-hat): {model_edf.scale:.4f}")
+print(f"Deviance: {model_edf.deviance:.4f}")
+print(f"GCV score: {model_edf.gcv_score:.4f}")
+```
+
+The scale estimate directly affects confidence intervals and p-values: standard errors are
+proportional to $\sqrt{\hat\phi}$, so an overestimated scale produces wider confidence bands.
+
+## Practical guidance
+
+### When to use REML vs GCV
+
+| Situation | Recommendation |
+|-----------|----------------|
+| Default, general-purpose fitting | **REML** |
+| Reproducing a legacy analysis that used GCV | GCV |
+| Comparing models with different fixed effects via LRT | ML |
+| Very large $n$ (> 50,000) | GCV may be faster; both give similar results |
+| Sparse data or small $n$ | **REML** (GCV tends to undersmooth) |
+
+### When to increase `k`
+
+The basis dimension `k` should be large enough that the smooth can capture the true function shape.
+After fitting, run `model.check()` (see [Model diagnostics](07-diagnostics.qmd)) to test whether
+`k` is adequate:
+
+```python
+model.check()
+```
+
+If the k-index is below 1 with a significant p-value, double `k` and re-fit:
+
+```python
+model = wk.GAM("y ~ s(x, k=20)")
+model.fit(data, method="REML")
+model.check()
+```
+
+::: {.callout-tip}
+## A safe workflow for production models
+
+1. Start with the defaults: `method="REML"`, `k=10`.
+2. Fit the model and run `model.check()`.
+3. If any smooth fails the k-index test, increase `k` for that term and re-fit.
+4. Review the summary: are the EDF values plausible for the data?
+6. If you suspect irrelevant predictors, re-fit with `select=True`.
+7. Generate [predictions](06-prediction.qmd) and [diagnostic plots](07-diagnostics.qmd).
+:::
+
+## Summary of fit attributes
+
+After calling `model.fit()`, the following attributes are available:
+
+| Attribute | Type | Description |
+|-----------|------|-------------|
+| `model.smoothing_params` | `list[float]` | Estimated (or fixed) $\lambda_j$ values |
+| `model.edf_total` | `float` | Total effective degrees of freedom |
+| `model.scale` | `float` | Estimated scale parameter $\hat\phi$ |
+| `model.deviance` | `float` | Model deviance |
+| `model.gcv_score` | `float` | GCV score (computed regardless of method) |
+
+## Where to go next
+
+- **[Prediction and inference](06-prediction.qmd)**: standard errors, confidence intervals,
+  and term-level predictions from a fitted model.
+- **[Model diagnostics](07-diagnostics.qmd)**: residual plots, k-index tests, and
+  `model.check()`.
+- **[Smooth terms](03-smooths.qmd)**: choosing the right basis and basis dimension.
+- **[Response families](04-families.qmd)**: how the family and link function affect the
+  P-IRLS algorithm.

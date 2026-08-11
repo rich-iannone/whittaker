@@ -1,0 +1,520 @@
+---
+title: "Distributional regression (GAMLSS)"
+guide-section: "Advanced features"
+---
+
+```{python}
+#| echo: false
+#| output: false
+import great_docs as gd
+
+gd.enable_tbl_preview(n_head=8, n_tail=3)
+```
+
+A standard GAM models the conditional **mean** of the response as a smooth function of the
+predictors. Everything else about the distribution---the variance, skewness, zero-inflation---is
+treated as fixed. That assumption is often wrong. Reaction-time variability increases under
+cognitive load. Insurance claim amounts become more dispersed in certain regions. Survey
+proportions cluster near 0 or 1 depending on the question.
+
+**Generalized Additive Models for Location, Scale, and Shape** (GAMLSS) remove these restrictions.
+Every parameter of the response distribution---not just the mean---gets its own additive predictor
+with its own smooth terms, its own link function, and its own penalty. The result is a model that
+captures how the **entire conditional distribution** changes with the covariates.
+
+## The GAMLSS framework
+
+In a standard GAM for the Gaussian family you model one parameter:
+
+$$g(\mu) = \mathbf{X}\boldsymbol{\beta} + \sum_j f_j(x_j)$$
+
+GAMLSS generalizes this to $K$ distribution parameters $\theta_1, \ldots, \theta_K$, each with its
+own link function $g_k$ and its own additive predictor:
+
+$$g_k(\theta_k) = \mathbf{X}_k \boldsymbol{\beta}_k + \sum_j f_{kj}(x_j) \qquad k = 1, \ldots, K$$
+
+For a Gaussian location-scale model, $K = 2$: $\theta_1 = \mu$ (mean) with an identity link, and
+$\theta_2 = \sigma$ (standard deviation) with a log link (to keep it positive). For a
+zero-inflated Poisson, $K = 2$: $\theta_1 = \mu$ (rate) with a log link, and $\theta_2 = \pi$
+(zero-inflation probability) with a logit link.
+
+::: {.callout-note}
+## Formula conventions
+
+In Whittaker's GAMLSS interface, formulas are passed as a dictionary keyed by parameter name. The
+response variable must appear on the left-hand side of every formula, and all formulas must share the
+same response variable:
+
+```python
+formulas = {
+    "mu":    "y ~ s(x)",       # mean parameter
+    "sigma": "y ~ s(x)",       # scale parameter
+}
+```
+:::
+
+## Available GAMLSS families
+
+Whittaker provides five GAMLSS families. Each defines a response distribution and the set of
+parameters that can be modeled as functions of covariates.
+
+| Family | Parameters | Default links | Typical use |
+|---|---|---|---|
+| `GaussianLS()` | $\mu$ (mean), $\sigma$ (std. dev.) | identity, log | Heteroscedastic continuous data |
+| `GammaLS()` | $\mu$ (mean), $\sigma$ (CV) | log, log | Positive data with varying dispersion |
+| `BetaLS()` | $\mu$ (mean), $\phi$ (precision) | logit, log | Proportions on $(0,1)$ |
+| `ZeroInflatedPoisson()` | $\mu$ (rate), $\pi$ (zero prob.) | log, logit | Counts with excess zeros |
+| `ZeroInflatedNegativeBinomial()` | $\mu$ (rate), $\sigma$ (dispersion), $\pi$ (zero prob.) | log, log, logit | Overdispersed counts with excess zeros |
+
+## Gaussian location-scale: heteroscedastic data
+
+The simplest GAMLSS application is data where the **spread** changes with a predictor. A standard
+Gaussian GAM assumes constant variance, so its confidence intervals are too narrow where the data
+are noisy and too wide where they are tight. Modeling $\sigma$ as a smooth function of $x$ fixes
+this.
+
+### Simulating heteroscedastic data
+
+```{python}
+import numpy as np
+import whittaker as wk
+import altair as alt
+
+rng = np.random.default_rng(42)
+n = 400
+
+x = np.linspace(0, 6, n)
+
+# Mean: a smooth curve
+mu_true = 2 * np.sin(x)
+
+# Standard deviation: increases with x
+sigma_true = 0.3 + 0.4 * x
+
+y = mu_true + rng.normal(0, sigma_true)
+
+data = {"x": x, "y": y}
+```
+
+The noise level is small near $x = 0$ and large near $x = 6$. A standard GAM would estimate the
+mean correctly but would give uniform-width confidence bands---too cautious on the left, not
+cautious enough on the right.
+
+### Fitting the model
+
+```{python}
+model_gls = wk.GAMLSS(
+    formulas={"mu": "y ~ s(x)", "sigma": "y ~ s(x)"},
+    family=wk.GaussianLS(),
+)
+model_gls.fit(data)
+
+print(model_gls.summary())
+```
+
+Both $\mu$ and $\sigma$ have their own smooth terms with separate EDFs and smoothing parameters.
+The summary reports each parameter's additive predictor independently.
+
+### Prediction and visualization
+
+```{python}
+x_grid = np.linspace(0, 6, 300)
+preds_gls = model_gls.predict({"x": x_grid})
+
+# Extract predicted mu and sigma
+mu_hat = preds_gls.values["mu"]
+sigma_hat = preds_gls.values["sigma"]
+
+# Build 95% prediction intervals using the predicted sigma
+z = 1.96
+lower_pi = mu_hat - z * sigma_hat
+upper_pi = mu_hat + z * sigma_hat
+
+# Observed data
+obs_data = [{"x": float(x[i]), "y": float(y[i])} for i in range(n)]
+
+# Fitted curve and prediction interval
+fit_data = [
+    {"x": float(x_grid[i]), "mu": float(mu_hat[i]),
+     "lower": float(lower_pi[i]), "upper": float(upper_pi[i])}
+    for i in range(len(x_grid))
+]
+
+# True mu for comparison
+true_data = [
+    {"x": float(x_grid[i]), "mu_true": float(2 * np.sin(x_grid[i]))}
+    for i in range(len(x_grid))
+]
+
+points = alt.Chart({"values": obs_data}).mark_circle(
+    size=12, opacity=0.25, color="steelblue"
+).encode(
+    x=alt.X("x:Q", title="x"),
+    y=alt.Y("y:Q", title="y"),
+)
+
+band = alt.Chart({"values": fit_data}).mark_area(
+    opacity=0.2, color="firebrick"
+).encode(x="x:Q", y="lower:Q", y2="upper:Q")
+
+line = alt.Chart({"values": fit_data}).mark_line(
+    color="firebrick", strokeWidth=2
+).encode(x="x:Q", y="mu:Q")
+
+true_line = alt.Chart({"values": true_data}).mark_line(
+    color="gray", strokeDash=[4, 4], strokeWidth=1.5
+).encode(x="x:Q", y="mu_true:Q")
+
+(band + points + line + true_line).properties(
+    width=600, height=350,
+    title="GaussianLS: prediction intervals widen as variance increases"
+)
+```
+
+The prediction band fans out to the right, reflecting the increasing noise level. A standard GAM
+would produce a band of constant width---too narrow on the right where the data truly are noisy, and
+too wide on the left where the data are precise.
+
+::: {.callout-tip}
+## When is a location-scale model worth the extra complexity?
+
+Run a standard GAM first and inspect the residuals. If a plot of squared residuals against $x$
+shows a clear trend, the variance is not constant, and a `GaussianLS` model will give you better
+prediction intervals and more honest uncertainty estimates.
+:::
+
+## Gamma location-scale: positive data with varying shape
+
+For strictly positive, right-skewed data the `GammaLS()` family models both the mean and the
+coefficient of variation as smooth functions of covariates. This is useful for financial data,
+waiting times, and environmental measurements where both the level and the relative spread change.
+
+```{python}
+rng = np.random.default_rng(7)
+n = 350
+
+x = np.linspace(0.5, 5, n)
+
+# True mean (always positive)
+mu_true = np.exp(1.0 + 0.5 * np.sin(2 * x))
+
+# True CV increases with x
+cv_true = 0.15 + 0.1 * x
+shape_true = 1.0 / cv_true**2
+scale_true = mu_true / shape_true
+
+y_gamma = rng.gamma(shape_true, scale=scale_true)
+
+data_gamma = {"x": x, "y": y_gamma}
+
+model_gamma_ls = wk.GAMLSS(
+    formulas={"mu": "y ~ s(x)", "sigma": "y ~ s(x)"},
+    family=wk.GammaLS(),
+)
+model_gamma_ls.fit(data_gamma)
+
+print(model_gamma_ls.summary())
+```
+
+The log link on both $\mu$ and $\sigma$ ensures positivity. The fitted `sigma` smooth captures how
+the coefficient of variation increases along the transect.
+
+## Beta location-scale: proportion data
+
+When modeling proportions on the open interval $(0, 1)$, the `BetaLS()` family lets you model
+both the mean proportion and the **precision** (or equivalently, the variance around that mean) as
+functions of covariates. This is common in ecological data (percent cover), educational data
+(test score fractions), and manufacturing (yield proportions).
+
+```{python}
+rng = np.random.default_rng(12)
+n = 300
+
+x = np.linspace(0, 4, n)
+
+# True mean proportion (logit scale -> (0, 1))
+mu_true = 1 / (1 + np.exp(-(0.5 + 0.8 * np.sin(1.5 * x))))
+
+# Precision varies: high precision in the middle, low at extremes
+phi_true = np.exp(2.5 + 1.0 * np.cos(x))
+
+alpha = mu_true * phi_true
+beta_param = (1 - mu_true) * phi_true
+y_beta = rng.beta(alpha, beta_param)
+
+data_beta = {"x": x, "y": y_beta}
+
+model_beta_ls = wk.GAMLSS(
+    formulas={"mu": "y ~ s(x)", "phi": "y ~ s(x)"},
+    family=wk.BetaLS(),
+)
+model_beta_ls.fit(data_beta)
+
+print(model_beta_ls.summary())
+```
+
+The logit link on $\mu$ constrains predictions to $(0, 1)$; the log link on $\sigma$ (the
+precision parameter) keeps it positive. Modeling precision as a function of $x$ avoids the common
+problem of over- or under-dispersed residuals at different covariate values.
+
+::: {.callout-note}
+## Beta boundary values
+
+Like the standard `Beta()` family, `BetaLS()` requires $y \in (0, 1)$---not 0 or 1 exactly. If
+your data contain boundary values, apply a small nudge (e.g., $y' = (y(n-1) + 0.5) / n$) before
+fitting.
+:::
+
+## Zero-inflated Poisson: counts with excess zeros
+
+Many count datasets contain more zeros than a Poisson distribution can explain. Species that are
+absent from most survey sites, customers who never purchase, medical events that do not occur for
+most patients---all produce **zero-inflated** data.
+
+The `ZeroInflatedPoisson()` family models two processes simultaneously:
+
+1. A **structural zero process**: with probability $\pi(x)$, the observation is always zero
+   (the species is absent, the customer is inactive).
+2. A **Poisson count process**: with probability $1 - \pi(x)$, the observation follows a
+   Poisson distribution with rate $\mu(x)$.
+
+Both $\mu$ and $\pi$ can be smooth functions of different (or the same) covariates.
+
+### Simulating zero-inflated count data
+
+```{python}
+rng = np.random.default_rng(99)
+n = 500
+
+x = np.linspace(0, 5, n)
+
+# True Poisson rate: varies smoothly
+mu_true = np.exp(0.5 + 0.8 * np.sin(1.5 * x))
+
+# True zero-inflation probability: higher at both ends
+logit_pi_true = 1.0 - 1.5 * np.sin(np.pi * x / 5)
+pi_true = 1 / (1 + np.exp(-logit_pi_true))
+
+# Generate data
+is_structural_zero = rng.binomial(1, pi_true).astype(bool)
+y_counts = np.where(
+    is_structural_zero,
+    0.0,
+    rng.poisson(mu_true).astype(float),
+)
+
+data_zip = {"x": x, "y": y_counts}
+
+print(f"Proportion of zeros: {(y_counts == 0).mean():.1%}")
+print(f"Proportion of structural zeros: {is_structural_zero.mean():.1%}")
+```
+
+### Fitting the ZIP model
+
+```{python}
+model_zip = wk.GAMLSS(
+    formulas={"mu": "y ~ s(x)", "pi": "y ~ s(x)"},
+    family=wk.ZeroInflatedPoisson(),
+)
+model_zip.fit(data_zip)
+
+print(model_zip.summary())
+```
+
+The model estimates separate smooth functions for the Poisson rate ($\mu$) and the zero-inflation
+probability ($\pi$). Each has its own EDF and smoothing parameter.
+
+### Visualizing the zero-inflated fit
+
+```{python}
+x_grid = np.linspace(0, 5, 300)
+preds_zip = model_zip.predict({"x": x_grid})
+
+mu_hat_zip = preds_zip.values["mu"]
+pi_hat_zip = preds_zip.values["pi"]
+
+# Build data for the two-panel chart
+rate_data = [
+    {"x": float(x_grid[i]), "value": float(mu_hat_zip[i]), "parameter": "Rate (mu)"}
+    for i in range(len(x_grid))
+] + [
+    {"x": float(x_grid[i]),
+     "value": float(np.exp(0.5 + 0.8 * np.sin(1.5 * x_grid[i]))),
+     "parameter": "Rate (mu), true"}
+    for i in range(len(x_grid))
+]
+
+pi_data = [
+    {"x": float(x_grid[i]), "value": float(pi_hat_zip[i]),
+     "parameter": "Zero-inflation (pi)"}
+    for i in range(len(x_grid))
+] + [
+    {"x": float(x_grid[i]),
+     "value": float(1 / (1 + np.exp(-(1.0 - 1.5 * np.sin(np.pi * x_grid[i] / 5))))),
+     "parameter": "Zero-inflation (pi), true"}
+    for i in range(len(x_grid))
+]
+
+# Observed data (show counts as a strip)
+obs_data = [{"x": float(x[i]), "y": float(y_counts[i])} for i in range(n)]
+
+# Top panel: observed data with fitted rate
+points_zip = alt.Chart({"values": obs_data}).mark_circle(
+    size=10, opacity=0.2, color="steelblue"
+).encode(
+    x=alt.X("x:Q", title="x"),
+    y=alt.Y("y:Q", title="Count"),
+)
+
+rate_fitted = alt.Chart(
+    {"values": [d for d in rate_data if "true" not in d["parameter"]]}
+).mark_line(color="darkorange", strokeWidth=2).encode(
+    x="x:Q", y=alt.Y("value:Q", title="Count"),
+)
+
+rate_true = alt.Chart(
+    {"values": [d for d in rate_data if "true" in d["parameter"]]}
+).mark_line(color="gray", strokeDash=[4, 4], strokeWidth=1.5).encode(
+    x="x:Q", y="value:Q",
+)
+
+top_panel = (points_zip + rate_fitted + rate_true).properties(
+    width=600, height=220, title="Fitted rate (mu) with observed counts"
+)
+
+# Bottom panel: zero-inflation probability
+pi_fitted = alt.Chart(
+    {"values": [d for d in pi_data if "true" not in d["parameter"]]}
+).mark_line(color="crimson", strokeWidth=2).encode(
+    x=alt.X("x:Q", title="x"),
+    y=alt.Y("value:Q", title="P(structural zero)"),
+)
+
+pi_true_line = alt.Chart(
+    {"values": [d for d in pi_data if "true" in d["parameter"]]}
+).mark_line(color="gray", strokeDash=[4, 4], strokeWidth=1.5).encode(
+    x="x:Q", y="value:Q",
+)
+
+bottom_panel = (pi_fitted + pi_true_line).properties(
+    width=600, height=200, title="Fitted zero-inflation probability (pi)"
+)
+
+alt.vconcat(top_panel, bottom_panel).resolve_scale(x="shared")
+```
+
+The top panel shows the fitted Poisson rate overlaid on the observed counts. The bottom panel shows
+the estimated zero-inflation probability $\hat\pi(x)$ (crimson) against the true generating
+function (gray dashed). The model successfully separates the two sources of zeros: those from the
+Poisson process (rate-driven) and those from structural absence (zero-inflation-driven).
+
+## Zero-inflated Negative Binomial
+
+When zero-inflated count data are also **overdispersed** (variance exceeds the mean within the
+count component), the `ZeroInflatedNegativeBinomial()` family adds a dispersion parameter $\sigma$
+alongside the rate $\mu$ and the zero-inflation probability $\pi$. This is the most flexible
+count model in Whittaker.
+
+```{python}
+model_zinb = wk.GAMLSS(
+    formulas={
+        "mu":    "y ~ s(x)",
+        "sigma": "y ~ s(x)",
+        "pi":    "y ~ s(x)",
+    },
+    family=wk.ZeroInflatedNegativeBinomial(),
+)
+model_zinb.fit(data_zip)
+
+print(model_zinb.summary())
+```
+
+::: {.callout-warning}
+## Model complexity and identifiability
+
+The ZINB model has three smooth functions to estimate, which requires substantially more data than
+a ZIP or standard Poisson. With small samples, the dispersion and zero-inflation parameters can be
+poorly identified. Start with a simpler model (`ZeroInflatedPoisson` or `NegativeBinomial`) and
+add complexity only if residual diagnostics indicate it is needed.
+:::
+
+## How fitting works
+
+GAMLSS models are fitted by an **alternating (outer) iteration** that cycles through the
+distribution parameters:
+
+1. **Initialize** all parameters to reasonable starting values (e.g., the response mean for $\mu$,
+   the residual standard deviation for $\sigma$).
+2. **Cycle**: for each parameter $\theta_k$ in turn, hold the other parameters fixed and update
+   $\theta_k$ by running one step of penalized iteratively reweighted least squares (P-IRLS) on its
+   working model. The working response and weights depend on the current values of all other
+   parameters.
+3. **Check convergence**: if the overall penalized deviance has changed by less than a tolerance
+   (default $10^{-7}$), stop. Otherwise, return to step 2.
+
+This is a **backfitting** algorithm over the distribution parameters. Within each P-IRLS step, the
+smooth terms for that parameter are estimated exactly as in a standard GAM---the REML (or GCV)
+criterion selects the smoothing parameters, and the basis/penalty machinery is identical.
+
+::: {.callout-note}
+## Convergence considerations
+
+Because the outer iteration is a coordinate-descent scheme, convergence is guaranteed under mild
+regularity conditions, but the number of outer cycles grows with the complexity of the model. Two
+practical tips:
+
+- **Start simple.** Fit the `mu` model first as a standard GAM, inspect the residuals, and add
+  a `sigma` (or `pi`) model only if the diagnostics suggest it.
+- **Watch the iteration count.** If `.fit()` reports that it has not converged, consider
+  simplifying the formulas (e.g., reducing `k` or removing terms) before increasing the maximum
+  number of outer iterations.
+:::
+
+## When to use GAMLSS vs. a standard GAM
+
+A standard GAM (with the appropriate family) is sufficient when the **shape** of the response
+distribution does not change with the covariates---only the mean shifts. GAMLSS adds value in
+three situations:
+
+1. **Heteroscedasticity.** The variance (or coefficient of variation) changes systematically with
+   a predictor. Classic example: measurement precision that degrades with distance, concentration,
+   or time. Use `GaussianLS()` or `GammaLS()`.
+
+2. **Changing shape.** The skewness or kurtosis of the response varies. For proportions near
+   boundaries, the Beta distribution's shape parameters change the degree of asymmetry. Use
+   `BetaLS()`.
+
+3. **Structural zeros.** A fraction of the population can never produce a positive count, and that
+   fraction varies with covariates. Use `ZeroInflatedPoisson()` or
+   `ZeroInflatedNegativeBinomial()`.
+
+If none of these apply---the data have roughly constant spread and no excess zeros---a standard
+GAM is simpler, faster, and easier to interpret. The table below summarizes the decision:
+
+| Situation | Recommended model |
+|---|---|
+| Constant variance, no excess zeros | Standard GAM with `Gaussian()`, `Poisson()`, etc. |
+| Variance changes with covariates | `GAMLSS` with `GaussianLS()` or `GammaLS()` |
+| Proportion data with varying precision | `GAMLSS` with `BetaLS()` |
+| Count data with excess zeros | `GAMLSS` with `ZeroInflatedPoisson()` |
+| Overdispersed counts with excess zeros | `GAMLSS` with `ZeroInflatedNegativeBinomial()` |
+
+::: {.callout-important}
+## More parameters means more data
+
+Each additional distributional parameter requires its own smooth to be estimated. A two-parameter
+GAMLSS needs roughly twice the effective sample size of a one-parameter GAM to achieve comparable
+precision. A three-parameter model (ZINB) needs even more. Always check that your sample size is
+adequate before adding distributional complexity.
+:::
+
+## Where to go next
+
+- **[Response families](04-families.qmd)**: the standard (single-parameter) families that underlie
+  the GAMLSS extensions.
+- **[Smooth terms](03-smooths.qmd)**: basis types, tensor products, and choosing `k` for the
+  smooth terms inside each distributional parameter.
+- **[Model fitting](05-fitting.qmd)**: details on REML, P-IRLS, and convergence diagnostics that
+  apply to the inner loop of GAMLSS fitting.
+- **[Diagnostics](07-diagnostics.qmd)**: residual checks and model validation, including
+  randomized quantile residuals for GAMLSS models.

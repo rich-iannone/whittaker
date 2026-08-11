@@ -1,0 +1,284 @@
+---
+title: Cross-validation
+guide-section: "Model selection"
+---
+
+```{python}
+#| echo: false
+#| output: false
+import great_docs as gd
+
+gd.enable_tbl_preview(n_head=8, n_tail=3)
+```
+
+Smoothing parameter selection (GCV, REML) optimises within a single fit, but cross-validation
+answers a different question: **how well does the model generalise to unseen data?** Use it to
+compare formulas, families, or basis configurations on the same dataset.
+
+Whittaker provides `cross_validate()`, which performs $K$-fold cross-validation on a GAM
+specification and returns a `CVResult` with the mean score, per-fold scores, and a standard error.
+
+## Basic usage
+
+```{python}
+import numpy as np
+import whittaker as wk
+
+# Generate data with a known signal
+rng = np.random.default_rng(42)
+n = 400
+x = np.linspace(0, 2 * np.pi, n)
+y = np.sin(x) + 0.5 * np.sin(3 * x) + rng.normal(0, 0.3, n)
+
+data = {"x": x, "y": y}
+
+# 10-fold cross-validation (the default)
+result = wk.cross_validate("y ~ s(x)", data, method="REML")
+
+print(f"CV score (deviance): {result.cv_score:.4f}")
+print(f"SE of CV score:      {result.cv_se:.4f}")
+print(f"Number of folds:     {result.n_folds}")
+```
+
+The `cv_score` is the mean out-of-sample loss across folds. Lower is better. The `cv_se` gives the
+standard error of this mean, which is useful for comparing models: two models whose scores differ by
+less than one standard error are essentially equivalent.
+
+## Comparing models
+
+Cross-validation is most useful for comparing competing specifications. For example, how many basis
+functions does the smooth need?
+
+```{python}
+# Compare different basis dimensions
+results = {}
+for k in [5, 10, 15, 20, 30]:
+    cv = wk.cross_validate(f"y ~ s(x, k={k})", data, method="REML", seed=42)
+    results[k] = cv
+
+for k, cv in results.items():
+    print(f"k={k:2d}: CV = {cv.cv_score:.4f} (SE = {cv.cv_se:.4f})")
+```
+
+```{python}
+import altair as alt
+
+# Plot CV scores with error bars
+plot_data = [
+    {"k": k, "cv_score": float(cv.cv_score),
+     "lower": float(cv.cv_score - cv.cv_se),
+     "upper": float(cv.cv_score + cv.cv_se)}
+    for k, cv in results.items()
+]
+
+points = alt.Chart({"values": plot_data}).mark_point(size=60, color="steelblue").encode(
+    x=alt.X("k:Q", title="Basis dimension k", scale=alt.Scale(domain=[3, 32])),
+    y=alt.Y("cv_score:Q", title="CV score (deviance)"),
+)
+
+errorbars = alt.Chart({"values": plot_data}).mark_rule(color="steelblue").encode(
+    x="k:Q", y="lower:Q", y2="upper:Q",
+)
+
+(points + errorbars).properties(
+    width=400, height=280,
+    title="Cross-validation score by basis dimension"
+)
+```
+
+The CV score drops as `k` increases from 5 to around 15, then levels off. Since REML penalises away
+unnecessary complexity, larger `k` values do not overfit, but the CV score confirms that 15 basis
+functions are sufficient for this signal.
+
+## Comparing families
+
+Cross-validation also helps choose between response distributions. Here we simulate count data and
+compare Poisson and Gaussian fits:
+
+```{python}
+# Count data
+rng = np.random.default_rng(42)
+n = 300
+x = np.linspace(0, 2, n)
+mu = np.exp(0.5 + 0.8 * np.sin(2 * np.pi * x))
+y_counts = rng.poisson(mu).astype(float)
+count_data = {"x": x, "y": y_counts}
+
+# Compare families
+cv_gauss = wk.cross_validate("y ~ s(x)", count_data, method="REML", seed=42)
+cv_pois = wk.cross_validate(
+    "y ~ s(x)", count_data, family=wk.Poisson(), method="REML", seed=42
+)
+
+print(f"Gaussian CV: {cv_gauss.cv_score:.4f} (SE = {cv_gauss.cv_se:.4f})")
+print(f"Poisson  CV: {cv_pois.cv_score:.4f} (SE = {cv_pois.cv_se:.4f})")
+```
+
+::: {.callout-note}
+## Comparing scores across families
+
+The `"deviance"` metric uses each family's own deviance, so scores from different families are not
+directly comparable on the same scale. Switch to `metric="mse"` for an apples-to-apples comparison
+on the response scale:
+
+```{python}
+cv_gauss_mse = wk.cross_validate(
+    "y ~ s(x)", count_data, method="REML", metric="mse", seed=42
+)
+cv_pois_mse = wk.cross_validate(
+    "y ~ s(x)", count_data, family=wk.Poisson(), method="REML", metric="mse", seed=42
+)
+
+print(f"Gaussian MSE: {cv_gauss_mse.cv_score:.4f}")
+print(f"Poisson  MSE: {cv_pois_mse.cv_score:.4f}")
+```
+:::
+
+## Per-fold scores
+
+The `cv_scores` array gives the loss for each fold, which is useful for checking whether a single
+fold is driving the overall score:
+
+```{python}
+result = wk.cross_validate("y ~ s(x)", data, method="REML", seed=42)
+
+print(f"Per-fold scores: {result.cv_scores.round(4)}")
+print(f"Mean: {result.cv_scores.mean():.4f}")
+print(f"Std:  {result.cv_scores.std():.4f}")
+```
+
+```{python}
+# Plot per-fold scores
+fold_data = [
+    {"fold": i + 1, "score": float(s)}
+    for i, s in enumerate(result.cv_scores)
+]
+
+bars = alt.Chart({"values": fold_data}).mark_bar(color="steelblue", opacity=0.7).encode(
+    x=alt.X("fold:O", title="Fold"),
+    y=alt.Y("score:Q", title="Fold score (deviance)"),
+)
+
+mean_line = alt.Chart({"values": [{"y": float(result.cv_score)}]}).mark_rule(
+    color="firebrick", strokeDash=[4, 4], strokeWidth=1.5
+).encode(y="y:Q")
+
+(bars + mean_line).properties(
+    width=400, height=250,
+    title="Per-fold CV scores (red line = mean)"
+)
+```
+
+## Choosing the number of folds
+
+```{python}
+# Compare 5-fold vs 10-fold vs leave-one-out-ish (n_folds=n)
+for k in [5, 10, 20]:
+    cv = wk.cross_validate("y ~ s(x)", data, n_folds=k, method="REML", seed=42)
+    print(f"{k:2d}-fold: CV = {cv.cv_score:.4f} (SE = {cv.cv_se:.4f})")
+```
+
+::: {.callout-tip}
+## How many folds?
+
+- **5-fold**: faster, slightly higher bias, lower variance. Good for large datasets.
+- **10-fold** (default): a good balance for most datasets.
+- **20-fold or more**: lower bias but higher variance and slower. Useful for small datasets where
+  you want to use as much training data as possible per fold.
+:::
+
+## Smooth selection via cross-validation
+
+The `select=True` option enables double-penalty smooth selection, which can shrink entire smooth
+terms to zero. Cross-validation can verify whether this helps:
+
+```{python}
+# Restore the original data from the first example
+rng = np.random.default_rng(42)
+n = 400
+x = np.linspace(0, 2 * np.pi, n)
+y = np.sin(x) + 0.5 * np.sin(3 * x) + rng.normal(0, 0.3, n)
+data = {"x": x, "y": y}
+
+# Add a noise variable that should be selected out
+noise = rng.uniform(0, 1, n)
+data_noise = {"x": x, "noise": noise, "y": y}
+
+cv_no_select = wk.cross_validate(
+    "y ~ s(x) + s(noise)", data_noise, method="REML", seed=42
+)
+cv_select = wk.cross_validate(
+    "y ~ s(x) + s(noise)", data_noise, method="REML", select=True, seed=42
+)
+
+print(f"Without selection: {cv_no_select.cv_score:.4f}")
+print(f"With selection:    {cv_select.cv_score:.4f}")
+```
+
+## Reproducibility
+
+Pass `seed` to get reproducible fold assignments:
+
+```{python}
+cv1 = wk.cross_validate("y ~ s(x)", data, method="REML", seed=123)
+cv2 = wk.cross_validate("y ~ s(x)", data, method="REML", seed=123)
+
+print(f"Same seed, same result: {cv1.cv_score == cv2.cv_score}")
+```
+
+Without a seed, the fold assignment is randomised on each call.
+
+## The CVResult object
+
+`CVResult` is a simple dataclass with four fields:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `cv_score` | `float` | Mean out-of-sample loss across folds |
+| `cv_scores` | `NDArray` | Per-fold loss values |
+| `cv_se` | `float` | Standard error of the mean score |
+| `n_folds` | `int` | Number of folds |
+
+## Practical workflow
+
+A typical model-selection workflow combines cross-validation with REML fitting:
+
+1. **Candidate models**: vary the formula, basis dimension, or family
+2. **Cross-validate each**: use the same `seed` so folds are identical
+3. **Compare scores**: pick the model with the lowest CV score, or the simplest model within one SE
+   of the best
+4. **Final fit**: refit the chosen model on all the data
+
+```{python}
+# Step 1-3: compare candidates
+candidates = {
+    "s(x, k=5)": "y ~ s(x, k=5)",
+    "s(x, k=10)": "y ~ s(x, k=10)",
+    "s(x, k=20)": "y ~ s(x, k=20)",
+    "s(x) + s(noise)": "y ~ s(x) + s(noise)",
+}
+
+best_name, best_score = None, float("inf")
+for name, formula in candidates.items():
+    cv = wk.cross_validate(formula, data_noise, method="REML", seed=42)
+    flag = ""
+    if cv.cv_score < best_score:
+        best_score = cv.cv_score
+        best_name = name
+        flag = " <-- best"
+    print(f"  {name:20s}: {cv.cv_score:.4f} (SE {cv.cv_se:.4f}){flag}")
+
+# Step 4: refit the winner on all data
+print(f"\nBest model: {best_name}")
+final = wk.GAM(candidates[best_name])
+final.fit(data_noise, method="REML")
+print(f"Final EDF: {final.edf_total:.1f}")
+```
+
+::: {.callout-tip}
+## The one-SE rule
+
+A common heuristic: instead of picking the model with the lowest CV score, pick the simplest model
+whose score is within one standard error of the best. This guards against overfitting to the
+validation folds and tends to produce more parsimonious models.
+:::

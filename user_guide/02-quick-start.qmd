@@ -3,85 +3,224 @@ title: Quick start
 guide-section: "Getting started"
 ---
 
-::: {.callout-note}
-The API is under active development. The snippets below show the intended interface.
-:::
+```{python}
+#| echo: false
+#| output: false
+import great_docs as gd
 
-This is a short tour from raw data to a fitted GAM, a model summary, and a plot. Each step is only a
-few lines. The rest of the guide covers every piece in depth.
-
-## Load the data
-
-Whittaker ships a small collection of classic datasets for examples. The motorcycle acceleration
-dataset (`mcycle`) records the head acceleration of a crash-test dummy over time following impact.
-
-```python
-import whittaker as wk
-import polars as pl
-
-mcycle = wk.load_dataset("mcycle", backend="polars")
-mcycle.head()
+gd.enable_tbl_preview(n_head=8, n_tail=3)
 ```
 
-The two columns are `times` (milliseconds post-impact) and `accel` (acceleration in g).
+This is a short tour from raw data to a fitted GAM, a model summary, and predictions. Each step is
+only a few lines. The rest of the guide covers every piece in depth.
+
+## Create some data
+
+We start with a simple nonlinear relationship: $y = \sin(x) + \varepsilon$, where $\varepsilon$ is
+Gaussian noise. This is a classic test case for smooth function estimation.
+
+```{python}
+import numpy as np
+import whittaker as wk
+
+# Generate 200 observations from a noisy sine curve
+rng = np.random.default_rng(42)
+n = 200
+x = np.linspace(0, 2 * np.pi, n)
+y = np.sin(x) + rng.normal(0, 0.3, n)
+
+# Whittaker accepts data as a dictionary of arrays
+data = {"x": x, "y": y}
+```
+
+The data is a dictionary mapping column names to 1-D NumPy arrays. Every column referenced in the
+formula must be present.
 
 ## Specify and fit the model
 
 A GAM formula looks like an R formula. Wrapping a predictor in `s()` tells Whittaker to model it as
-a smooth function using a thin plate regression spline (the default basis).
+a smooth function. The default basis is a thin plate regression spline (TPRS) with 10 basis
+functions.
 
-```python
-model = wk.GAM("accel ~ s(times)")
-model.fit(mcycle)
+```{python}
+# Create a GAM with a smooth term for x
+model = wk.GAM("y ~ s(x)")
+
+# Fit the model; smoothing parameters are selected automatically via REML
+model.fit(data, method="REML")
 ```
 
-Whittaker automatically selects the smoothing parameter $\lambda$ by REML. No tuning is required.
+Whittaker automatically selects the smoothing parameter $\lambda$ by REML (restricted maximum
+likelihood). No manual tuning is required. The `fit()` method returns `self`, so you can chain
+calls: `wk.GAM("y ~ s(x)").fit(data)`.
 
 ## Inspect the summary
 
-```python
-model.summary()
+```{python}
+# Print a summary of the fitted model
+print(model.summary())
 ```
 
 The summary reports:
 
-- **Parametric terms**: the intercept and any linear terms, with standard errors and p-values.
-- **Smooth terms**: effective degrees of freedom (EDF), reference degrees of freedom, and an
-approximate p-value for each smooth.
-- **Model fit statistics**: deviance explained, adjusted R², GCV score, scale estimate.
-
-## Check model adequacy
-
-```python
-model.check()
-```
-
-The `check()` method runs a basis dimension adequacy test (the k-index), prints convergence
-information, and produces four diagnostic plots: QQ plot of residuals, residuals vs. fitted values,
-a histogram of residuals, and response vs. fitted values.
-
-## Plot the smooth
-
-```python
-model.plot()
-```
-
-The `plot()` method produces a partial-effect plot for every smooth term: the estimated function
-with a 95% pointwise confidence band and a rug of the observed covariate values.
+- **Smooth terms**: the effective degrees of freedom (EDF) for each smooth. An EDF near 1 means the
+  smooth is approximately linear; higher values indicate more complex curvature.
+- **Model fit statistics**: deviance explained, GCV score, and scale estimate $\hat\phi$.
 
 ## Predict on new data
 
-```python
-new_times = pl.DataFrame({"times": [10.0, 20.0, 30.0, 40.0]})
-preds = model.predict(new_times, se=True)
-preds
+```{python}
+# Create a fine grid for smooth predictions
+x_new = np.linspace(0, 2 * np.pi, 100)
+new_data = {"x": x_new}
+
+# Predict on the response scale
+preds = model.predict(new_data)
+
+# The result contains fitted values
+print(f"Prediction shape: {preds.values.shape}")
+print(f"First 5 predictions: {preds.values[:5].round(3)}")
 ```
 
-Set `se=True` to also return standard errors on the linear predictor scale, or `type="terms"` to get
-the contribution of each smooth term separately.
+The `predict()` method returns a `PredictionResult` with a `.values` attribute containing
+predictions on the response scale ($\hat\mu = g^{-1}(\hat\eta)$; for Gaussian with identity link,
+this is simply $X\hat\beta$).
+
+## Predictions with standard errors
+
+```{python}
+# Predict with standard errors
+preds_se = model.predict(new_data, se=True)
+
+# Standard errors are on the linear predictor scale
+print(f"SE shape: {preds_se.se.shape}")
+print(f"First 5 SEs: {preds_se.se[:5].round(4)}")
+```
+
+Setting `se=True` additionally computes standard errors from the Bayesian posterior covariance
+matrix $V_\beta = \hat\phi (X^\top W X + \sum_j \lambda_j S_j)^{-1}$, where $S_j$ are the penalty
+matrices and $\lambda_j$ the estimated smoothing parameters.
+
+## Visualize the fit
+
+```{python}
+import altair as alt
+
+# Build a DataFrame for plotting
+x_plot = np.linspace(0, 2 * np.pi, 200)
+preds_plot = model.predict({"x": x_plot}, se=True)
+
+# Compute 95% confidence band on the response scale
+z = 1.96
+lower = preds_plot.values - z * preds_plot.se
+upper = preds_plot.values + z * preds_plot.se
+
+# Observed data points
+points = alt.Chart({"values": [{"x": float(x[i]), "y": float(y[i])} for i in range(n)]}).mark_circle(
+    size=15, opacity=0.3, color="steelblue"
+).encode(
+    x=alt.X("x:Q", title="x"),
+    y=alt.Y("y:Q", title="y"),
+)
+
+# Fitted curve
+fit_data = [
+    {"x": float(x_plot[i]), "fit": float(preds_plot.values[i]),
+     "lower": float(lower[i]), "upper": float(upper[i])}
+    for i in range(len(x_plot))
+]
+line = alt.Chart({"values": fit_data}).mark_line(color="firebrick", strokeWidth=2).encode(
+    x="x:Q", y="fit:Q"
+)
+
+# Confidence band
+band = alt.Chart({"values": fit_data}).mark_area(opacity=0.2, color="firebrick").encode(
+    x="x:Q", y="lower:Q", y2="upper:Q"
+)
+
+# True function
+true_data = [{"x": float(x_plot[i]), "true": float(np.sin(x_plot[i]))} for i in range(len(x_plot))]
+true_line = alt.Chart({"values": true_data}).mark_line(
+    color="gray", strokeDash=[4, 4], strokeWidth=1.5
+).encode(x="x:Q", y="true:Q")
+
+# Combine all layers
+(band + points + line + true_line).properties(
+    width=500, height=300,
+    title="GAM fit: y ~ s(x)"
+)
+```
+
+The red curve is the estimated smooth $\hat{f}(x)$, the shaded band is the 95% pointwise confidence
+interval, the gray dashed line is the true $\sin(x)$, and the blue points are the observed data. The
+GAM recovers the true shape closely, with the confidence band covering the truth everywhere.
+
+## A model with multiple smooths
+
+GAMs shine when you have multiple predictors, each with a potentially nonlinear effect. Here we
+generate data with two smooth effects and a linear term:
+
+```{python}
+# Generate data with two smooth effects
+rng = np.random.default_rng(42)
+n = 300
+x1 = np.linspace(0, 2 * np.pi, n)
+x2 = rng.uniform(0, 1, n)
+x3 = rng.normal(0, 1, n)
+
+# True relationship: sin(x1) + x2^2 + 0.5*x3 + noise
+y = np.sin(x1) + x2**2 + 0.5 * x3 + rng.normal(0, 0.3, n)
+
+data_multi = {"x1": x1, "x2": x2, "x3": x3, "y": y}
+```
+
+```{python}
+# Fit a GAM with two smooth terms and one linear term
+model_multi = wk.GAM("y ~ s(x1) + s(x2) + x3")
+model_multi.fit(data_multi, method="REML")
+
+# Print the summary
+print(model_multi.summary())
+```
+
+The formula `"y ~ s(x1) + s(x2) + x3"` specifies:
+
+- `s(x1)`: a smooth function of `x1` (captures the sine wave)
+- `s(x2)`: a smooth function of `x2` (captures the quadratic)
+- `x3`: a plain linear term (enters the model as $\beta \cdot x_3$)
+
+The summary shows that `s(x1)` uses more effective degrees of freedom (capturing the sine wave's
+curvature) while `s(x2)` uses fewer (a quadratic is a simpler shape).
+
+## Non-Gaussian responses
+
+For count data, binary outcomes, or other non-Gaussian responses, specify a family:
+
+```{python}
+# Poisson count data
+rng = np.random.default_rng(42)
+n = 300
+x = np.linspace(0, 2 * np.pi, n)
+mu = np.exp(0.5 + 0.8 * np.sin(x))  # true log-linear rate
+y_counts = rng.poisson(mu)
+
+# Fit a Poisson GAM
+model_pois = wk.GAM("y ~ s(x)", family=wk.Poisson())
+model_pois.fit({"x": x, "y": y_counts.astype(float)}, method="REML")
+
+# Predictions are on the response scale (counts)
+preds_pois = model_pois.predict({"x": x})
+print(f"Mean predicted count: {preds_pois.values.mean():.2f}")
+print(f"Mean observed count: {y_counts.mean():.2f}")
+```
+
+The Poisson family uses a log link, so the model is
+$\log(\mu) = \beta_0 + f(x)$ and predictions are on the count scale after applying $\exp$.
 
 ## Where to go next
 
-- **[Smooth terms](03-smooths.qmd)**: TPRS, cubic splines, P-splines, tensor products.
-- **[Response families](04-families.qmd)**: fit count, binary, or continuous responses.
-- **[Model fitting](05-fitting.qmd)**: the P-IRLS algorithm and smoothness selection.
+- **[Smooth terms](03-smooths.qmd)**: TPRS, cubic splines, P-splines, tensor products, and more.
+- **[Response families](04-families.qmd)**: all supported distributions and link functions.
+- **[Model fitting](05-fitting.qmd)**: the P-IRLS algorithm, GCV vs. REML, and convergence.
+- **[Prediction and inference](06-prediction.qmd)**: standard errors, confidence intervals, and
+  term-level predictions.
