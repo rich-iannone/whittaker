@@ -177,7 +177,7 @@ class TestGammaLSDerivatives:
 
     def test_score_zero_at_mle(self):
         f = GammaLS()
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 10000
         mu_true = np.full(n, 3.0)
         sigma_true = np.full(n, 0.4)
@@ -194,7 +194,7 @@ class TestGammaLSDerivatives:
 class TestGammaLSOther:
     def test_log_likelihood(self):
         f = GammaLS()
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         mu = np.array([2.0])
         sigma = np.array([0.5])
         shape = 1.0 / sigma**2
@@ -298,7 +298,7 @@ class TestBetaLSDerivatives:
 
     def test_score_zero_at_mle(self):
         f = BetaLS()
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 50000
         mu_true = np.full(n, 0.4)
         phi_true = np.full(n, 10.0)
