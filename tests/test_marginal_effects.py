@@ -11,7 +11,7 @@ from whittaker.gam import GAM
 
 @pytest.fixture
 def sin_model():
-    rng = np.random.default_rng(42)
+    rng = np.random.default_rng(23)
     n = 300
     x = np.linspace(0, 2 * np.pi, n)
     y = np.sin(x) + rng.normal(0, 0.2, n)
@@ -23,7 +23,7 @@ def sin_model():
 
 @pytest.fixture
 def two_smooth_model():
-    rng = np.random.default_rng(42)
+    rng = np.random.default_rng(23)
     n = 300
     x1 = np.linspace(0, 2 * np.pi, n)
     x2 = rng.uniform(0, 1, n)
@@ -36,7 +36,7 @@ def two_smooth_model():
 
 @pytest.fixture
 def by_model():
-    rng = np.random.default_rng(42)
+    rng = np.random.default_rng(23)
     n = 400
     x = np.linspace(0, 2 * np.pi, n)
     z = rng.uniform(-1, 1, n)
@@ -66,9 +66,7 @@ class TestDerivatives:
         r = results[0]
         expected = np.cos(r.x)
         interior = (r.x > 0.5) & (r.x < 2 * np.pi - 0.5)
-        np.testing.assert_allclose(
-            r.derivative[interior], expected[interior], atol=0.3
-        )
+        np.testing.assert_allclose(r.derivative[interior], expected[interior], atol=0.3)
 
     def test_second_derivative_shape(self, sin_model):
         model, _ = sin_model
@@ -83,9 +81,7 @@ class TestDerivatives:
         r = results[0]
         expected = -np.sin(r.x)
         interior = (r.x > 1.0) & (r.x < 2 * np.pi - 1.0)
-        np.testing.assert_allclose(
-            r.derivative[interior], expected[interior], atol=0.5
-        )
+        np.testing.assert_allclose(r.derivative[interior], expected[interior], atol=0.5)
 
     def test_ci_contains_derivative(self, sin_model):
         model, _ = sin_model
@@ -270,7 +266,7 @@ class TestPairwiseComparisons:
 
 class TestDerivativesPoisson:
     def test_poisson_derivative(self):
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 300
         x = np.linspace(0, 3, n)
         y = rng.poisson(np.exp(0.5 * x)).astype(float)
@@ -286,7 +282,7 @@ class TestDerivativesPoisson:
 
 class TestMarginalEffectsPoisson:
     def test_poisson_marginal(self):
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 300
         x = np.linspace(0, 3, n)
         y = rng.poisson(np.exp(0.5 * x)).astype(float)
