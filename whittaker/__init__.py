@@ -6,7 +6,14 @@ from importlib.metadata import PackageNotFoundError, version
 
 from whittaker.bam import BigGAM
 from whittaker.calibration import calibrate_sigma
+from whittaker.conformal import (
+    ConformalPredictor,
+    ConformalResult,
+    conformal_coverage,
+    conformal_fit,
+)
 from whittaker.cross_validation import CVResult, cross_validate
+from whittaker.duckdb import DuckDBGAM
 from whittaker.families import (
     Beta,
     Binomial,
@@ -23,7 +30,6 @@ from whittaker.formula import parse as parse_formula
 from whittaker.gam import GAM
 from whittaker.io import from_mgcv_dict, load_gam, save_gam, to_mgcv_dict
 from whittaker.model_matrix import ModelMatrix, build_model_matrix, predict_matrix
-from whittaker.duckdb import DuckDBGAM
 from whittaker.polars_streaming import PolarsGAM
 from whittaker.quantile_gam import QuantileGAM
 from whittaker.sklearn import GAMClassifier, GAMRegressor
@@ -51,6 +57,10 @@ __all__ = [
     "CVResult",
     "Beta",
     "Binomial",
+    "ConformalPredictor",
+    "ConformalResult",
+    "conformal_coverage",
+    "conformal_fit",
     "CoxPH",
     "CRS",
     "DuckDBGAM",
