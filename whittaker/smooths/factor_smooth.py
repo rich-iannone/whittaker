@@ -49,8 +49,9 @@ class FactorSmoothBasis(SmoothBasis):
     xt:
         Marginal basis type. One of `"tp"` (thin plate), `"cr"` (cubic regression), or
         `"ps"` (P-spline). The default is `"tp"`.
-    m:
-        Spline order for the marginal basis (passed through). Only used by `"tp"` and `"ps"`.
+    **marginal_kwargs:
+        Additional keyword arguments passed to the marginal basis constructor (e.g., `m` for
+        spline order in `"tp"` and `"ps"` bases).
     """
 
     def __init__(self, k: int = 10, xt: str = "tp", **marginal_kwargs: Any) -> None:
