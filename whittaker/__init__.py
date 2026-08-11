@@ -23,34 +23,59 @@ from whittaker.cross_validation import CVResult, cross_validate
 from whittaker.duckdb import DuckDBGAM
 from whittaker.families import (
     Beta,
+    BetaLS,
     Binomial,
     CoxPH,
     Family,
+    GAMLSSFamily,
     Gamma,
+    GammaLS,
     Gaussian,
+    GaussianLS,
+    InverseGaussian,
+    Multinomial,
     NegativeBinomial,
+    OrderedCategorical,
     Poisson,
+    QuantileFamily,
+    Tweedie,
+    TweedieEstimated,
+    ZeroInflatedNegativeBinomial,
+    ZeroInflatedPoisson,
     tw,
 )
 from whittaker.formula import Formula, InteractionTerm, LinearTerm, OffsetTerm, SmoothTerm
 from whittaker.formula import parse as parse_formula
 from whittaker.functional import CoefficientFunction, FunctionalGAM, FunctionalTerm
-from whittaker.gam import GAM
+from whittaker.gam import GAM, GamCheckResult, PredictionResult, TermsPredictionResult
+from whittaker.gamlss import GAMLSS, GAMLSSPrediction
 from whittaker.io import from_mgcv_dict, load_gam, save_gam, to_mgcv_dict
-from whittaker.model_matrix import ModelMatrix, build_model_matrix, predict_matrix
+from whittaker.model_matrix import ModelMatrix, SmoothInfo, build_model_matrix, predict_matrix
 from whittaker.multi_response import MultiResponseGAM, MultiResponseResult, ResidualCorrelation
 from whittaker.polars_streaming import PolarsGAM
-from whittaker.quantile_gam import QuantileGAM
+from whittaker.quantile_gam import QuantileGAM, QuantileGAMResult
 from whittaker.sklearn import GAMClassifier, GAMRegressor
 from whittaker.smooths import (
     CRS,
     TPRS,
+    AdaptiveTPRS,
+    ConvexPSpline,
+    CyclicCRS,
+    CyclicPSpline,
     DuchonSpline,
+    FactorSmoothBasis,
     GaussianProcess,
+    MonotonePSpline,
     MRFBasis,
     PSpline,
+    RandomEffectBasis,
+    ShrinkageCRS,
+    ShrinkageTPRS,
     SmoothBasis,
     SoapFilm,
+    TensorInteractionBasis,
+    TensorProductBasis,
+    TensorProductBasisT2,
 )
 from whittaker.streaming import StreamingGAM, StreamingSnapshot
 
@@ -61,61 +86,110 @@ except PackageNotFoundError:
 
 __all__ = [
     "__version__",
-    "BigGAM",
-    "calibrate_sigma",
-    "cross_validate",
-    "CVResult",
-    "Beta",
+    # Core model
+    "GAM",
+    "PredictionResult",
+    "TermsPredictionResult",
+    "GamCheckResult",
+    # Formula
+    "Formula",
+    "SmoothTerm",
+    "LinearTerm",
+    "InteractionTerm",
+    "OffsetTerm",
+    "parse_formula",
+    # Response families
+    "Family",
+    "Gaussian",
+    "Poisson",
     "Binomial",
-    "CausalGAM",
-    "CATEResult",
+    "Gamma",
+    "NegativeBinomial",
+    "Beta",
+    "Tweedie",
+    "TweedieEstimated",
+    "tw",
+    "InverseGaussian",
+    "CoxPH",
+    "OrderedCategorical",
+    "Multinomial",
+    # Distributional families (GAMLSS)
+    "GAMLSSFamily",
+    "GaussianLS",
+    "GammaLS",
+    "BetaLS",
+    "ZeroInflatedPoisson",
+    "ZeroInflatedNegativeBinomial",
+    # Distributional regression
+    "GAMLSS",
+    "GAMLSSPrediction",
+    # Smooth basis types
+    "SmoothBasis",
+    "TPRS",
+    "CRS",
+    "PSpline",
+    "CyclicCRS",
+    "CyclicPSpline",
+    "ShrinkageTPRS",
+    "ShrinkageCRS",
+    "DuchonSpline",
+    "GaussianProcess",
+    "SoapFilm",
+    "MRFBasis",
+    "AdaptiveTPRS",
+    "RandomEffectBasis",
+    "FactorSmoothBasis",
+    "TensorProductBasis",
+    "TensorInteractionBasis",
+    "TensorProductBasisT2",
+    # Shape-constrained smooths
+    "MonotonePSpline",
+    "ConvexPSpline",
+    # Quantile regression
+    "QuantileGAM",
+    "QuantileGAMResult",
+    "QuantileFamily",
+    "calibrate_sigma",
+    # Conformal prediction
+    "conformal_fit",
+    "conformal_coverage",
     "ConformalPredictor",
     "ConformalResult",
-    "conformal_coverage",
-    "conformal_fit",
-    "CoxPH",
-    "CRS",
-    "DuckDBGAM",
-    "DuchonSpline",
-    "Family",
-    "Formula",
+    # Causal inference
+    "CausalGAM",
+    "TreatmentEffect",
+    "CATEResult",
+    "mediation_analysis",
+    "MediationResult",
+    # Streaming and online GAMs
+    "StreamingGAM",
+    "StreamingSnapshot",
+    # Multi-response GAMs
+    "MultiResponseGAM",
+    "MultiResponseResult",
+    "ResidualCorrelation",
+    # Functional regression
     "FunctionalGAM",
     "FunctionalTerm",
     "CoefficientFunction",
-    "GAM",
-    "GAMClassifier",
-    "GAMRegressor",
-    "Gamma",
-    "Gaussian",
-    "GaussianProcess",
-    "MediationResult",
-    "mediation_analysis",
-    "MRFBasis",
-    "MultiResponseGAM",
-    "MultiResponseResult",
-    "NegativeBinomial",
+    # Large datasets
+    "BigGAM",
     "PolarsGAM",
-    "Poisson",
-    "QuantileGAM",
-    "ResidualCorrelation",
-    "ModelMatrix",
-    "PSpline",
-    "InteractionTerm",
-    "LinearTerm",
-    "OffsetTerm",
-    "SmoothBasis",
-    "SmoothTerm",
-    "SoapFilm",
-    "StreamingGAM",
-    "StreamingSnapshot",
-    "TreatmentEffect",
-    "TPRS",
-    "tw",
-    "build_model_matrix",
-    "from_mgcv_dict",
-    "load_gam",
-    "parse_formula",
-    "predict_matrix",
+    "DuckDBGAM",
+    # Cross-validation
+    "cross_validate",
+    "CVResult",
+    # scikit-learn integration
+    "GAMRegressor",
+    "GAMClassifier",
+    # Serialization
     "save_gam",
+    "load_gam",
+    "from_mgcv_dict",
     "to_mgcv_dict",
+    # Model matrix
+    "build_model_matrix",
+    "predict_matrix",
+    "ModelMatrix",
+    "SmoothInfo",
 ]
