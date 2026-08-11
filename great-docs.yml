@@ -8,8 +8,8 @@ site_url: "https://rich-iannone.github.io/whittaker/"
 dynamic: true
 
 logo:
-  light: assets/whittaker_logo_light.svg
-  dark: assets/whittaker_logo_dark.svg
+  light: assets/whittaker_logo_light.png
+  dark: assets/whittaker_logo_dark.png
 
 hero:
   name: false
