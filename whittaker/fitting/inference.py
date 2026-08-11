@@ -1141,3 +1141,434 @@ def vif(mm: ModelMatrix) -> list[VIFResult]:
         results.append(VIFResult(term=param_names[j], vif=vif_val))
 
     return results
+
+
+# ---------------------------------------------------------------------------
+# Derivative-based inference
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class DerivativeResult:
+    """Result of smooth derivative estimation.
+
+    Attributes
+    ----------
+    term:
+        Label for the smooth term.
+    x:
+        Covariate values at which derivatives are evaluated.
+    derivative:
+        Estimated derivative values, shape ``(n,)``.
+    se:
+        Standard errors of the derivative estimates.
+    lower:
+        Lower confidence band.
+    upper:
+        Upper confidence band.
+    level:
+        Confidence level used.
+    order:
+        Derivative order (1 or 2).
+    """
+
+    term: str
+    x: NDArray
+    derivative: NDArray
+    se: NDArray
+    lower: NDArray
+    upper: NDArray
+    level: float
+    order: int
+
+
+def smooth_derivatives(
+    fit: FitResult,
+    mm: ModelMatrix,
+    variable: str,
+    data: dict[str, NDArray],
+    *,
+    order: int = 1,
+    n_points: int = 200,
+    level: float = 0.95,
+    eps: float | None = None,
+    unconditional: bool = False,
+    V_beta: NDArray | None = None,
+) -> list[DerivativeResult]:
+    """Estimate derivatives of smooth terms with respect to a variable.
+
+    Uses central finite differences on the basis matrix: for each evaluation
+    point x, compute [B(x+eps) - B(x-eps)] / (2*eps) to get the derivative of
+    each basis function, then multiply by the coefficient vector.
+
+    Standard errors are computed via the delta method.
+    """
+    from whittaker.model_matrix import predict_matrix
+
+    beta = fit.coefficients
+    n_data = len(next(iter(data.values())))
+
+    x_var = data.get(variable)
+    if x_var is None:
+        raise ValueError(f"Variable {variable!r} not found in data.")
+
+    x_grid = np.linspace(float(x_var.min()), float(x_var.max()), n_points)
+
+    if eps is None:
+        x_range = float(x_var.max()) - float(x_var.min())
+        eps = x_range / (n_points * 10) if order == 1 else x_range / (n_points * 5)
+        eps = max(eps, 1e-7)
+
+    base_data = {k: np.full(n_points, np.mean(v)) if k != variable else x_grid
+                 for k, v in data.items()}
+
+    if V_beta is None:
+        W = fit.weights
+        if fit.prior_weights is not None and W is None:
+            W = fit.prior_weights
+        V_beta = _bayesian_covariance(
+            mm.X, mm.penalties, fit.smoothing_params, fit.scale, W=W
+        )
+
+    z_crit = norm.ppf(1.0 - (1.0 - level) / 2.0)
+
+    results = []
+    for info in mm.smooths:
+        term_vars = info.term.variables
+        if variable not in term_vars:
+            continue
+
+        cs, ce = info.col_start, info.col_end
+        beta_j = beta[cs:ce]
+        V_j = V_beta[cs:ce, cs:ce]
+
+        label = repr(info.term)
+        if info.by_level is not None:
+            label = f"{label}:{info.by_level}"
+
+        if order == 1:
+            data_plus = {k: (v + eps if k == variable else v.copy())
+                         for k, v in base_data.items()}
+            data_minus = {k: (v - eps if k == variable else v.copy())
+                          for k, v in base_data.items()}
+            X_plus = predict_matrix(mm, data_plus)
+            X_minus = predict_matrix(mm, data_minus)
+            dX_j = (X_plus[:, cs:ce] - X_minus[:, cs:ce]) / (2.0 * eps)
+        elif order == 2:
+            data_plus = {k: (v + eps if k == variable else v.copy())
+                         for k, v in base_data.items()}
+            data_minus = {k: (v - eps if k == variable else v.copy())
+                          for k, v in base_data.items()}
+            data_center = base_data
+            X_plus = predict_matrix(mm, data_plus)
+            X_minus = predict_matrix(mm, data_minus)
+            X_center = predict_matrix(mm, data_center)
+            dX_j = (X_plus[:, cs:ce] - 2.0 * X_center[:, cs:ce] + X_minus[:, cs:ce]) / (eps**2)
+        else:
+            raise ValueError(f"order must be 1 or 2, got {order}")
+
+        deriv_vals = dX_j @ beta_j
+        var_deriv = np.sum(dX_j * (dX_j @ V_j), axis=1)
+        se_deriv = np.sqrt(np.maximum(var_deriv, 0.0))
+
+        lower = deriv_vals - z_crit * se_deriv
+        upper = deriv_vals + z_crit * se_deriv
+
+        results.append(DerivativeResult(
+            term=label,
+            x=x_grid,
+            derivative=deriv_vals,
+            se=se_deriv,
+            lower=lower,
+            upper=upper,
+            level=level,
+            order=order,
+        ))
+
+    if not results:
+        raise ValueError(
+            f"No smooth terms found involving variable {variable!r}."
+        )
+
+    return results
+
+
+# ---------------------------------------------------------------------------
+# Marginal effects
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class MarginalEffectResult:
+    """Result of marginal effect estimation for one smooth term.
+
+    Attributes
+    ----------
+    term:
+        Label for the smooth term.
+    variable:
+        The focal variable.
+    x:
+        Covariate values for the focal variable.
+    effect:
+        Estimated marginal effect (partial effect on the linear predictor).
+    se:
+        Standard errors.
+    lower:
+        Lower confidence band.
+    upper:
+        Upper confidence band.
+    level:
+        Confidence level used.
+    by_values:
+        Dict of conditioning variable values, if any.
+    """
+
+    term: str
+    variable: str
+    x: NDArray
+    effect: NDArray
+    se: NDArray
+    lower: NDArray
+    upper: NDArray
+    level: float
+    by_values: dict[str, float] | None = None
+
+
+def marginal_effects(
+    fit: FitResult,
+    mm: ModelMatrix,
+    variable: str,
+    data: dict[str, NDArray],
+    *,
+    at: dict[str, float | list[float]] | None = None,
+    n_points: int = 200,
+    level: float = 0.95,
+    unconditional: bool = False,
+    V_beta: NDArray | None = None,
+) -> list[MarginalEffectResult]:
+    """Compute marginal (partial) effects of a variable.
+
+    Evaluates the smooth term(s) involving *variable* over a grid while holding
+    other variables fixed at their means or at values specified via *at*. This
+    is the ``gratia::smooth_estimates()`` / ``marginaleffects`` equivalent.
+    """
+    from whittaker.model_matrix import predict_matrix
+
+    beta = fit.coefficients
+
+    x_var = data.get(variable)
+    if x_var is None:
+        raise ValueError(f"Variable {variable!r} not found in data.")
+
+    x_grid = np.linspace(float(x_var.min()), float(x_var.max()), n_points)
+
+    if V_beta is None:
+        W = fit.weights
+        if fit.prior_weights is not None and W is None:
+            W = fit.prior_weights
+        V_beta = _bayesian_covariance(
+            mm.X, mm.penalties, fit.smoothing_params, fit.scale, W=W
+        )
+
+    z_crit = norm.ppf(1.0 - (1.0 - level) / 2.0)
+
+    at_expanded: list[dict[str, float]] = [{}]
+    if at is not None:
+        combos = [{}]
+        for var_name, vals in at.items():
+            if isinstance(vals, (int, float)):
+                vals = [vals]
+            new_combos = []
+            for combo in combos:
+                for v in vals:
+                    c = dict(combo)
+                    c[var_name] = float(v)
+                    new_combos.append(c)
+            combos = new_combos
+        at_expanded = combos
+
+    results = []
+    for at_vals in at_expanded:
+        pred_data: dict[str, NDArray] = {}
+        for k, v in data.items():
+            if k == variable:
+                pred_data[k] = x_grid
+            elif k in at_vals:
+                pred_data[k] = np.full(n_points, at_vals[k])
+            else:
+                pred_data[k] = np.full(n_points, np.mean(v))
+
+        X_new = predict_matrix(mm, pred_data)
+
+        for info in mm.smooths:
+            if variable not in info.term.variables:
+                continue
+
+            cs, ce = info.col_start, info.col_end
+            beta_j = beta[cs:ce]
+            V_j = V_beta[cs:ce, cs:ce]
+
+            label = repr(info.term)
+            if info.by_level is not None:
+                label = f"{label}:{info.by_level}"
+
+            X_j = X_new[:, cs:ce]
+            effect = X_j @ beta_j
+            var_j = np.sum(X_j * (X_j @ V_j), axis=1)
+            se_j = np.sqrt(np.maximum(var_j, 0.0))
+
+            lower = effect - z_crit * se_j
+            upper = effect + z_crit * se_j
+
+            results.append(MarginalEffectResult(
+                term=label,
+                variable=variable,
+                x=x_grid.copy(),
+                effect=effect,
+                se=se_j,
+                lower=lower,
+                upper=upper,
+                level=level,
+                by_values=at_vals if at_vals else None,
+            ))
+
+    if not results:
+        raise ValueError(
+            f"No smooth terms found involving variable {variable!r}."
+        )
+
+    return results
+
+
+# ---------------------------------------------------------------------------
+# Pairwise comparisons / contrasts
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class ContrastResult:
+    """Result of a pairwise comparison between two conditions.
+
+    Attributes
+    ----------
+    term:
+        Smooth term label.
+    x:
+        Covariate grid.
+    difference:
+        Estimated difference (condition1 - condition2).
+    se:
+        Standard error of the difference.
+    lower:
+        Lower confidence bound.
+    upper:
+        Upper confidence bound.
+    level:
+        Confidence level.
+    label:
+        Description of the comparison.
+    """
+
+    term: str
+    x: NDArray
+    difference: NDArray
+    se: NDArray
+    lower: NDArray
+    upper: NDArray
+    level: float
+    label: str
+
+
+def pairwise_comparisons(
+    fit: FitResult,
+    mm: ModelMatrix,
+    variable: str,
+    data: dict[str, NDArray],
+    pairs: list[tuple[dict[str, float], dict[str, float]]],
+    *,
+    n_points: int = 200,
+    level: float = 0.95,
+    unconditional: bool = False,
+    V_beta: NDArray | None = None,
+) -> list[ContrastResult]:
+    """Compute pairwise contrasts between conditions.
+
+    Each pair is ``(condition1, condition2)`` where each condition is a dict of
+    covariate values. The contrast is ``f(x | condition1) - f(x | condition2)``
+    evaluated over a grid of the focal *variable*.
+
+    This is the ``emmeans``/``marginaleffects::comparisons()`` equivalent for
+    smooth terms.
+    """
+    from whittaker.model_matrix import predict_matrix
+
+    beta = fit.coefficients
+
+    x_var = data.get(variable)
+    if x_var is None:
+        raise ValueError(f"Variable {variable!r} not found in data.")
+
+    x_grid = np.linspace(float(x_var.min()), float(x_var.max()), n_points)
+
+    if V_beta is None:
+        W = fit.weights
+        if fit.prior_weights is not None and W is None:
+            W = fit.prior_weights
+        V_beta = _bayesian_covariance(
+            mm.X, mm.penalties, fit.smoothing_params, fit.scale, W=W
+        )
+
+    z_crit = norm.ppf(1.0 - (1.0 - level) / 2.0)
+
+    results = []
+    for cond1, cond2 in pairs:
+        data1: dict[str, NDArray] = {}
+        data2: dict[str, NDArray] = {}
+        for k, v in data.items():
+            if k == variable:
+                data1[k] = x_grid
+                data2[k] = x_grid
+            else:
+                data1[k] = np.full(n_points, cond1.get(k, np.mean(v)))
+                data2[k] = np.full(n_points, cond2.get(k, np.mean(v)))
+
+        X1 = predict_matrix(mm, data1)
+        X2 = predict_matrix(mm, data2)
+
+        for info in mm.smooths:
+            if variable not in info.term.variables:
+                continue
+
+            cs, ce = info.col_start, info.col_end
+            beta_j = beta[cs:ce]
+            V_j = V_beta[cs:ce, cs:ce]
+
+            label_term = repr(info.term)
+            if info.by_level is not None:
+                label_term = f"{label_term}:{info.by_level}"
+
+            dX = X1[:, cs:ce] - X2[:, cs:ce]
+            diff = dX @ beta_j
+            var_diff = np.sum(dX * (dX @ V_j), axis=1)
+            se_diff = np.sqrt(np.maximum(var_diff, 0.0))
+
+            lower = diff - z_crit * se_diff
+            upper = diff + z_crit * se_diff
+
+            cond1_str = ", ".join(f"{k}={v}" for k, v in sorted(cond1.items()))
+            cond2_str = ", ".join(f"{k}={v}" for k, v in sorted(cond2.items()))
+            comparison_label = f"({cond1_str}) - ({cond2_str})"
+
+            results.append(ContrastResult(
+                term=label_term,
+                x=x_grid.copy(),
+                difference=diff,
+                se=se_diff,
+                lower=lower,
+                upper=upper,
+                level=level,
+                label=comparison_label,
+            ))
+
+    return results

@@ -1178,6 +1178,154 @@ class GAM:
         self._check_fitted()
         return vif(self._model_matrix)
 
+    def derivatives(
+        self,
+        variable: str,
+        *,
+        order: int = 1,
+        n_points: int = 200,
+        level: float = 0.95,
+        eps: float | None = None,
+        unconditional: bool = False,
+    ) -> list:
+        """Estimate derivatives of smooth terms with respect to a variable.
+
+        Uses central finite differences on the basis matrix with delta-method
+        standard errors.
+
+        Parameters
+        ----------
+        variable:
+            The covariate to differentiate with respect to.
+        order:
+            Derivative order: ``1`` for first derivative (rate of change),
+            ``2`` for second derivative (curvature).
+        n_points:
+            Number of evaluation points along the variable's range.
+        level:
+            Confidence level for the bands.
+        eps:
+            Finite difference step size. If ``None``, chosen automatically.
+        unconditional:
+            If ``True``, use unconditional covariance (Marra & Wood 2012).
+
+        Returns
+        -------
+        list[DerivativeResult]
+            One result per smooth term involving the variable.
+        """
+        from whittaker.fitting.inference import smooth_derivatives
+
+        self._check_fitted()
+        V = self._covariance_matrix(unconditional=unconditional)
+        return smooth_derivatives(
+            self._fit_result,
+            self._model_matrix,
+            variable,
+            self._data,
+            order=order,
+            n_points=n_points,
+            level=level,
+            eps=eps,
+            V_beta=V,
+        )
+
+    def marginal_effects(
+        self,
+        variable: str,
+        *,
+        at: dict | None = None,
+        n_points: int = 200,
+        level: float = 0.95,
+        unconditional: bool = False,
+    ) -> list:
+        """Compute marginal (partial) effects of a variable.
+
+        Evaluates the smooth term(s) involving *variable* over a grid while
+        holding other variables at their means or at values specified via *at*.
+
+        Parameters
+        ----------
+        variable:
+            The focal covariate.
+        at:
+            Dict mapping other variable names to fixed values (or lists of
+            values for a grid). Variables not listed are held at their mean.
+        n_points:
+            Number of evaluation points along the variable's range.
+        level:
+            Confidence level for the bands.
+        unconditional:
+            If ``True``, use unconditional covariance.
+
+        Returns
+        -------
+        list[MarginalEffectResult]
+            One result per smooth term per ``at`` combination.
+        """
+        from whittaker.fitting.inference import marginal_effects
+
+        self._check_fitted()
+        V = self._covariance_matrix(unconditional=unconditional)
+        return marginal_effects(
+            self._fit_result,
+            self._model_matrix,
+            variable,
+            self._data,
+            at=at,
+            n_points=n_points,
+            level=level,
+            V_beta=V,
+        )
+
+    def pairwise_comparisons(
+        self,
+        variable: str,
+        pairs: list[tuple[dict, dict]],
+        *,
+        n_points: int = 200,
+        level: float = 0.95,
+        unconditional: bool = False,
+    ) -> list:
+        """Compute pairwise contrasts between conditions.
+
+        Each pair is ``(condition1, condition2)`` where each condition is a dict
+        of covariate values. The contrast ``f(x|cond1) - f(x|cond2)`` is
+        evaluated over a grid of the focal variable.
+
+        Parameters
+        ----------
+        variable:
+            The focal covariate (the x-axis for the contrast).
+        pairs:
+            List of ``(cond1, cond2)`` dicts specifying the two conditions.
+        n_points:
+            Number of evaluation points.
+        level:
+            Confidence level for the bands.
+        unconditional:
+            If ``True``, use unconditional covariance.
+
+        Returns
+        -------
+        list[ContrastResult]
+            One result per smooth term per pair.
+        """
+        from whittaker.fitting.inference import pairwise_comparisons
+
+        self._check_fitted()
+        V = self._covariance_matrix(unconditional=unconditional)
+        return pairwise_comparisons(
+            self._fit_result,
+            self._model_matrix,
+            variable,
+            self._data,
+            pairs,
+            n_points=n_points,
+            level=level,
+            V_beta=V,
+        )
+
     def _check_fitted(self) -> None:
         if not self._fitted:
             raise RuntimeError("This GAM has not been fitted yet. Call .fit(data) first.")
