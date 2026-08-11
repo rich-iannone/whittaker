@@ -459,6 +459,33 @@ print(f"Link scale (log counts): {preds_pois.linear_predictor[:5].round(3)}")
 print(f"exp(link) = response:    {np.exp(preds_pois.linear_predictor[:5]).round(3)}")
 ```
 
+```{python}
+# Visualize the Poisson fit
+pts_pois = alt.Chart(
+    {"values": [{"x": float(x[i]), "y": float(y_counts[i])} for i in range(n)]}
+).mark_circle(size=12, opacity=0.2, color="teal").encode(
+    x=alt.X("x:Q", title="x"), y=alt.Y("y:Q", title="Count"),
+)
+
+true_grid = np.exp(0.5 + 0.8 * np.sin(x_grid))
+fit_pois = [
+    {"x": float(x_grid[i]), "fit": float(preds_pois.values[i]), "true": float(true_grid[i])}
+    for i in range(len(x_grid))
+]
+
+line_fit = alt.Chart({"values": fit_pois}).mark_line(
+    color="darkorange", strokeWidth=2
+).encode(x="x:Q", y="fit:Q")
+
+line_true = alt.Chart({"values": fit_pois}).mark_line(
+    color="gray", strokeDash=[4, 4], strokeWidth=1.5
+).encode(x="x:Q", y="true:Q")
+
+(pts_pois + line_fit + line_true).properties(
+    width=500, height=300, title="Poisson GAM: fitted rate (orange) vs. true rate (dashed)"
+)
+```
+
 ### Confidence intervals for non-Gaussian models
 
 Intervals are constructed on the linear predictor scale and then transformed via the inverse link.
@@ -502,6 +529,33 @@ model_bin.fit({"x": x, "y": y_bin}, method="REML")
 preds_bin = model_bin.predict({"x": x_grid}, se=True)
 print(f"Probability range: [{preds_bin.values.min():.3f}, {preds_bin.values.max():.3f}]")
 print(f"Log-odds range: [{preds_bin.linear_predictor.min():.3f}, {preds_bin.linear_predictor.max():.3f}]")
+```
+
+```{python}
+# Visualize the binomial fit
+prob_true = 1 / (1 + np.exp(-(0.5 + 1.5 * np.sin(x_grid))))
+fit_bin = [
+    {"x": float(x_grid[i]), "fit": float(preds_bin.values[i]), "true": float(prob_true[i])}
+    for i in range(len(x_grid))
+]
+
+pts_bin = alt.Chart(
+    {"values": [{"x": float(x[i]), "y": float(y_bin[i])} for i in range(n)]}
+).mark_circle(size=12, opacity=0.15, color="steelblue").encode(
+    x=alt.X("x:Q", title="x"), y=alt.Y("y:Q", title="P(y = 1)"),
+)
+
+line_bin = alt.Chart({"values": fit_bin}).mark_line(
+    color="darkorange", strokeWidth=2
+).encode(x="x:Q", y="fit:Q")
+
+line_true_bin = alt.Chart({"values": fit_bin}).mark_line(
+    color="gray", strokeDash=[4, 4], strokeWidth=1.5
+).encode(x="x:Q", y="true:Q")
+
+(pts_bin + line_bin + line_true_bin).properties(
+    width=500, height=300, title="Binomial GAM: fitted probability (orange) vs. true (dashed)"
+)
 ```
 
 ## Prediction type summary

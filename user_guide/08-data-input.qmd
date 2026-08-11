@@ -106,6 +106,39 @@ preds = model.predict(new_data)
 print(f"Predictions shape: {preds.values.shape}")
 ```
 
+```{python}
+import altair as alt
+
+x_plot = np.linspace(0, 2 * np.pi, 100)
+pred_plot = model.predict({"x": x_plot}, se=True)
+
+plot_data = [
+    {"x": float(x_plot[i]), "fit": float(pred_plot.values[i]),
+     "lower": float(pred_plot.values[i] - 1.96 * pred_plot.se[i]),
+     "upper": float(pred_plot.values[i] + 1.96 * pred_plot.se[i])}
+    for i in range(len(x_plot))
+]
+
+pts = alt.Chart(
+    {"values": [{"x": float(data_from_pandas["x"][i]), "y": float(data_from_pandas["y"][i])}
+     for i in range(len(data_from_pandas["y"]))]}
+).mark_circle(size=15, opacity=0.3, color="steelblue").encode(
+    x=alt.X("x:Q", title="x"), y=alt.Y("y:Q", title="y"),
+)
+
+band = alt.Chart({"values": plot_data}).mark_area(
+    opacity=0.2, color="firebrick"
+).encode(x="x:Q", y="lower:Q", y2="upper:Q")
+
+line = alt.Chart({"values": plot_data}).mark_line(
+    color="firebrick", strokeWidth=2
+).encode(x="x:Q", y="fit:Q")
+
+(band + pts + line).properties(
+    width=500, height=300, title="Predictions from the fitted GAM"
+)
+```
+
 ## Missing values
 
 GAMs do not support missing values in model covariates. If your data contains `NaN` values, Whittaker

@@ -262,6 +262,47 @@ model_ps.fit({"x": x, "y": y}, method="REML")
 print(model_ps.summary())
 ```
 
+```{python}
+# Predict on a fine grid with standard errors
+x_grid = np.linspace(0, 10, 300)
+preds_ps = model_ps.predict({"x": x_grid}, se=True)
+
+# Compute 95% confidence band
+lower = preds_ps.values - 1.96 * preds_ps.se
+upper = preds_ps.values + 1.96 * preds_ps.se
+
+# Build plot data
+obs_data = [{"x": float(x[i]), "y": float(y[i])} for i in range(n)]
+fit_data = [
+    {"x": float(x_grid[i]), "fit": float(preds_ps.values[i]),
+     "lower": float(lower[i]), "upper": float(upper[i])}
+    for i in range(len(x_grid))
+]
+
+# Observed points
+points = alt.Chart({"values": obs_data}).mark_circle(
+    size=15, opacity=0.3, color="steelblue"
+).encode(
+    x=alt.X("x:Q", title="x"),
+    y=alt.Y("y:Q", title="y"),
+)
+
+# Fitted curve
+line = alt.Chart({"values": fit_data}).mark_line(
+    color="darkorchid", strokeWidth=2
+).encode(x="x:Q", y="fit:Q")
+
+# Confidence band
+band = alt.Chart({"values": fit_data}).mark_area(
+    opacity=0.2, color="darkorchid"
+).encode(x="x:Q", y="lower:Q", y2="upper:Q")
+
+(band + points + line).properties(
+    width=550, height=320,
+    title="P-spline smooth: s(x, bs='ps', k=20)"
+)
+```
+
 ::: {.callout-note}
 ## Changing the penalty order
 
@@ -559,6 +600,46 @@ model_by.fit({"x": x, "y": y, "group": group}, method="REML")
 print(model_by.summary())
 ```
 
+```{python}
+# Predict each group on a fine grid
+x_grid = np.linspace(0, 2 * np.pi, 200)
+
+obs_data = [
+    {"x": float(x[i]), "y": float(y[i]), "group": str(group[i])}
+    for i in range(len(x))
+]
+
+fit_data = []
+for g in ["A", "B"]:
+    g_arr = np.array([g] * len(x_grid))
+    preds_g = model_by.predict({"x": x_grid, "group": g_arr})
+    fit_data.extend(
+        {"x": float(x_grid[i]), "fit": float(preds_g.values[i]), "group": g}
+        for i in range(len(x_grid))
+    )
+
+points = alt.Chart({"values": obs_data}).mark_circle(
+    size=15, opacity=0.3
+).encode(
+    x=alt.X("x:Q", title="x"),
+    y=alt.Y("y:Q", title="y"),
+    color=alt.Color("group:N", title="Group"),
+)
+
+lines = alt.Chart({"values": fit_data}).mark_line(
+    strokeWidth=2
+).encode(
+    x="x:Q",
+    y=alt.Y("fit:Q", title="y"),
+    color="group:N",
+)
+
+(points + lines).properties(
+    width=500, height=300,
+    title="Factor by-variable smooth: s(x, by=group)"
+)
+```
+
 The model estimates a different smooth $f_A(x)$ and $f_B(x)$, each with its own EDF and smoothing
 parameter. This is the GAM analogue of an interaction between a smooth and a factor.
 
@@ -580,6 +661,31 @@ model_vc = wk.GAM("y ~ s(x, by=z)")
 model_vc.fit({"x": x, "z": z, "y": y}, method="REML")
 
 print(model_vc.summary())
+```
+
+```{python}
+# Show how the smooth varies at different z values
+x_grid = np.linspace(0, 2 * np.pi, 200)
+z_quantiles = np.percentile(z, [25, 50, 75])
+
+fit_data = []
+for zq in z_quantiles:
+    z_arr = np.full_like(x_grid, zq)
+    preds_vc = model_vc.predict({"x": x_grid, "z": z_arr})
+    fit_data.extend(
+        {"x": float(x_grid[i]), "fit": float(preds_vc.values[i]),
+         "z": f"z = {zq:.2f}"}
+        for i in range(len(x_grid))
+    )
+
+alt.Chart({"values": fit_data}).mark_line(strokeWidth=2).encode(
+    x=alt.X("x:Q", title="x"),
+    y=alt.Y("fit:Q", title="f(x) scaled by z"),
+    color=alt.Color("z:N", title="z value"),
+).properties(
+    width=500, height=300,
+    title="Varying-coefficient smooth: effect of x at different z levels"
+)
 ```
 
 ## Choosing the basis dimension `k` {#choosing-k}

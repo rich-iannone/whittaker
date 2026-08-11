@@ -216,6 +216,31 @@ model_gamma_ls.fit(data_gamma)
 print(model_gamma_ls.summary())
 ```
 
+```{python}
+x_grid = np.linspace(0.5, 5, 300)
+preds_gamma = model_gamma_ls.predict({"x": x_grid})
+mu_hat_gamma = preds_gamma.values["mu"]
+
+obs_gamma = [{"x": float(x[i]), "y": float(y_gamma[i])} for i in range(n)]
+fit_gamma = [{"x": float(x_grid[i]), "mu": float(mu_hat_gamma[i])} for i in range(len(x_grid))]
+
+points_gamma = alt.Chart({"values": obs_gamma}).mark_circle(
+    size=15, opacity=0.3, color="steelblue"
+).encode(
+    x=alt.X("x:Q", title="x"),
+    y=alt.Y("y:Q", title="y"),
+)
+
+line_gamma = alt.Chart({"values": fit_gamma}).mark_line(
+    color="firebrick", strokeWidth=2
+).encode(x="x:Q", y=alt.Y("mu:Q", title="y"))
+
+(points_gamma + line_gamma).properties(
+    width=500, height=300,
+    title="Gamma location-scale: fitted mean"
+)
+```
+
 The log link on both $\mu$ and $\sigma$ ensures positivity. The fitted `sigma` smooth captures how
 the coefficient of variation increases along the transect.
 
@@ -251,6 +276,31 @@ model_beta_ls = wk.GAMLSS(
 model_beta_ls.fit(data_beta)
 
 print(model_beta_ls.summary())
+```
+
+```{python}
+x_grid = np.linspace(0, 4, 300)
+preds_beta = model_beta_ls.predict({"x": x_grid})
+mu_hat_beta = preds_beta.values["mu"]
+
+obs_beta = [{"x": float(x[i]), "y": float(y_beta[i])} for i in range(n)]
+fit_beta = [{"x": float(x_grid[i]), "mu": float(mu_hat_beta[i])} for i in range(len(x_grid))]
+
+points_beta = alt.Chart({"values": obs_beta}).mark_circle(
+    size=15, opacity=0.3, color="steelblue"
+).encode(
+    x=alt.X("x:Q", title="x"),
+    y=alt.Y("y:Q", title="y"),
+)
+
+line_beta = alt.Chart({"values": fit_beta}).mark_line(
+    color="firebrick", strokeWidth=2
+).encode(x="x:Q", y=alt.Y("mu:Q", title="y"))
+
+(points_beta + line_beta).properties(
+    width=500, height=300,
+    title="Beta location-scale: fitted mean proportion"
+)
 ```
 
 The logit link on $\mu$ constrains predictions to $(0, 1)$; the log link on $\sigma$ (the
@@ -427,6 +477,32 @@ model_zinb = wk.GAMLSS(
 model_zinb.fit(data_zip)
 
 print(model_zinb.summary())
+```
+
+```{python}
+x_zip = data_zip["x"]
+x_grid = np.linspace(float(x_zip.min()), float(x_zip.max()), 300)
+new_data = {"x": x_grid}
+
+mu_zip = model_zip.predict(new_data).values["mu"]
+mu_zinb = model_zinb.predict(new_data).values["mu"]
+
+fit_compare = [
+    {"x": float(x_grid[i]), "rate": float(mu_zip[i]), "model": "ZIP"}
+    for i in range(len(x_grid))
+] + [
+    {"x": float(x_grid[i]), "rate": float(mu_zinb[i]), "model": "ZINB"}
+    for i in range(len(x_grid))
+]
+
+alt.Chart({"values": fit_compare}).mark_line(strokeWidth=2).encode(
+    x=alt.X("x:Q", title="x"),
+    y=alt.Y("rate:Q", title="Fitted rate (mu)"),
+    color=alt.Color("model:N", title="Model"),
+).properties(
+    width=500, height=300,
+    title="ZIP vs. ZINB: fitted rate comparison"
+)
 ```
 
 ::: {.callout-warning}

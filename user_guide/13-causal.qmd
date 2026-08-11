@@ -400,6 +400,28 @@ print(f"Indirect effect:      {med_result.indirect_effect:.3f} (SE: {med_result.
 print(f"Proportion mediated:  {med_result.proportion_mediated:.3f}")
 ```
 
+```{python}
+# Horizontal bar chart decomposing the mediation effects
+med_bar_data = [
+    {"Effect": "Direct effect", "Magnitude": med_result.direct_effect},
+    {"Effect": "Indirect effect", "Magnitude": med_result.indirect_effect},
+    {"Effect": "Total effect", "Magnitude": med_result.total_effect},
+]
+
+alt.Chart({"values": med_bar_data}).mark_bar().encode(
+    x=alt.X("Magnitude:Q", title="Effect magnitude"),
+    y=alt.Y("Effect:N", sort=["Total effect", "Direct effect", "Indirect effect"]),
+    color=alt.Color(
+        "Effect:N",
+        scale=alt.Scale(
+            domain=["Direct effect", "Indirect effect", "Total effect"],
+            range=["steelblue", "coral", "gray"],
+        ),
+        legend=None,
+    ),
+).properties(width=400, height=200, title="Mediation decomposition")
+```
+
 The results should recover the true effects: a total effect near 2.2, a direct effect near 1.0,
 and an indirect effect near 1.2. The proportion mediated should be approximately $1.2 / 2.2
 \approx 0.55$, indicating that more than half the treatment effect operates through the mediator.
@@ -499,6 +521,43 @@ dml_ate = causal_check.treatment_effect().ate
 print(f"True ATE:       {true_theta:.3f}")
 print(f"Naive estimate: {naive_ate:.3f}")
 print(f"DML estimate:   {dml_ate:.3f}")
+```
+
+```{python}
+# Forest-plot-style dot chart comparing estimates to the true ATE
+dot_data = [
+    {"Estimate": "True ATE", "Value": true_theta},
+    {"Estimate": "Naive", "Value": naive_ate},
+    {"Estimate": "DML", "Value": dml_ate},
+]
+
+# Vertical reference line at the true ATE
+rule = alt.Chart({"values": [{"x": true_theta}]}).mark_rule(
+    color="gray", strokeDash=[4, 4], strokeWidth=1.5
+).encode(x="x:Q")
+
+points = alt.Chart({"values": dot_data}).mark_point(
+    size=100, filled=True
+).encode(
+    x=alt.X("Value:Q", title="Treatment effect estimate"),
+    y=alt.Y(
+        "Estimate:N",
+        sort=["True ATE", "Naive", "DML"],
+        title=None,
+    ),
+    color=alt.Color(
+        "Estimate:N",
+        scale=alt.Scale(
+            domain=["True ATE", "Naive", "DML"],
+            range=["gray", "coral", "steelblue"],
+        ),
+        legend=None,
+    ),
+)
+
+(rule + points).properties(
+    width=400, height=200, title="Naive vs. DML: bias comparison"
+)
 ```
 
 The naive difference-in-means estimate is biased because treated individuals tend to have

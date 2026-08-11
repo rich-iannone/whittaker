@@ -156,6 +156,28 @@ mu, se = model.predict({"curves": X_func[:10], "y": y[:10]}, se=True)
 print(f"SEs: {se[:5].round(4)}")
 ```
 
+```{python}
+# Predicted vs. observed for the first 10 observations
+scatter_data = [
+    {"observed": float(y[i]), "predicted": float(pred[i])}
+    for i in range(10)
+]
+
+obs_range = [min(y[:10]), max(y[:10])]
+
+points = alt.Chart({"values": scatter_data}).mark_circle(size=50, color="steelblue").encode(
+    x=alt.X("observed:Q", title="Observed"),
+    y=alt.Y("predicted:Q", title="Predicted"),
+)
+
+line_data = [{"v": float(obs_range[0])}, {"v": float(obs_range[1])}]
+ref_line = alt.Chart({"values": line_data}).mark_line(
+    strokeDash=[4, 4], color="firebrick"
+).encode(x="v:Q", y="v:Q")
+
+(points + ref_line).properties(width=300, height=300, title="Predicted vs. observed")
+```
+
 ## Using a Fourier basis
 
 For functional covariates with periodic structure (e.g., spectral data, seasonal patterns), a
@@ -212,6 +234,40 @@ model_two = wk.FunctionalGAM(
 model_two.fit({"f1": X_func, "f2": X2, "y": y2}, method="REML")
 
 print(model_two.summary())
+```
+
+```{python}
+# Extract coefficient functions for both functional terms
+cf1 = model_two.coefficient_function("f1", n_grid=200)
+cf2 = model_two.coefficient_function("f2", n_grid=200)
+
+# Panel for f1: estimated vs. true beta = sin(2*pi*t)
+cf1_data = [{"t": float(cf1.grid[i]), "beta": float(cf1.values[i]), "type": "Estimated"} for i in range(len(cf1.grid))]
+true1_data = [{"t": float(cf1.grid[i]), "beta": float(np.sin(2 * np.pi * cf1.grid[i])), "type": "True"} for i in range(len(cf1.grid))]
+
+est1 = alt.Chart({"values": cf1_data}).mark_line(color="steelblue", strokeWidth=2).encode(
+    x=alt.X("t:Q", title="t"), y=alt.Y("beta:Q", title="beta(t)"),
+)
+truth1 = alt.Chart({"values": true1_data}).mark_line(
+    color="firebrick", strokeDash=[4, 4], strokeWidth=1.5
+).encode(x="t:Q", y="beta:Q")
+
+panel1 = (est1 + truth1).properties(width=300, height=250, title="f1: sin(2*pi*t)")
+
+# Panel for f2: estimated vs. true beta = t^2 - t
+cf2_data = [{"t": float(cf2.grid[i]), "beta": float(cf2.values[i]), "type": "Estimated"} for i in range(len(cf2.grid))]
+true2_data = [{"t": float(cf2.grid[i]), "beta": float(cf2.grid[i]**2 - cf2.grid[i]), "type": "True"} for i in range(len(cf2.grid))]
+
+est2 = alt.Chart({"values": cf2_data}).mark_line(color="steelblue", strokeWidth=2).encode(
+    x=alt.X("t:Q", title="t"), y=alt.Y("beta:Q", title="beta(t)"),
+)
+truth2 = alt.Chart({"values": true2_data}).mark_line(
+    color="firebrick", strokeDash=[4, 4], strokeWidth=1.5
+).encode(x="t:Q", y="beta:Q")
+
+panel2 = (est2 + truth2).properties(width=300, height=250, title="f2: t^2 - t")
+
+panel1 | panel2
 ```
 
 ## Mixed models: functional + scalar terms

@@ -325,6 +325,28 @@ print("\nWith select=True:")
 print(model_sel.summary())
 ```
 
+```{python}
+# Grouped bar chart comparing per-term EDF with and without select=True
+term_labels = ["s(x1)", "s(x2)", "s(x3)"]
+edf_nosel = model_nosel.edf
+edf_sel = model_sel.edf
+
+bar_records = []
+for label, edf_std, edf_shrink in zip(term_labels, edf_nosel, edf_sel):
+    bar_records.append({"Term": label, "Model": "Standard", "EDF": float(edf_std)})
+    bar_records.append({"Term": label, "Model": "select=True", "EDF": float(edf_shrink)})
+
+alt.Chart({"values": bar_records}).mark_bar().encode(
+    x=alt.X("Term:N", title="Smooth term", axis=alt.Axis(labelAngle=0)),
+    y=alt.Y("EDF:Q", title="Effective degrees of freedom"),
+    color=alt.Color("Model:N", scale=alt.Scale(
+        domain=["Standard", "select=True"],
+        range=["#4c78a8", "#e45756"]
+    )),
+    xOffset="Model:N",
+).properties(width=400, height=300, title="Variable selection: per-term EDF")
+```
+
 With `select=True`, the EDF for `s(x3)` should be driven close to zero, confirming that Whittaker
 identified the noise predictor. The EDF values for `s(x1)` and `s(x2)` remain largely unchanged.
 
@@ -381,6 +403,62 @@ print(f"Unweighted scale: {model_unweighted.scale:.4f}")
 print(f"Weighted scale:   {model_weighted.scale:.4f}")
 print(f"Unweighted EDF:   {model_unweighted.edf_total:.3f}")
 print(f"Weighted EDF:     {model_weighted.edf_total:.3f}")
+```
+
+```{python}
+# Scatter with outliers highlighted plus weighted vs unweighted fitted curves
+x_fit = np.linspace(0, 2 * np.pi, 200)
+preds_unw = model_unweighted.predict({"x": x_fit})
+preds_w = model_weighted.predict({"x": x_fit})
+
+is_outlier = np.zeros(n, dtype=bool)
+is_outlier[outlier_idx] = True
+
+scatter_records = [
+    {"x": float(x[i]), "y": float(y_w[i]), "Type": "Outlier" if is_outlier[i] else "Normal"}
+    for i in range(n)
+]
+
+fit_records = []
+for i in range(len(x_fit)):
+    fit_records.append({"x": float(x_fit[i]), "fit": float(preds_unw.values[i]), "Model": "Unweighted"})
+    fit_records.append({"x": float(x_fit[i]), "fit": float(preds_w.values[i]), "Model": "Weighted"})
+
+points = alt.Chart({"values": scatter_records}).mark_circle().encode(
+    x=alt.X("x:Q", title="x"),
+    y=alt.Y("y:Q", title="y"),
+    color=alt.Color("Type:N", scale=alt.Scale(
+        domain=["Normal", "Outlier"],
+        range=["gray", "#e45756"]
+    )),
+    size=alt.Size("Type:N", scale=alt.Scale(
+        domain=["Normal", "Outlier"],
+        range=[30, 80]
+    ), legend=None),
+    opacity=alt.condition(
+        alt.datum.Type == "Outlier",
+        alt.value(0.8),
+        alt.value(0.3),
+    ),
+)
+
+lines = alt.Chart({"values": fit_records}).mark_line(strokeWidth=2).encode(
+    x="x:Q",
+    y="fit:Q",
+    color=alt.Color("Model:N", scale=alt.Scale(
+        domain=["Unweighted", "Weighted"],
+        range=["#e45756", "#4c78a8"]
+    )),
+    strokeDash=alt.StrokeDash("Model:N", scale=alt.Scale(
+        domain=["Unweighted", "Weighted"],
+        range=[[4, 4], [0]]
+    )),
+)
+
+(points + lines).properties(
+    width=500, height=300,
+    title="Effect of observation weights on outlier robustness"
+)
 ```
 
 The weighted fit should produce a lower scale estimate and fewer effective degrees of freedom

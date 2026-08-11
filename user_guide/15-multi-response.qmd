@@ -120,6 +120,38 @@ print(f"Covariance matrix:\n{rc.covariance.round(4)}")
 print(f"\nCorrelation matrix:\n{rc.correlation.round(4)}")
 ```
 
+```{python}
+# Heatmap of the residual correlation matrix
+responses = model_corr.responses
+records = [
+    {"row": r, "col": c, "corr": float(rc.correlation[i, j])}
+    for i, r in enumerate(responses)
+    for j, c in enumerate(responses)
+]
+
+base = alt.Chart({"values": records})
+
+heatmap = base.mark_rect().encode(
+    x=alt.X("col:N", title=None),
+    y=alt.Y("row:N", title=None),
+    color=alt.Color(
+        "corr:Q",
+        scale=alt.Scale(scheme="redblue", domain=[-1, 1]),
+        title="Correlation",
+    ),
+)
+
+labels = base.mark_text(fontSize=12).encode(
+    x="col:N", y="row:N",
+    text=alt.Text("corr:Q", format=".3f"),
+    color=alt.condition(
+        alt.datum.corr > 0.5, alt.value("white"), alt.value("black")
+    ),
+)
+
+(heatmap + labels).properties(width=250, height=250, title="Residual correlation matrix")
+```
+
 ## Joint prediction
 
 For applications that need all responses in a single matrix (e.g., multivariate downstream

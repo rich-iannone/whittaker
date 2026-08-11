@@ -165,6 +165,31 @@ print(f"Decay=0.3 (recent dominates): {pred_decay:.2f}")
 print(f"Expected (recent data):      {2 * np.sin(np.pi / 2):.2f}")
 ```
 
+```{python}
+# Plot the predicted curves against the recent truth
+x_grid = np.linspace(0, 2 * np.pi, 100)
+pred_nd = sgam_nodecay.predict({"x": x_grid}).values
+pred_dc = sgam_decay.predict({"x": x_grid}).values
+recent_truth = 2 * np.sin(x_grid)
+
+plot_data = []
+for i in range(len(x_grid)):
+    plot_data.append({"x": float(x_grid[i]), "y": float(pred_nd[i]), "model": "No decay"})
+    plot_data.append({"x": float(x_grid[i]), "y": float(pred_dc[i]), "model": "Decay=0.3"})
+    plot_data.append({"x": float(x_grid[i]), "y": float(recent_truth[i]), "model": "Recent truth"})
+
+alt.Chart({"values": plot_data}).mark_line().encode(
+    x=alt.X("x:Q"),
+    y=alt.Y("y:Q"),
+    color=alt.Color("model:N"),
+    strokeDash=alt.condition(
+        alt.datum.model == "Recent truth",
+        alt.value([4, 4]),
+        alt.value([0])
+    ),
+).properties(width=500, height=300, title="Exponential decay: tracking distribution shift")
+```
+
 ::: {.callout-note}
 ## Choosing the decay rate
 
@@ -197,6 +222,19 @@ history = sgam.smoothing_history()
 print(f"Number of snapshots: {len(history)}")
 for snap in history[:3]:
     print(f"  n_obs={snap.n_obs}, batches={snap.n_batches}, edf={snap.edf_total:.1f}")
+```
+
+```{python}
+# Plot EDF convergence over batches
+edf_data = [
+    {"batch": i + 1, "edf": float(snap.edf_total)}
+    for i, snap in enumerate(history)
+]
+
+alt.Chart({"values": edf_data}).mark_line(point=True).encode(
+    x=alt.X("batch:Q", title="Batch number"),
+    y=alt.Y("edf:Q", title="EDF total"),
+).properties(width=400, height=250, title="EDF convergence over batches")
 ```
 
 ### Should I refit?

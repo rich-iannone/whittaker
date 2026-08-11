@@ -183,6 +183,40 @@ model_multi.fit(data_multi, method="REML")
 print(model_multi.summary())
 ```
 
+```{python}
+# Predicted vs. observed for the multi-predictor model
+preds_multi = model_multi.predict(data_multi)
+
+obs_vs_pred = [
+    {"observed": float(y[i]), "predicted": float(preds_multi.values[i])}
+    for i in range(len(y))
+]
+
+scatter_multi = alt.Chart({"values": obs_vs_pred}).mark_circle(
+    size=20, opacity=0.4, color="steelblue"
+).encode(
+    x=alt.X("observed:Q", title="Observed y"),
+    y=alt.Y("predicted:Q", title="Predicted y"),
+)
+
+# 1:1 reference line
+y_range = [float(min(y.min(), preds_multi.values.min())),
+           float(max(y.max(), preds_multi.values.max()))]
+ref_line = alt.Chart(
+    {"values": [{"v": y_range[0]}, {"v": y_range[1]}]}
+).mark_line(
+    color="gray", strokeDash=[4, 4], strokeWidth=1.5
+).encode(
+    x=alt.X("v:Q", title="Observed y"),
+    y=alt.Y("v:Q", title="Predicted y"),
+)
+
+(ref_line + scatter_multi).properties(
+    width=350, height=350,
+    title="Multi-predictor GAM: predicted vs. observed"
+)
+```
+
 The formula `"y ~ s(x1) + s(x2) + x3"` specifies:
 
 - `s(x1)`: a smooth function of `x1` (captures the sine wave)
@@ -212,6 +246,44 @@ model_pois.fit({"x": x, "y": y_counts.astype(float)}, method="REML")
 preds_pois = model_pois.predict({"x": x})
 print(f"Mean predicted count: {preds_pois.values.mean():.2f}")
 print(f"Mean observed count: {y_counts.mean():.2f}")
+```
+
+```{python}
+# Scatter of observed counts + fitted rate curve + true rate
+x_fine = np.linspace(0, 2 * np.pi, 200)
+preds_fine = model_pois.predict({"x": x_fine})
+true_rate = np.exp(0.5 + 0.8 * np.sin(x_fine))
+
+obs_counts = [
+    {"x": float(x[i]), "y": float(y_counts[i])} for i in range(len(x))
+]
+points_pois = alt.Chart({"values": obs_counts}).mark_circle(
+    size=15, opacity=0.3, color="steelblue"
+).encode(
+    x=alt.X("x:Q", title="x"),
+    y=alt.Y("y:Q", title="Count"),
+)
+
+fit_rate = [
+    {"x": float(x_fine[i]), "rate": float(preds_fine.values[i])}
+    for i in range(len(x_fine))
+]
+fitted_line = alt.Chart({"values": fit_rate}).mark_line(
+    color="firebrick", strokeWidth=2
+).encode(x="x:Q", y="rate:Q")
+
+true_rate_data = [
+    {"x": float(x_fine[i]), "rate": float(true_rate[i])}
+    for i in range(len(x_fine))
+]
+truth_line = alt.Chart({"values": true_rate_data}).mark_line(
+    color="gray", strokeDash=[4, 4], strokeWidth=1.5
+).encode(x="x:Q", y="rate:Q")
+
+(points_pois + fitted_line + truth_line).properties(
+    width=500, height=300,
+    title="Poisson GAM: fitted rate vs. true rate"
+)
 ```
 
 The Poisson family uses a log link, so the model is

@@ -362,6 +362,30 @@ print(model_gamma.summary())
 With the log link the model is $\log(\mu) = \beta_0 + f(x)$, so coefficients are interpretable as
 multiplicative effects on the response.
 
+### Visualizing the Gamma fit
+
+```{python}
+x_grid = np.linspace(0.5, 5, 300)
+preds_gamma = model_gamma.predict({"x": x_grid}, type="response")
+
+points_gamma = alt.Chart(
+    {"values": [{"x": float(x[i]), "y": float(y_gamma[i])} for i in range(n)]}
+).mark_circle(size=15, opacity=0.3, color="goldenrod").encode(
+    x=alt.X("x:Q", title="x"),
+    y=alt.Y("y:Q", title="y"),
+)
+
+line_gamma = alt.Chart(
+    {"values": [{"x": float(x_grid[i]), "fit": float(preds_gamma.values[i])}
+                for i in range(len(x_grid))]}
+).mark_line(color="firebrick", strokeWidth=2).encode(x="x:Q", y="fit:Q")
+
+(points_gamma + line_gamma).properties(
+    width=500, height=300,
+    title="Gamma GAM: fitted mean"
+)
+```
+
 ## Negative Binomial: overdispersed counts {#sec-nb}
 
 When count data exhibit more variability than the Poisson model allows (i.e., the variance exceeds
@@ -413,6 +437,30 @@ A ratio of variance to mean substantially greater than 1 is the hallmark of over
 Poisson assumption ($\text{Var} = \mu$) would underestimate standard errors here, leading to
 overconfident inference. The Negative Binomial family handles this correctly.
 
+### Visualizing the Negative Binomial fit
+
+```{python}
+x_grid = np.linspace(0, 5, 300)
+preds_nb = model_nb.predict({"x": x_grid}, type="response")
+
+points_nb = alt.Chart(
+    {"values": [{"x": float(x[i]), "y": float(y_nb[i])} for i in range(n)]}
+).mark_circle(size=15, opacity=0.3, color="teal").encode(
+    x=alt.X("x:Q", title="x"),
+    y=alt.Y("y:Q", title="Count"),
+)
+
+line_nb = alt.Chart(
+    {"values": [{"x": float(x_grid[i]), "fit": float(preds_nb.values[i])}
+                for i in range(len(x_grid))]}
+).mark_line(color="darkorange", strokeWidth=2).encode(x="x:Q", y="fit:Q")
+
+(points_nb + line_nb).properties(
+    width=500, height=300,
+    title="Negative Binomial GAM: fitted rate"
+)
+```
+
 ## Beta: proportions on (0, 1) {#sec-beta}
 
 When the response is a continuous proportion (e.g., vegetation cover, exam scores as fractions), the
@@ -447,6 +495,30 @@ model_beta = wk.GAM("y ~ s(x)", family=wk.Beta())
 model_beta.fit(data_beta, method="REML")
 
 print(model_beta.summary())
+```
+
+### Visualizing the Beta fit
+
+```{python}
+x_grid = np.linspace(0, 4, 300)
+preds_beta = model_beta.predict({"x": x_grid}, type="response")
+
+points_beta = alt.Chart(
+    {"values": [{"x": float(x[i]), "y": float(y_beta[i])} for i in range(n)]}
+).mark_circle(size=15, opacity=0.3, color="seagreen").encode(
+    x=alt.X("x:Q", title="x"),
+    y=alt.Y("y:Q", title="Proportion"),
+)
+
+line_beta = alt.Chart(
+    {"values": [{"x": float(x_grid[i]), "fit": float(preds_beta.values[i])}
+                for i in range(len(x_grid))]}
+).mark_line(color="darkviolet", strokeWidth=2).encode(x="x:Q", y="fit:Q")
+
+(points_beta + line_beta).properties(
+    width=500, height=300,
+    title="Beta GAM: fitted mean proportion"
+)
 ```
 
 ::: {.callout-warning}
@@ -510,6 +582,35 @@ print(model_tw.summary())
 ```{python}
 # Proportion of exact zeros
 print(f"Proportion of zeros: {(y_tw == 0).mean():.2%}")
+```
+
+### Visualizing the Tweedie fit
+
+```{python}
+x_grid = np.linspace(0, 5, 300)
+preds_tw = model_tw.predict({"x": x_grid}, type="response")
+
+points_tw = alt.Chart(
+    {"values": [{"x": float(x[i]), "y": float(y_tw[i]),
+                 "zero": "zero" if y_tw[i] == 0.0 else "positive"}
+                for i in range(n)]}
+).mark_circle(size=15, opacity=0.4).encode(
+    x=alt.X("x:Q", title="x"),
+    y=alt.Y("y:Q", title="y"),
+    color=alt.Color("zero:N", scale=alt.Scale(
+        domain=["zero", "positive"], range=["crimson", "steelblue"]
+    ), title="Value"),
+)
+
+line_tw = alt.Chart(
+    {"values": [{"x": float(x_grid[i]), "fit": float(preds_tw.values[i])}
+                for i in range(len(x_grid))]}
+).mark_line(color="firebrick", strokeWidth=2).encode(x="x:Q", y="fit:Q")
+
+(points_tw + line_tw).properties(
+    width=500, height=300,
+    title="Tweedie GAM: fitted mean with zero mass"
+)
 ```
 
 ::: {.callout-tip}
