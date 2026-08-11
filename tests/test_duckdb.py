@@ -14,7 +14,7 @@ from whittaker.families.poisson import Poisson
 @pytest.fixture
 def conn_with_sin_data():
     """DuckDB connection with a table of sin(x) + noise data."""
-    rng = np.random.default_rng(42)
+    rng = np.random.default_rng(23)
     n = 500
     x = np.linspace(0, 2 * np.pi, n)
     y = np.sin(x) + rng.normal(0, 0.2, n)
@@ -29,7 +29,7 @@ def conn_with_sin_data():
 @pytest.fixture
 def conn_with_multi_data():
     """DuckDB connection with multi-predictor data."""
-    rng = np.random.default_rng(42)
+    rng = np.random.default_rng(23)
     n = 400
     x1 = np.linspace(0, 2 * np.pi, n)
     x2 = rng.uniform(0, 1, n)
@@ -48,7 +48,7 @@ def conn_with_multi_data():
 @pytest.fixture
 def conn_with_poisson_data():
     """DuckDB connection with count data."""
-    rng = np.random.default_rng(42)
+    rng = np.random.default_rng(23)
     n = 400
     x = np.linspace(0, 3, n)
     y = rng.poisson(np.exp(0.5 * x))
@@ -139,7 +139,7 @@ class TestDuckDBGAMPredictions:
 
         new_data = {
             "x1": np.linspace(0, 2 * np.pi, 30),
-            "x2": np.random.default_rng(42).uniform(0, 1, 30),
+            "x2": np.random.default_rng(23).uniform(0, 1, 30),
         }
         pred = model.predict(new_data)
         assert pred.values.shape == (30,)
@@ -172,7 +172,7 @@ class TestDuckDBGAMAgreement:
         """DuckDBGAM should produce similar results to BigGAM on same data."""
         from whittaker.bam import BigGAM
 
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 500
         x = np.linspace(0, 2 * np.pi, n)
         y = np.sin(x) + rng.normal(0, 0.2, n)
@@ -194,7 +194,7 @@ class TestDuckDBGAMAgreement:
 class TestDuckDBGAMParquet:
     def test_fit_from_parquet(self, tmp_path):
         """Test reading directly from a Parquet file via DuckDB."""
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 300
         x = np.linspace(0, 2 * np.pi, n)
         y = np.sin(x) + rng.normal(0, 0.2, n)
