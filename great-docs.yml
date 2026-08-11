@@ -31,6 +31,17 @@ nav_icons:
     "Prediction and inference": telescope
     "Model diagnostics": stethoscope
     "Data input": database
+    "Shape constraints": lock
+    "Distributional regression (GAMLSS)": bar-chart-2
+    "Quantile regression": percent
+    "Conformal prediction": shield-check
+    "Causal inference": git-branch
+    "Streaming and online fitting": activity
+    "Multi-response models": columns-3
+    "Functional regression": wave-square
+    "Cross-validation": repeat
+    "Large datasets": database
+    "Serialization": save
 
 authors:
   - name: Richard Iannone
@@ -41,30 +52,248 @@ authors:
 
 # API Reference Structure
 # -----------------------
-# Populated as the API is implemented. Will uncomment each section as classes and
-# functions are implemented in the codebase.
-#
-# reference:
-#   - title: Core model
-#     desc: The main GAM interface.
-#     contents:
-#       - name: GAM
-#         members: true
-#
-#   - title: Smooth terms
-#     desc: Basis constructors for use inside a formula or term list.
-#     contents:
-#       - s
-#       - te
-#       - ti
-#
-#   - title: Response families
-#     desc: Distributions and link functions for the response variable.
-#     contents:
-#       - name: Gaussian
-#         members: true
-#
-#   - title: Utilities
-#     desc: Dataset loaders and helper functions.
-#     contents:
-#       - load_dataset
+
+reference:
+  - title: Core model
+    desc: The primary GAM interface for fitting, predicting, and inspecting models.
+    contents:
+      - name: GAM
+        members: true
+      - name: PredictionResult
+        members: true
+      - name: TermsPredictionResult
+        members: true
+      - name: GamCheckResult
+        members: true
+
+  - title: Formula
+    desc: Formula parsing and term specifications for model construction.
+    contents:
+      - name: Formula
+        members: true
+      - name: SmoothTerm
+        members: true
+      - name: LinearTerm
+        members: true
+      - name: InteractionTerm
+        members: true
+      - name: OffsetTerm
+        members: true
+      - parse_formula
+
+  - title: Response families
+    desc: >
+      Distributions and link functions for the response variable.
+      Each family specifies a conditional distribution and a link function
+      relating the linear predictor to the conditional mean.
+    contents:
+      - name: Family
+        members: true
+      - name: Gaussian
+        members: true
+      - name: Poisson
+        members: true
+      - name: Binomial
+        members: true
+      - name: Gamma
+        members: true
+      - name: NegativeBinomial
+        members: true
+      - name: Beta
+        members: true
+      - name: Tweedie
+        members: true
+      - name: TweedieEstimated
+        members: true
+      - tw
+      - name: InverseGaussian
+        members: true
+      - name: CoxPH
+        members: true
+      - name: OrderedCategorical
+        members: true
+      - name: Multinomial
+        members: true
+
+  - title: Distributional families (GAMLSS)
+    desc: >
+      Location-scale-shape families for distributional regression, where
+      multiple distribution parameters are modeled as smooth functions.
+    contents:
+      - name: GAMLSSFamily
+        members: true
+      - name: GaussianLS
+        members: true
+      - name: GammaLS
+        members: true
+      - name: BetaLS
+        members: true
+      - name: ZeroInflatedPoisson
+        members: true
+      - name: ZeroInflatedNegativeBinomial
+        members: true
+
+  - title: Distributional regression
+    desc: The GAMLSS fitting interface for distributional regression models.
+    contents:
+      - name: GAMLSS
+        members: true
+      - name: GAMLSSPrediction
+        members: true
+
+  - title: Smooth basis types
+    desc: >
+      Basis constructors for smooth terms. Each basis type can be specified
+      in a formula via `bs=` or constructed directly for advanced use.
+    contents:
+      - name: SmoothBasis
+        members: true
+      - name: TPRS
+        members: true
+      - name: CRS
+        members: true
+      - name: PSpline
+        members: true
+      - name: CyclicCRS
+        members: true
+      - name: CyclicPSpline
+        members: true
+      - name: ShrinkageTPRS
+        members: true
+      - name: ShrinkageCRS
+        members: true
+      - name: DuchonSpline
+        members: true
+      - name: GaussianProcess
+        members: true
+      - name: SoapFilm
+        members: true
+      - name: MRFBasis
+        members: true
+      - name: AdaptiveTPRS
+        members: true
+      - name: RandomEffectBasis
+        members: true
+      - name: FactorSmoothBasis
+        members: true
+      - name: TensorProductBasis
+        members: true
+      - name: TensorInteractionBasis
+        members: true
+      - name: TensorProductBasisT2
+        members: true
+
+  - title: Shape-constrained smooths
+    desc: Monotone, convex, and concave smooth basis types with built-in shape enforcement.
+    contents:
+      - name: MonotonePSpline
+        members: true
+      - name: ConvexPSpline
+        members: true
+
+  - title: Quantile regression
+    desc: Quantile GAMs with optional non-crossing constraints.
+    contents:
+      - name: QuantileGAM
+        members: true
+      - name: QuantileGAMResult
+        members: true
+      - name: QuantileFamily
+        members: true
+      - calibrate_sigma
+
+  - title: Conformal prediction
+    desc: Distribution-free prediction intervals via split, CV+, and jackknife+ conformal methods.
+    contents:
+      - conformal_fit
+      - conformal_coverage
+      - name: ConformalPredictor
+        members: true
+      - name: ConformalResult
+        members: true
+
+  - title: Causal inference
+    desc: >
+      Causal GAMs using double/debiased machine learning (DML),
+      heterogeneous treatment effect estimation (CATE), and mediation analysis.
+    contents:
+      - name: CausalGAM
+        members: true
+      - name: TreatmentEffect
+        members: true
+      - name: CATEResult
+        members: true
+      - mediation_analysis
+      - name: MediationResult
+        members: true
+
+  - title: Streaming and online GAMs
+    desc: Incremental fitting via sufficient statistics for data that arrives in batches.
+    contents:
+      - name: StreamingGAM
+        members: true
+      - name: StreamingSnapshot
+        members: true
+
+  - title: Multi-response GAMs
+    desc: Joint fitting of multiple response variables with optional residual correlation modeling.
+    contents:
+      - name: MultiResponseGAM
+        members: true
+      - name: MultiResponseResult
+        members: true
+      - name: ResidualCorrelation
+        members: true
+
+  - title: Functional regression
+    desc: Scalar-on-function regression where predictors include functional covariates (curves).
+    contents:
+      - name: FunctionalGAM
+        members: true
+      - name: FunctionalTerm
+        members: true
+      - name: CoefficientFunction
+        members: true
+
+  - title: Large datasets
+    desc: Scalable GAM fitting for datasets that exceed memory or benefit from parallel computation.
+    contents:
+      - name: BigGAM
+        members: true
+      - name: PolarsGAM
+        members: true
+      - name: DuckDBGAM
+        members: true
+
+  - title: Cross-validation
+    desc: K-fold cross-validation for GAMs with deviance, MSE, and MAE scoring.
+    contents:
+      - cross_validate
+      - name: CVResult
+        members: true
+
+  - title: scikit-learn integration
+    desc: GAM estimators compatible with the scikit-learn API for use in pipelines and grid search.
+    contents:
+      - name: GAMRegressor
+        members: true
+      - name: GAMClassifier
+        members: true
+
+  - title: Serialization
+    desc: Save and load fitted GAMs, and convert to/from mgcv-compatible dictionaries.
+    contents:
+      - save_gam
+      - load_gam
+      - from_mgcv_dict
+      - to_mgcv_dict
+
+  - title: Model matrix
+    desc: Low-level model matrix construction from formulas and data.
+    contents:
+      - build_model_matrix
+      - predict_matrix
+      - name: ModelMatrix
+        members: true
+      - name: SmoothInfo
+        members: true
