@@ -25,6 +25,7 @@ from whittaker.io import from_mgcv_dict, load_gam, save_gam, to_mgcv_dict
 from whittaker.model_matrix import ModelMatrix, build_model_matrix, predict_matrix
 from whittaker.duckdb import DuckDBGAM
 from whittaker.polars_streaming import PolarsGAM
+from whittaker.quantile_gam import QuantileGAM
 from whittaker.sklearn import GAMClassifier, GAMRegressor
 from whittaker.smooths import (
     CRS,
@@ -66,6 +67,7 @@ __all__ = [
     "NegativeBinomial",
     "PolarsGAM",
     "Poisson",
+    "QuantileGAM",
     "ModelMatrix",
     "PSpline",
     "InteractionTerm",
