@@ -33,6 +33,7 @@ from whittaker.families import (
     tw,
 )
 from whittaker.formula import Formula, InteractionTerm, LinearTerm, OffsetTerm, SmoothTerm
+from whittaker.functional import CoefficientFunction, FunctionalGAM, FunctionalTerm
 from whittaker.formula import parse as parse_formula
 from whittaker.gam import GAM
 from whittaker.io import from_mgcv_dict, load_gam, save_gam, to_mgcv_dict
@@ -78,6 +79,9 @@ __all__ = [
     "DuchonSpline",
     "Family",
     "Formula",
+    "FunctionalGAM",
+    "FunctionalTerm",
+    "CoefficientFunction",
     "GAM",
     "GAMClassifier",
     "GAMRegressor",
