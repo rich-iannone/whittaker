@@ -16,17 +16,15 @@ class NegativeBinomial(Family):
     The NB2 variance function is V(μ) = μ + μ²/θ, where θ controls overdispersion. As θ → ∞ the
     distribution converges to Poisson.
 
+    - Link: g(μ) = log(μ)
+    - Variance function: V(μ) = μ + μ²/θ
+    - Deviance: 2 Σ [y log(y/μ) − (y + θ) log((y + θ)/(μ + θ))]
+
     Parameters
     ----------
     theta:
         Initial overdispersion parameter (must be positive). Estimated during fitting via outer
         iteration unless held fixed.
-
-    For the Negative Binomial family:
-
-    - Link: g(μ) = log(μ)
-    - Variance function: V(μ) = μ + μ²/θ
-    - Deviance: 2 Σ [y log(y/μ) − (y + θ) log((y + θ)/(μ + θ))]
     """
 
     def __init__(self, theta: float = 1.0) -> None:
