@@ -84,7 +84,7 @@ class TestCalibrateSigma:
             tau=0.5,
             n_folds=3,
             sigma_values=_GRID,
-            seed=42,
+            seed=23,
         )
         s2 = calibrate_sigma(
             "y ~ s(x)",
@@ -92,6 +92,6 @@ class TestCalibrateSigma:
             tau=0.5,
             n_folds=3,
             sigma_values=_GRID,
-            seed=42,
+            seed=23,
         )
         assert s1 == s2
