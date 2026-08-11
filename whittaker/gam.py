@@ -1190,24 +1190,23 @@ class GAM:
     ) -> list:
         """Estimate derivatives of smooth terms with respect to a variable.
 
-        Uses central finite differences on the basis matrix with delta-method
-        standard errors.
+        Uses central finite differences on the basis matrix with delta-method standard errors.
 
         Parameters
         ----------
         variable:
             The covariate to differentiate with respect to.
         order:
-            Derivative order: ``1`` for first derivative (rate of change),
-            ``2`` for second derivative (curvature).
+            Derivative order: `1` for first derivative (rate of change), `2` for second derivative
+            (curvature).
         n_points:
             Number of evaluation points along the variable's range.
         level:
             Confidence level for the bands.
         eps:
-            Finite difference step size. If ``None``, chosen automatically.
+            Finite difference step size. If `None`, chosen automatically.
         unconditional:
-            If ``True``, use unconditional covariance (Marra & Wood 2012).
+            If `True`, use unconditional covariance (Marra & Wood 2012).
 
         Returns
         -------
@@ -1256,12 +1255,12 @@ class GAM:
         level:
             Confidence level for the bands.
         unconditional:
-            If ``True``, use unconditional covariance.
+            If `True`, use unconditional covariance.
 
         Returns
         -------
         list[MarginalEffectResult]
-            One result per smooth term per ``at`` combination.
+            One result per smooth term per `at` combination.
         """
         from whittaker.fitting.inference import marginal_effects
 
@@ -1289,22 +1288,21 @@ class GAM:
     ) -> list:
         """Compute pairwise contrasts between conditions.
 
-        Each pair is ``(condition1, condition2)`` where each condition is a dict
-        of covariate values. The contrast ``f(x|cond1) - f(x|cond2)`` is
-        evaluated over a grid of the focal variable.
+        Each pair is `(condition1, condition2)` where each condition is a dict of covariate values.
+        The contrast `f(x|cond1) - f(x|cond2)` is evaluated over a grid of the focal variable.
 
         Parameters
         ----------
         variable:
             The focal covariate (the x-axis for the contrast).
         pairs:
-            List of ``(cond1, cond2)`` dicts specifying the two conditions.
+            List of `(cond1, cond2)` dicts specifying the two conditions.
         n_points:
             Number of evaluation points.
         level:
             Confidence level for the bands.
         unconditional:
-            If ``True``, use unconditional covariance.
+            If `True`, use unconditional covariance.
 
         Returns
         -------
