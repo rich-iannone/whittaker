@@ -68,8 +68,8 @@ class TestCrossValidate:
         assert cv_good.cv_score < cv_bad.cv_score
 
     def test_deterministic_with_seed(self, gaussian_data):
-        r1 = cross_validate("y ~ s(x)", gaussian_data, n_folds=3, seed=42)
-        r2 = cross_validate("y ~ s(x)", gaussian_data, n_folds=3, seed=42)
+        r1 = cross_validate("y ~ s(x)", gaussian_data, n_folds=3, seed=23)
+        r2 = cross_validate("y ~ s(x)", gaussian_data, n_folds=3, seed=23)
         np.testing.assert_array_equal(r1.cv_scores, r2.cv_scores)
 
     def test_fold_scores_all_finite(self, gaussian_data):
