@@ -3,14 +3,13 @@
 from __future__ import annotations
 
 import numpy as np
-import pytest
 
 from whittaker.families.tweedie import Tweedie
 from whittaker.families.tweedie_estimated import TweedieEstimated, tw
 from whittaker.gam import GAM
 
 
-def _tweedie_data(p: float = 1.5, n: int = 500, seed: int = 42):
+def _tweedie_data(p: float = 1.5, n: int = 500, seed: int = 23):
     """Generate Tweedie data with known p for testing."""
     rng = np.random.default_rng(seed)
     x = np.linspace(0, 4, n)
