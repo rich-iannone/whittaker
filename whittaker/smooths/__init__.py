@@ -10,6 +10,7 @@ from whittaker.smooths.duchon import DuchonSpline
 from whittaker.smooths.factor_smooth import FactorSmoothBasis
 from whittaker.smooths.gp import GaussianProcess
 from whittaker.smooths.monotone import ConvexPSpline, MonotonePSpline
+from whittaker.smooths.mrf import MRFBasis
 from whittaker.smooths.pspline import PSpline
 from whittaker.smooths.random import RandomEffectBasis
 from whittaker.smooths.shrinkage import ShrinkageCRS, ShrinkageTPRS
@@ -31,6 +32,7 @@ __all__ = [
     "FactorSmoothBasis",
     "GaussianProcess",
     "MonotonePSpline",
+    "MRFBasis",
     "PSpline",
     "RandomEffectBasis",
     "ShrinkageCRS",
