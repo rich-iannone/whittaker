@@ -37,6 +37,7 @@ from whittaker.formula import parse as parse_formula
 from whittaker.gam import GAM
 from whittaker.io import from_mgcv_dict, load_gam, save_gam, to_mgcv_dict
 from whittaker.model_matrix import ModelMatrix, build_model_matrix, predict_matrix
+from whittaker.multi_response import MultiResponseGAM, MultiResponseResult, ResidualCorrelation
 from whittaker.polars_streaming import PolarsGAM
 from whittaker.quantile_gam import QuantileGAM
 from whittaker.sklearn import GAMClassifier, GAMRegressor
@@ -86,10 +87,13 @@ __all__ = [
     "MediationResult",
     "mediation_analysis",
     "MRFBasis",
+    "MultiResponseGAM",
+    "MultiResponseResult",
     "NegativeBinomial",
     "PolarsGAM",
     "Poisson",
     "QuantileGAM",
+    "ResidualCorrelation",
     "ModelMatrix",
     "PSpline",
     "InteractionTerm",
