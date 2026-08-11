@@ -6,6 +6,7 @@ from whittaker.families.base import Family
 from whittaker.families.beta import Beta
 from whittaker.families.beta_ls import BetaLS
 from whittaker.families.binomial import Binomial
+from whittaker.families.cox_ph import CoxPH
 from whittaker.families.gamlss_base import GAMLSSFamily
 from whittaker.families.gamma import Gamma
 from whittaker.families.gamma_ls import GammaLS
@@ -25,6 +26,7 @@ __all__ = [
     "Beta",
     "BetaLS",
     "Binomial",
+    "CoxPH",
     "Family",
     "GAMLSSFamily",
     "Gamma",
