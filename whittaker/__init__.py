@@ -6,6 +6,13 @@ from importlib.metadata import PackageNotFoundError, version
 
 from whittaker.bam import BigGAM
 from whittaker.calibration import calibrate_sigma
+from whittaker.causal import (
+    CATEResult,
+    CausalGAM,
+    MediationResult,
+    TreatmentEffect,
+    mediation_analysis,
+)
 from whittaker.conformal import (
     ConformalPredictor,
     ConformalResult,
@@ -57,6 +64,8 @@ __all__ = [
     "CVResult",
     "Beta",
     "Binomial",
+    "CausalGAM",
+    "CATEResult",
     "ConformalPredictor",
     "ConformalResult",
     "conformal_coverage",
@@ -73,6 +82,8 @@ __all__ = [
     "Gamma",
     "Gaussian",
     "GaussianProcess",
+    "MediationResult",
+    "mediation_analysis",
     "MRFBasis",
     "NegativeBinomial",
     "PolarsGAM",
@@ -86,6 +97,7 @@ __all__ = [
     "SmoothBasis",
     "SmoothTerm",
     "SoapFilm",
+    "TreatmentEffect",
     "TPRS",
     "tw",
     "build_model_matrix",
