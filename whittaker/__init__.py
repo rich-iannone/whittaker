@@ -21,7 +21,10 @@ from whittaker.families import (
 from whittaker.formula import Formula, InteractionTerm, LinearTerm, OffsetTerm, SmoothTerm
 from whittaker.formula import parse as parse_formula
 from whittaker.gam import GAM
+from whittaker.io import from_mgcv_dict, load_gam, save_gam, to_mgcv_dict
 from whittaker.model_matrix import ModelMatrix, build_model_matrix, predict_matrix
+from whittaker.duckdb import DuckDBGAM
+from whittaker.polars_streaming import PolarsGAM
 from whittaker.sklearn import GAMClassifier, GAMRegressor
 from whittaker.smooths import (
     CRS,
@@ -49,6 +52,7 @@ __all__ = [
     "Binomial",
     "CoxPH",
     "CRS",
+    "DuckDBGAM",
     "DuchonSpline",
     "Family",
     "Formula",
@@ -60,6 +64,7 @@ __all__ = [
     "GaussianProcess",
     "MRFBasis",
     "NegativeBinomial",
+    "PolarsGAM",
     "Poisson",
     "ModelMatrix",
     "PSpline",
@@ -72,6 +77,10 @@ __all__ = [
     "TPRS",
     "tw",
     "build_model_matrix",
+    "from_mgcv_dict",
+    "load_gam",
     "parse_formula",
     "predict_matrix",
+    "save_gam",
+    "to_mgcv_dict",
 ]

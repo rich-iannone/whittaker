@@ -1,4 +1,4 @@
-"""Inference for GAM terms: parametric Wald tests, smooth p-values, and concurvity."""
+"""Inference for GAM terms: parametric Wald tests, smooth p-values, concurvity, and diagnostics."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 
 import numpy as np
 from numpy.typing import NDArray
-from scipy.stats import chi2, norm
+from scipy.stats import chi2, norm, uniform
 from scipy.stats import f as f_dist
 from scipy.stats import t as t_dist
 
@@ -922,5 +922,222 @@ def k_check(
                 p_value=p_value,
             )
         )
+
+    return results
+
+
+# ---------------------------------------------------------------------------
+# Influence / leverage diagnostics
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class InfluenceResult:
+    """Observation-level influence diagnostics.
+
+    Attributes
+    ----------
+    hat_values:
+        Leverage (diagonal of the hat matrix), shape ``(n,)``.
+    cooks_distance:
+        Cook's distance for each observation, shape ``(n,)``.
+    """
+
+    hat_values: NDArray
+    cooks_distance: NDArray
+
+
+def influence(fit: FitResult, mm: ModelMatrix) -> InfluenceResult:
+    """Compute hat values and Cook's distance for each observation."""
+    X = mm.X
+    sp = fit.smoothing_params
+    W = _combined_weights(fit)
+
+    if W is not None:
+        sqrtW = np.sqrt(W)
+        Xw = X * sqrtW[:, np.newaxis]
+    else:
+        Xw = X
+
+    S_total = np.zeros((X.shape[1], X.shape[1]))
+    for lam, pen in zip(sp, mm.penalties):
+        S_total += lam * pen
+
+    A = Xw.T @ Xw + S_total
+    A = (A + A.T) * 0.5
+
+    eigvals, eigvecs = np.linalg.eigh(A)
+    tol = np.max(eigvals) * A.shape[0] * np.finfo(float).eps
+    eigvals_inv = np.zeros_like(eigvals)
+    keep = eigvals > tol
+    eigvals_inv[keep] = 1.0 / eigvals[keep]
+
+    A_inv = (eigvecs * eigvals_inv[np.newaxis, :]) @ eigvecs.T
+
+    H_diag = np.einsum("ij,jk,ik->i", Xw, A_inv, Xw)
+    H_diag = np.clip(H_diag, 0.0, 1.0)
+
+    resid = fit.residuals
+    p_eff = fit.edf_total
+    scale = fit.scale
+    denom = scale * (1.0 - H_diag) ** 2
+    denom = np.maximum(denom, np.finfo(float).eps)
+    cooks_d = resid**2 * H_diag / (p_eff * denom)
+
+    return InfluenceResult(hat_values=H_diag, cooks_distance=cooks_d)
+
+
+# ---------------------------------------------------------------------------
+# Randomized quantile residuals (Dunn & Smyth 1996)
+# ---------------------------------------------------------------------------
+
+
+def quantile_residuals(
+    fit: FitResult,
+    mm: ModelMatrix,
+    family: object,
+    *,
+    seed: int | None = None,
+) -> NDArray:
+    """Compute randomized quantile residuals.
+
+    For continuous families, the CDF at each observation should be uniform.
+    For discrete families, a random uniform on [F(y-1), F(y)] is used.
+    The result is transformed via the standard normal quantile function,
+    so properly specified models produce approximately N(0,1) residuals.
+    """
+    from scipy.stats import beta as beta_dist
+    from scipy.stats import gamma, nbinom, poisson
+
+    rng = np.random.default_rng(seed)
+    y = mm.response
+    mu = fit.fitted_values
+    scale = fit.scale
+
+    family_name = type(family).__name__
+
+    if family_name == "Gaussian":
+        u = norm.cdf(y, loc=mu, scale=np.sqrt(np.maximum(scale, 1e-20)))
+    elif family_name == "Poisson":
+        u_upper = poisson.cdf(y, mu)
+        u_lower = poisson.cdf(y - 1, mu)
+        u = rng.uniform(u_lower, u_upper)
+    elif family_name == "Binomial":
+        from scipy.stats import binom
+
+        u_upper = binom.cdf(y, 1, mu)
+        u_lower = binom.cdf(y - 1, 1, mu)
+        u = rng.uniform(u_lower, u_upper)
+    elif family_name == "NegativeBinomial":
+        theta = getattr(family, "theta", 1.0)
+        p_nb = theta / (theta + mu)
+        u_upper = nbinom.cdf(y, theta, p_nb)
+        u_lower = nbinom.cdf(y - 1, theta, p_nb)
+        u = rng.uniform(u_lower, u_upper)
+    elif family_name == "Gamma":
+        shape_param = 1.0 / max(scale, 1e-20)
+        gamma_scale = mu / shape_param
+        u = gamma.cdf(y, a=shape_param, scale=gamma_scale)
+    elif family_name == "Beta":
+        prec = 1.0 / max(scale, 1e-20)
+        a = mu * prec
+        b = (1.0 - mu) * prec
+        u = beta_dist.cdf(y, a, b)
+    else:
+        u = norm.cdf((y - mu) / np.sqrt(scale * np.maximum(family.variance(mu), 1e-10)))
+
+    u = np.clip(u, 1e-10, 1.0 - 1e-10)
+    return norm.ppf(u)
+
+
+# ---------------------------------------------------------------------------
+# Dispersion test
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class DispersionTestResult:
+    """Result of a dispersion test.
+
+    Attributes
+    ----------
+    dispersion:
+        Estimated dispersion ratio (should be ~1 for correctly specified Poisson/Binomial).
+    chi2_stat:
+        Chi-squared test statistic.
+    p_value:
+        Two-sided p-value.
+    """
+
+    dispersion: float
+    chi2_stat: float
+    p_value: float
+
+
+def dispersion_test(fit: FitResult, mm: ModelMatrix, family: object) -> DispersionTestResult:
+    """Test for overdispersion in Poisson or Binomial models."""
+    y = mm.response
+    mu = fit.fitted_values
+    n = len(y)
+    p_eff = fit.edf_total
+
+    v = family.variance(mu)
+    pearson_resid_sq = (y - mu) ** 2 / np.maximum(v, np.finfo(float).eps)
+
+    X2 = float(np.sum(pearson_resid_sq))
+    residual_df = n - p_eff
+    dispersion = X2 / residual_df if residual_df > 0 else X2 / n
+
+    p_value = float(chi2.sf(X2, df=max(residual_df, 1)))
+
+    return DispersionTestResult(
+        dispersion=dispersion,
+        chi2_stat=X2,
+        p_value=p_value,
+    )
+
+
+# ---------------------------------------------------------------------------
+# VIF for parametric terms
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class VIFResult:
+    """Variance inflation factor for a parametric term."""
+
+    term: str
+    vif: float
+
+
+def vif(mm: ModelMatrix) -> list[VIFResult]:
+    """Compute variance inflation factors for parametric (linear) terms.
+
+    VIF measures collinearity among the parametric predictors. Only applies to
+    models with 2+ parametric terms (excluding the intercept).
+    """
+    start = 1 if mm.has_intercept else 0
+    end = start + mm.n_parametric
+
+    if mm.n_parametric < 2:
+        return []
+
+    X_param = mm.X[:, start:end]
+    param_names = mm.column_names[start:end]
+
+    results = []
+    for j in range(X_param.shape[1]):
+        y_j = X_param[:, j]
+        X_others = np.delete(X_param, j, axis=1)
+        X_design = np.column_stack([np.ones(len(y_j)), X_others])
+
+        beta, _, _, _ = np.linalg.lstsq(X_design, y_j, rcond=None)
+        y_hat = X_design @ beta
+        ss_res = np.sum((y_j - y_hat) ** 2)
+        ss_tot = np.sum((y_j - y_j.mean()) ** 2)
+        r_sq = 1.0 - ss_res / max(ss_tot, np.finfo(float).eps)
+        vif_val = 1.0 / max(1.0 - r_sq, np.finfo(float).eps)
+
+        results.append(VIFResult(term=param_names[j], vif=vif_val))
 
     return results

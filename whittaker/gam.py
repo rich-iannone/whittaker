@@ -1119,6 +1119,65 @@ class GAM:
 
         return _check(self)
 
+    def influence(self) -> object:
+        """Compute hat values and Cook's distance for each observation.
+
+        Returns
+        -------
+        InfluenceResult
+            Object with ``hat_values`` and ``cooks_distance`` arrays.
+        """
+        from whittaker.fitting.inference import influence
+
+        self._check_fitted()
+        return influence(self._fit_result, self._model_matrix)
+
+    def quantile_residuals(self, *, seed: int | None = None) -> NDArray:
+        """Compute randomized quantile residuals (Dunn & Smyth 1996).
+
+        For a correctly specified model, these should be approximately standard normal.
+
+        Parameters
+        ----------
+        seed:
+            Random seed for the jittering step (discrete families).
+
+        Returns
+        -------
+        NDArray
+            Quantile residuals, shape ``(n,)``.
+        """
+        from whittaker.fitting.inference import quantile_residuals
+
+        self._check_fitted()
+        return quantile_residuals(self._fit_result, self._model_matrix, self._family, seed=seed)
+
+    def dispersion_test(self) -> object:
+        """Test for overdispersion in Poisson or Binomial models.
+
+        Returns
+        -------
+        DispersionTestResult
+            Object with ``dispersion``, ``chi2_stat``, and ``p_value``.
+        """
+        from whittaker.fitting.inference import dispersion_test
+
+        self._check_fitted()
+        return dispersion_test(self._fit_result, self._model_matrix, self._family)
+
+    def vif(self) -> list:
+        """Compute variance inflation factors for parametric (linear) terms.
+
+        Returns
+        -------
+        list[VIFResult]
+            One result per parametric term. Empty if fewer than 2 parametric terms.
+        """
+        from whittaker.fitting.inference import vif
+
+        self._check_fitted()
+        return vif(self._model_matrix)
+
     def _check_fitted(self) -> None:
         if not self._fitted:
             raise RuntimeError("This GAM has not been fitted yet. Call .fit(data) first.")
