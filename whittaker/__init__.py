@@ -50,6 +50,7 @@ from whittaker.smooths import (
     SmoothBasis,
     SoapFilm,
 )
+from whittaker.streaming import StreamingGAM, StreamingSnapshot
 
 try:
     __version__: str = version("whittaker")
@@ -97,6 +98,8 @@ __all__ = [
     "SmoothBasis",
     "SmoothTerm",
     "SoapFilm",
+    "StreamingGAM",
+    "StreamingSnapshot",
     "TreatmentEffect",
     "TPRS",
     "tw",
