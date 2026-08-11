@@ -3,16 +3,14 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
 
 import numpy as np
 import pytest
 
-from whittaker.families.binomial import Binomial
 from whittaker.families.gaussian import Gaussian
 from whittaker.families.negative_binomial import NegativeBinomial
 from whittaker.families.poisson import Poisson
-from whittaker.formula.terms import Formula, SmoothTerm
+from whittaker.formula.terms import SmoothTerm
 from whittaker.gam import GAM
 from whittaker.io import (
     _family_from_dict,
@@ -28,7 +26,7 @@ from whittaker.io import (
 
 @pytest.fixture
 def sin_data():
-    rng = np.random.default_rng(42)
+    rng = np.random.default_rng(23)
     x = np.linspace(0, 2 * np.pi, 200)
     y = np.sin(x) + rng.normal(0, 0.2, 200)
     return {"x": x, "y": y}
@@ -43,7 +41,7 @@ def fitted_gam(sin_data):
 
 @pytest.fixture
 def two_smooth_data():
-    rng = np.random.default_rng(42)
+    rng = np.random.default_rng(23)
     n = 200
     x1 = np.linspace(0, 2 * np.pi, n)
     x2 = rng.uniform(0, 1, n)
@@ -151,7 +149,7 @@ class TestSaveLoadGAM:
         np.testing.assert_allclose(pred_loaded.values, pred_orig.values, atol=1e-10)
 
     def test_poisson_roundtrip(self, tmp_path):
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         x = np.linspace(0, 3, 200)
         y = rng.poisson(np.exp(0.5 * x))
         data = {"x": x, "y": y.astype(float)}
