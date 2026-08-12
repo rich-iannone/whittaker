@@ -74,7 +74,7 @@ the linear predictor via `.linear_predictor`:
 ```{python}
 preds = model.predict(new_data)
 
-# .values is on the response scale; .linear_predictor is on the link scale
+# .values is on the response scale while .linear_predictor is on the link scale
 print(f"Response: {preds.values[:3].round(4)}")
 print(f"Linear predictor: {preds.linear_predictor[:3].round(4)}")
 ```
@@ -119,9 +119,9 @@ and the standard error is $\text{SE}(\hat\eta_*) = \sqrt{\mathbf{x}_*^\top V_\be
 
 ::: {.callout-note}
 These are **Bayesian** standard errors, not frequentist. They have good frequentist coverage
-properties (Nychka 1988; Wood 2006), but they include a component from the penalty that a purely
-frequentist SE would not. This is why the SEs are well-calibrated even at the boundaries of the data,
-where the smooth is partially identified by the penalty.
+properties (Nychka 1988, Wood 2006), but they include a component from the penalty that a purely
+frequentist SE would not. This is why the SEs are well-calibrated even at the boundaries of the
+data, where the smooth is partially identified by the penalty.
 :::
 
 ### Unconditional standard errors
