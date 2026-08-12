@@ -1,4 +1,4 @@
-"""Quantile regression family via the Extended Log-F (ELF) loss.
+r"""Quantile regression family via the Extended Log-F (ELF) loss.
 
 Implements the smooth quantile loss from Fasiolo et al. (2021) "Fast calibrated additive quantile
 regression." The ELF loss is a smooth approximation to the pinball/check loss that fits within the
@@ -32,15 +32,82 @@ def _elf_d2(r: NDArray, sigma: float) -> NDArray:
 
 
 class QuantileFamily(Family):
-    """Quantile regression via the Extended Log-F (ELF) pseudo-family.
+    r"""Quantile regression via the Extended Log-F (ELF) pseudo-family.
+
+    `QuantileFamily` fits a single conditional quantile `tau` of the response — for example the
+    median (`tau=0.5`) or the 90th percentile (`tau=0.9`) — rather than the conditional mean
+    targeted by families such as `Gaussian` or `Gamma`. This is useful whenever the object of
+    interest is not the average behavior of the response but a specific point in its
+    distribution, e.g. modeling the upper tail of a skewed cost distribution, or building
+    prediction bands by fitting several quantiles (`tau` values) side by side. Rather than the
+    non-smooth pinball ("check") loss used by classical quantile regression, Whittaker uses the
+    smooth Extended Log-F (ELF) approximation of Fasiolo et al. (2021), which is differentiable
+    and therefore fits within the standard P-IRLS loop via a custom `irls_update`. To fit
+    several quantiles jointly with a shared smoothness structure, fit one `QuantileFamily` per
+    `tau` and compare/combine the resulting models, or see `ConformalPredictor` for
+    distribution-free coverage guarantees around a fitted mean model.
 
     Parameters
     ----------
-    tau:
-        Quantile level in `(0, 1)`. Default `0.5` (median regression).
-    sigma:
-        Bandwidth/learning rate controlling the smoothness of the loss approximation. Smaller values
-        give a sharper approximation to the pinball loss. The default is `1.0`.
+    tau : float, default=0.5
+        Quantile level to estimate, in `(0, 1)`. `tau=0.5` corresponds to median regression;
+        smaller values target lower quantiles and larger values target upper quantiles.
+    sigma : float, default=1.0
+        Bandwidth (smoothing) parameter controlling how closely the ELF loss approximates the
+        non-smooth pinball loss. Smaller values give a sharper, more faithful approximation to
+        the pinball loss (and to the check-function optimum) but a less smooth optimization
+        surface; larger values give a smoother but more biased approximation. `sigma` may be
+        adjusted after construction via the `sigma` property, e.g. to anneal it across fitting
+        iterations.
+
+    Notes
+    -----
+    `QuantileFamily` has no meaningful link or variance function in the usual GLM sense — `link`
+    and `link_inverse` are the identity on `eta` — because fitting instead minimizes the ELF loss
+    directly. For a residual `r = y - mu`, the ELF loss is
+
+    $$
+    \rho_{\tau,\sigma}(r) = \tau r + \sigma \log\!\left(1 + e^{-r/\sigma}\right),
+    $$
+
+    which converges to the pinball loss
+    $\rho_\tau(r) = \tau r \, \mathbb{1}[r \ge 0] - (1-\tau) r \, \mathbb{1}[r < 0]$ as
+    $\sigma \to 0$. Its first and second derivatives with respect to `mu`,
+
+    $$
+    \frac{\partial \rho}{\partial \mu} = -\left[\tau - 1 + \operatorname{expit}(r/\sigma)\right],
+    \qquad
+    \frac{\partial^2 \rho}{\partial \mu^2} = \frac{1}{\sigma}\, s (1 - s), \quad
+    s = \operatorname{expit}(r/\sigma),
+    $$
+
+    supply the working response `z` and working weight `W` used by the custom `irls_update`. The
+    reported "deviance" is `2 * sum(ELF loss)`, so that it reduces to twice the usual pinball
+    loss in the limit `sigma -> 0`.
+
+    Examples
+    --------
+    Fit the 10th, 50th, and 90th percentile curves of a heteroscedastic response:
+
+    ```{python}
+    import numpy as np
+    import whittaker as wk
+
+    rng = np.random.default_rng(0)
+    n = 300
+    x = np.linspace(0, 2 * np.pi, n)
+    mu = np.sin(x)
+    noise_scale = 0.2 + 0.3 * np.abs(np.cos(x))
+    y = mu + rng.normal(0, noise_scale, n)
+
+    data = {"x": x, "y": y}
+
+    for tau in (0.1, 0.5, 0.9):
+        model = wk.GAM("y ~ s(x)", family=wk.QuantileFamily(tau=tau))
+        model.fit(data, method="REML")
+        print(f"tau={tau}:")
+        print(model.summary())
+    ```
     """
 
     def __init__(self, tau: float = 0.5, sigma: float = 1.0) -> None:
