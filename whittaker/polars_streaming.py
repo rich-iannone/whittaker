@@ -87,33 +87,77 @@ def _count_lazy(lf) -> int:
 
 
 class PolarsGAM(BigGAM):
-    """GAM that reads data from Polars LazyFrames or file paths.
+    r"""GAM that reads data from Polars LazyFrames, DataFrames, or files.
 
-    Data is collected via Polars' streaming engine and the model is fit using discretized basis
-    evaluation (same as `BigGAM`), so the full design matrix is never materialized.
+    `PolarsGAM` extends `~whittaker.bam.BigGAM` with a data-loading layer built on Polars, so it
+    can source data from an in-memory Polars `DataFrame`/`LazyFrame` or directly from a file on
+    disk (CSV, Parquet, IPC/Arrow, or NDJSON), without requiring the caller to materialize the
+    whole dataset into a `dict` of NumPy arrays first. File paths are opened lazily (`pl.scan_*`),
+    and the resulting `LazyFrame` is collected using Polars' streaming query engine
+    (`collect(streaming=True)`), which evaluates the query plan incrementally rather than loading
+    the entire source at once. The collected frame is then walked in `chunk_size`-row slices
+    (`iter_slices`) and each column is converted to a NumPy array and concatenated, producing the
+    same `dict[str, numpy.ndarray]` that `~whittaker.gam.GAM.fit` and `~whittaker.bam.BigGAM.fit`
+    expect. Fitting itself then proceeds exactly as in `BigGAM`: covariates are discretized to at
+    most `n_discrete` unique values per smooth, and the design matrix is never materialized.
+
+    Use `PolarsGAM` when the data already lives in Polars, or on disk in a Polars-readable format,
+    and you want to avoid a manual load-then-convert step — particularly for datasets in the
+    1M-100M row range where Polars' streaming engine keeps peak memory bounded during the read.
+    For SQL-native sources or datasets that are more naturally expressed as a database query
+    (joins, filters, aggregations), see `~whittaker.duckdb.DuckDBGAM` instead.
+
+    Requires the `polars` package (install via `pip install whittaker[polars]`).
 
     Parameters
     ----------
-    formula:
-        Model formula (same as `~whittaker.gam.GAM`).
-    family:
-        Response distribution family.
-    n_discrete:
-        Number of discretization grid points per covariate.
-    chunk_size:
-        Number of rows per chunk when iterating the collected DataFrame.
+    formula : str or Formula
+        Model formula as a string (e.g. `"y ~ s(x1) + s(x2) + x3"`), or an already-parsed `Formula`
+        object. Same syntax as `~whittaker.gam.GAM`.
+    family : Family, optional
+        Response distribution family, e.g. `Gaussian()`, `Binomial()`, `Poisson()`, `Gamma()`, or
+        `Tweedie()`. Defaults to `Gaussian()`.
+    n_discrete : int
+        Maximum number of unique representative values per covariate used when discretizing
+        smooth terms (see `~whittaker.bam.BigGAM`). Defaults to `200`.
+    chunk_size : int
+        Number of rows collected per slice when converting the source into NumPy arrays. Smaller
+        values reduce peak memory during the Polars-to-NumPy conversion step at the cost of more
+        Python-level overhead; larger values reduce overhead but require more memory per slice.
+        Defaults to `100_000`.
 
     Examples
     --------
-    >>> import polars as pl
-    >>> model = PolarsGAM("y ~ s(x1) + s(x2)")
-    >>> model.fit(pl.scan_parquet("large_dataset.parquet"))
-    >>> predictions = model.predict(new_data)
+    ```{python}
+    import numpy as np
+    import polars as pl
+    from whittaker.polars_streaming import PolarsGAM
 
-    Or from a file path directly:
+    rng = np.random.default_rng(0)
+    n = 5_000
+    x1 = rng.uniform(0, 1, n)
+    x2 = rng.uniform(0, 1, n)
+    y = np.sin(2 * np.pi * x1) + x2**2 + rng.normal(scale=0.2, size=n)
 
-    >>> model = PolarsGAM("y ~ s(x)")
-    >>> model.fit("data.parquet")
+    df = pl.DataFrame({"x1": x1, "x2": x2, "y": y})
+
+    model = PolarsGAM("y ~ s(x1) + s(x2)", n_discrete=100, chunk_size=1_000)
+    model.fit(df.lazy())
+    print(model.summary())
+    ```
+
+    A file path can be passed directly instead of a `DataFrame`/`LazyFrame` — `PolarsGAM` infers
+    the format from the extension and scans it lazily:
+
+    ```{python}
+    #| eval: false
+    model = PolarsGAM("y ~ s(x)")
+    model.fit("large_dataset.parquet")
+    ```
+
+    Fitting from an actual multi-gigabyte file requires `pip install whittaker[polars]` and enough
+    disk I/O bandwidth to stream the file; the in-memory example above is kept small so it runs
+    quickly, but the same code path scales to files with tens of millions of rows.
     """
 
     def __init__(
@@ -149,22 +193,37 @@ class PolarsGAM(BigGAM):
     ) -> PolarsGAM:
         """Fit the GAM from a Polars source.
 
+        Converts `source` to a Polars `LazyFrame`, collects it via Polars' streaming engine in
+        `chunk_size`-row slices, and combines the result into `dict[str, numpy.ndarray]` before
+        delegating to `~whittaker.bam.BigGAM`'s discretized fitting (see the class docstring for
+        details on the discretization and cross-product accumulation).
+
         Parameters
         ----------
-        source:
-            A Polars `LazyFrame`, `DataFrame`, or a file path (string or `Path`) to a Parquet, CSV,
-            IPC, or NDJSON file. File paths are scanned lazily.
-        smoothing_params:
-            Fixed smoothing parameters. If `None`, selected automatically.
-        method:
-            Smoothing selection method: `"fREML"` (default), `"REML"`, `"ML"`, or `"GCV"`.
-        select:
-            If `True`, enable double-penalty variable selection.
+        source : polars.LazyFrame or polars.DataFrame or str or pathlib.Path
+            The data source. A Polars `LazyFrame` is used as-is; a `DataFrame` is converted with
+            `.lazy()`; a file path (string or `Path`) is scanned lazily based on its extension —
+            `.parquet` (`scan_parquet`), `.csv` (`scan_csv`), `.ipc`/`.arrow` (`scan_ipc`), or
+            `.ndjson`/`.jsonl` (`scan_ndjson`). Any other type or unrecognized extension raises
+            `TypeError` or `ValueError` respectively.
+        smoothing_params : list of float, optional
+            Fixed smoothing parameters `lambda_j`, one per smooth term, in formula order. If
+            `None` (the default), smoothing parameters are selected automatically according to
+            `method`.
+        method : str
+            Criterion used to select smoothing parameters when `smoothing_params` is `None`. One
+            of `"fREML"` (default), `"REML"`, `"ML"`, or `"GCV"`. See `~whittaker.gam.GAM.fit` for
+            a description of each criterion.
+        select : bool
+            If `True`, add an extra penalty on each smooth's null space so the term can be shrunk
+            to exactly zero (double-penalty selection). Defaults to `False`.
+        **kwargs
+            Reserved for future keyword arguments; currently unused.
 
         Returns
         -------
         PolarsGAM
-            Returns `self` for method chaining.
+            Returns `self` for method chaining, e.g. `model = PolarsGAM("y ~ s(x)").fit(source)`.
         """
         lf = _to_lazy(source)
         self._n_rows = _count_lazy(lf)
