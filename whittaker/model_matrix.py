@@ -438,20 +438,46 @@ class ModelMatrix:
 
     @property
     def n_obs(self) -> int:
-        """Number of observations."""
+        """Number of observations used to build the design matrix.
+
+        Returns
+        -------
+        int
+            The number of rows of `X`, i.e. `X.shape[0]`.
+        """
         return self.X.shape[0]
 
     @property
     def n_coefs(self) -> int:
-        """Total number of model coefficients (columns of `X`)."""
+        """Total number of model coefficients.
+
+        Counts every column of `X`: the intercept (if present), all parametric
+        (linear/interaction) columns, and every basis function of every smooth term after
+        identifiability constraints have been applied.
+
+        Returns
+        -------
+        int
+            The number of columns of `X`, i.e. `X.shape[1]`.
+        """
         return self.X.shape[1]
 
     @property
     def penalty_matrix(self) -> NDArray:
-        """Combined penalty `S_total = sum(S_j)` (unweighted by λ).
+        r"""Combined penalty `S_total = sum(S_j)` (unweighted by `lambda`).
 
-        Useful as a quick reference; the fitting engine should use `penalties` with per-smooth λ
-        weights.
+        Sums every entry of `penalties` element-wise into a single `(n_coefs, n_coefs)` matrix,
+        without applying any per-smooth smoothing parameter. This is a convenience for inspecting
+        the overall penalty structure; it is *not* what the fitting engine (`~whittaker.pirls.pirls_fit`)
+        actually optimizes against, since each term's contribution should be weighted by its own
+        `lambda_j` before being summed. Use `penalties` directly, combined with the fitted
+        smoothing parameters, for anything that needs the weighted penalty.
+
+        Returns
+        -------
+        numpy.ndarray
+            An `(n_coefs, n_coefs)` matrix, or an all-zeros matrix of that shape if there are no
+            penalized (smooth) terms.
         """
         if not self.penalties:
             return np.zeros((self.n_coefs, self.n_coefs))
