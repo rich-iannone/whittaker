@@ -275,7 +275,20 @@ class FactorSmoothBasis(SmoothBasis):
         return self.penalty_matrices()[0]
 
     def null_space_dimension(self) -> int:
-        """Return `0`: every coefficient is penalized by the combination of penalties."""
+        """Return the dimension of the basis's unpenalized null space.
+
+        The factor-smooth basis has no unpenalized null space: the shared wiggliness penalty
+        `I_L ⊗ S_marginal` covers the range space of the marginal penalty in every level, and the
+        `M` additional null-space (random-intercept/slope) penalties returned by
+        `penalty_matrices()` cover exactly the directions the wiggliness penalty leaves
+        unpenalized. Since every basis coefficient is touched by at least one penalty, this is
+        always `0`.
+
+        Returns
+        -------
+        int
+            Always `0`.
+        """
         return 0
 
     def identifiability_constraints(self) -> NDArray | None:
@@ -289,33 +302,85 @@ class FactorSmoothBasis(SmoothBasis):
 
     @property
     def n_basis(self) -> int:
-        """Total number of basis functions, `n_levels * k_marginal`."""
+        """Total number of basis functions.
+
+        Equal to `n_levels * k_marginal`: the marginal basis dimension repeated once per factor
+        level, since the full basis matrix is block-diagonal by level.
+
+        Returns
+        -------
+        int
+            Total basis dimension.
+
+        Raises
+        ------
+        RuntimeError
+            If accessed before `fit()` has been called.
+        """
         if not self._fitted:
             raise RuntimeError("n_basis is not available until fit() is called.")
         return self._n_levels * self._k_marginal
 
     @property
     def k(self) -> int:
-        """Requested (before `fit()`) or actual (after `fit()`) marginal basis dimension per level."""
+        """Marginal basis dimension per factor level.
+
+        Before `fit()` is called, returns the requested value passed to `__init__` (which may be
+        `-1` to defer to the marginal basis's own default). After `fit()`, returns the marginal
+        basis's actual, fitted dimension.
+
+        Returns
+        -------
+        int
+            Requested or fitted marginal basis dimension.
+        """
         if self._fitted:
             return self._k_marginal
         return self._k_request
 
     @property
     def levels(self) -> NDArray:
-        """Sorted array of unique factor levels retained during `fit()`."""
+        """Sorted array of unique factor levels retained during `fit()`.
+
+        Each level corresponds to one diagonal block of the basis matrix and one column range of
+        `k_marginal` coefficients.
+
+        Returns
+        -------
+        NDArray
+            Copy of the sorted, unique factor levels seen during `fit()`.
+        """
         self._check_fitted()
         return self._levels.copy()
 
     @property
     def n_levels(self) -> int:
-        """Number of factor levels."""
+        """Number of factor (grouping) levels seen during `fit()`.
+
+        Determines the number of diagonal blocks in the basis matrix and, together with
+        `k_marginal`, the total basis dimension `n_basis`.
+
+        Returns
+        -------
+        int
+            Number of distinct factor levels, always `>= 2`.
+        """
         self._check_fitted()
         return self._n_levels
 
     @property
     def marginal_basis(self) -> SmoothBasis:
-        """The fitted marginal basis object shared (in form) across all levels."""
+        """The fitted marginal basis object shared, in form, across all levels.
+
+        This single fitted basis (e.g. a `TPRS`, `CRS`, or `PSpline` instance) supplies the shape
+        of the per-level smooths; it is evaluated once per level, each time multiplied by that
+        level's indicator, to build the block-diagonal `basis_matrix()`.
+
+        Returns
+        -------
+        SmoothBasis
+            The fitted marginal basis instance.
+        """
         self._check_fitted()
         return self._marginal
 
