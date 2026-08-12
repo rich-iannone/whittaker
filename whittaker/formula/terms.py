@@ -215,7 +215,20 @@ class Formula:
     intercept: bool = True
 
     def required_columns(self) -> list[str]:
-        """Return every column name referenced in the formula, deduplicated."""
+        """Return every data column name referenced by the formula, in first-seen order.
+
+        Walks the response name and every term, collecting the response, each `LinearTerm.variable`,
+        each `SmoothTerm`'s `variables` (and its `by` column, if any), and both sides of each
+        `InteractionTerm`. `OffsetTerm` is skipped because its `expression` may be an arbitrary
+        expression string rather than a bare column name. Names are deduplicated while preserving
+        the order in which they were first encountered.
+
+        Returns
+        -------
+        list of str
+            Column names that must be present in a data dictionary passed to
+            `~whittaker.model_matrix.build_model_matrix`.
+        """
         seen: dict[str, None] = {self.response: None}
         for term in self.terms:
             if isinstance(term, LinearTerm):
