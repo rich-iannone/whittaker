@@ -83,34 +83,141 @@ class NegativeBinomial(Family):
 
     @property
     def theta(self) -> float:
+        """Overdispersion (size) parameter `theta` of the NB2 distribution.
+
+        Smaller values imply greater overdispersion relative to Poisson; larger values make
+        the distribution approach Poisson as `theta -> infinity`. This value is used by
+        `variance`, `unit_deviance`, `log_likelihood`, and `simulate`.
+        """
         return self._theta
 
     @theta.setter
     def theta(self, value: float) -> None:
+        """Set the overdispersion parameter `theta`.
+
+        Parameters
+        ----------
+        value
+            New value for `theta`. Must be positive.
+
+        Raises
+        ------
+        ValueError
+            If `value` is not positive.
+        """
         if value <= 0:
             raise ValueError(f"theta must be positive, got {value}.")
         self._theta = float(value)
 
     def link(self, mu: NDArray) -> NDArray:
+        r"""Apply the log link: $\eta = \log(\mu)$.
+
+        Parameters
+        ----------
+        mu
+            Conditional mean values, shape `(n,)`. Must be positive.
+
+        Returns
+        -------
+        NDArray
+            Linear predictor values $\eta = \log(\mu)$, shape `(n,)`.
+        """
         return np.log(np.maximum(mu, _EPS))
 
     def link_inverse(self, eta: NDArray) -> NDArray:
+        r"""Apply the inverse log link: $\mu = e^{\eta}$.
+
+        The linear predictor is clipped to `[-30, 30]` before exponentiating to guard against
+        overflow while fitting.
+
+        Parameters
+        ----------
+        eta
+            Linear predictor values, shape `(n,)`.
+
+        Returns
+        -------
+        NDArray
+            Conditional mean values $\mu = e^{\eta}$, shape `(n,)`.
+        """
         return np.exp(np.clip(eta, -30.0, 30.0))
 
     def link_derivative(self, mu: NDArray) -> NDArray:
+        r"""Derivative of the log link: $g'(\mu) = 1/\mu$.
+
+        Parameters
+        ----------
+        mu
+            Conditional mean values, shape `(n,)`.
+
+        Returns
+        -------
+        NDArray
+            Derivative values $1/\mu$, shape `(n,)`.
+        """
         return 1.0 / np.maximum(mu, _EPS)
 
     def variance(self, mu: NDArray) -> NDArray:
+        r"""NB2 variance function: $V(\mu) = \mu + \mu^2/\theta$.
+
+        The variance always exceeds the mean by the extra term $\mu^2/\theta$, which vanishes
+        as `theta -> infinity` (recovering the Poisson variance `V(mu) = mu`).
+
+        Parameters
+        ----------
+        mu
+            Conditional mean values, shape `(n,)`.
+
+        Returns
+        -------
+        NDArray
+            Variance values $\mu + \mu^2/\theta$, shape `(n,)`.
+        """
         mu_c = np.maximum(mu, _EPS)
         return mu_c + mu_c**2 / self._theta
 
     def deviance(self, y: NDArray, mu: NDArray, *, weights: NDArray | None = None) -> float:
+        r"""Total NB2 deviance, the (weighted) sum of `unit_deviance`.
+
+        Parameters
+        ----------
+        y
+            Observed response values (counts), shape `(n,)`.
+        mu
+            Fitted conditional mean values, shape `(n,)`.
+        weights
+            Optional prior weights, shape `(n,)`.
+
+        Returns
+        -------
+        float
+            The total (weighted) deviance.
+        """
         d = self.unit_deviance(y, mu)
         if weights is not None:
             d = weights * d
         return float(np.sum(d))
 
     def unit_deviance(self, y: NDArray, mu: NDArray) -> NDArray:
+        r"""Per-observation NB2 deviance contributions.
+
+        Computes
+        $d_i = 2 \left[ y_i \log(y_i/\hat\mu_i)
+        - (y_i + \theta) \log\!\left(\frac{y_i+\theta}{\hat\mu_i+\theta}\right) \right]$,
+        with the usual convention that the $y_i \log(\cdot)$ term vanishes when $y_i = 0$.
+
+        Parameters
+        ----------
+        y
+            Observed response values (counts), shape `(n,)`.
+        mu
+            Fitted conditional mean values, shape `(n,)`.
+
+        Returns
+        -------
+        NDArray
+            Per-observation deviance contributions, shape `(n,)`.
+        """
         mu_c = np.maximum(mu, _EPS)
         theta = self._theta
         dev = np.empty_like(y, dtype=float)
@@ -123,6 +230,27 @@ class NegativeBinomial(Family):
     def log_likelihood(
         self, y: NDArray, mu: NDArray, scale: float, *, weights: NDArray | None = None
     ) -> float:
+        r"""NB2 log-likelihood evaluated using the current `theta`.
+
+        The `scale` argument is accepted for interface compatibility but ignored; the
+        overdispersion is instead governed by `theta` (see `scale_known`).
+
+        Parameters
+        ----------
+        y
+            Observed response values (counts), shape `(n,)`.
+        mu
+            Fitted conditional mean values, shape `(n,)`.
+        scale
+            Ignored.
+        weights
+            Optional prior weights, shape `(n,)`.
+
+        Returns
+        -------
+        float
+            The total log-likelihood.
+        """
         from scipy.special import gammaln
 
         mu_c = np.maximum(mu, _EPS)
@@ -140,15 +268,53 @@ class NegativeBinomial(Family):
 
     @property
     def scale_known(self) -> bool:
+        """Whether the dispersion parameter is fixed. Always `True` for NegativeBinomial.
+
+        The NB2 dispersion is governed entirely by `theta` rather than a separate scale
+        parameter estimated during P-IRLS, so the scale is treated as fixed at `1`. `theta`
+        itself is refined by an outer iteration around P-IRLS rather than the usual scale
+        estimation.
+        """
         return True
 
     def simulate(self, mu: NDArray, scale: float, rng: object) -> NDArray:
+        """Simulate NB2-distributed response values with mean `mu` and the current `theta`.
+
+        Parameters
+        ----------
+        mu
+            Mean (fitted values), shape `(n,)`.
+        scale
+            Ignored; overdispersion is governed by `theta`.
+        rng
+            A `numpy.random.Generator` instance.
+
+        Returns
+        -------
+        NDArray
+            Simulated response values, shape `(n,)`.
+        """
         mu_c = np.maximum(mu, _EPS)
         theta = self._theta
         p = theta / (mu_c + theta)
         return rng.negative_binomial(theta, p).astype(float)
 
     def initialize(self, y: NDArray) -> NDArray:
+        """Starting values for `mu`: `y` nudged away from zero.
+
+        Since the log link requires strictly positive `mu`, small or zero counts are pushed
+        away from zero to avoid `log(0)` on the first P-IRLS iteration.
+
+        Parameters
+        ----------
+        y
+            Observed response values (counts), shape `(n,)`.
+
+        Returns
+        -------
+        NDArray
+            Starting values for `mu`, shape `(n,)`.
+        """
         return np.maximum(y, 0.1) + 0.1
 
     def __repr__(self) -> str:
