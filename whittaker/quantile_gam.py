@@ -195,22 +195,63 @@ class QuantileGAM:
 
     @property
     def formula(self) -> Formula:
+        """The parsed model formula shared by every quantile level.
+
+        Returns
+        -------
+        Formula
+            The `Formula` object built from the `formula` string passed to `__init__`, used
+            unchanged (only the loss function differs) to fit each quantile's `GAM`.
+        """
         return self._formula
 
     @property
     def quantiles(self) -> list[float]:
+        """Quantile levels fitted by this model, in ascending order.
+
+        Returns
+        -------
+        list[float]
+            Sorted copy of the `tau` values passed to `__init__`, each in `(0, 1)`.
+        """
         return list(self._quantiles)
 
     @property
     def sigma(self) -> float:
+        """Bandwidth of the smoothed pinball (ELF) loss used for every quantile.
+
+        Returns
+        -------
+        float
+            The `sigma` value passed to `__init__`. Smaller values approximate the true
+            quantile check loss more closely but can slow IRLS convergence.
+        """
         return self._sigma
 
     @property
     def non_crossing(self) -> bool:
+        """Whether the non-crossing constraint is enforced.
+
+        Returns
+        -------
+        bool
+            `True` if fitted (and predicted) quantile curves are corrected via isotonic
+            projection so they never cross; `False` if quantiles are fit and predicted
+            completely independently.
+        """
         return self._non_crossing
 
     @property
     def is_fitted(self) -> bool:
+        """Whether `fit()` has been called successfully.
+
+        Returns
+        -------
+        bool
+            `True` once every quantile's `GAM` has been fit, `False` otherwise. Other methods
+            such as `predict()`, `coverage()`, and `summary()` raise `RuntimeError` when this is
+            `False`.
+        """
         return self._fitted
 
     def fit(
@@ -443,7 +484,17 @@ class QuantileGAM:
         return violations / n
 
     def summary(self) -> str:
-        """Return a text summary of the fitted quantile GAM."""
+        """Return a text summary of the fitted quantile GAM.
+
+        Reports the formula, fitted quantile levels, non-crossing setting, and ELF `sigma`,
+        followed by one line per quantile giving its `GAM`'s total effective degrees of freedom
+        and deviance.
+
+        Returns
+        -------
+        str
+            Multi-line, human-readable summary suitable for printing.
+        """
         self._check_fitted()
         lines = [
             "QuantileGAM summary",
