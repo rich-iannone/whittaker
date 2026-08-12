@@ -1,4 +1,4 @@
-"""GAMLSS: Generalized Additive Models for Location, Scale, and Shape."""
+r"""GAMLSS: Generalized Additive Models for Location, Scale, and Shape."""
 
 from __future__ import annotations
 
@@ -18,17 +18,25 @@ from whittaker.model_matrix import ModelMatrix, build_model_matrix, predict_matr
 
 @dataclass
 class GAMLSSPrediction:
-    """Result of `GAMLSS.predict()`.
+    r"""Result of `GAMLSS.predict()`.
+
+    Holds, for every distributional parameter in the fitted `GAMLSSFamily`, the predicted value on
+    the response scale (`values`), the corresponding linear predictor (`linear_predictors`), and
+    optionally the standard error of that linear predictor (`se`). Because a GAMLSS estimates several
+    parameters at once (for example `mu` and `sigma` of a location-scale family), the results are
+    keyed by parameter name rather than returned as a single array.
 
     Attributes
     ----------
     values:
-        Dict mapping parameter names to predicted values on the response scale.
+        Dict mapping parameter names to predicted values on the response scale, i.e.
+        `theta = g^{-1}(eta)` for each parameter's link function `g`.
     linear_predictors:
-        Dict mapping parameter names to predicted linear predictors.
+        Dict mapping parameter names to predicted linear predictors `eta = X @ beta` (plus any
+        offset).
     se:
         Dict mapping parameter names to standard errors on the linear predictor scale, or `None` if
-        `se=False`.
+        `se=False` was passed to `predict()`.
     """
 
     values: dict[str, NDArray]
@@ -37,28 +45,73 @@ class GAMLSSPrediction:
 
 
 class GAMLSS:
-    """Generalized Additive Model for Location, Scale, and Shape.
+    r"""Generalized Additive Model for Location, Scale, and Shape.
 
-    Fits multiple distributional parameters simultaneously, each with its
-    own additive predictor. Uses the RS algorithm (Rigby & Stasinopoulos 2005).
+    A GAMLSS extends the ordinary GAM by allowing every parameter of the response distribution, not
+    just its mean, to depend on covariates through its own smooth additive predictor. For a
+    distribution with parameters `theta_1, ..., theta_K` (e.g. location `mu`, scale `sigma`, and
+    possibly shape parameters `nu`, `tau`), each parameter has its own link function `g_k` and its own
+    formula:
+
+    $$g_k(\theta_k) = \eta_k = X_k \beta_k, \quad k = 1, \dots, K$$
+
+    This makes it possible to model, for example, both the mean and the variance of `y` as smooth
+    functions of `x`, which ordinary (mean-only) GAMs cannot do. Fitting uses the RS ("Rigby and
+    Stasinopoulos") algorithm, which cycles through the parameters, holding all but one fixed,
+    updating it via penalized IRLS, and repeating until the penalized log-likelihood converges.
+
+    Use `GAMLSS` when the assumption of a fixed dispersion (constant variance, constant shape) is
+    implausible, such as heteroscedastic regression, or regression with distributions like the
+    negative binomial or beta that have separate location and shape parameters.
 
     Parameters
     ----------
     formulas:
         Dict mapping parameter names to formula strings. All formulas must share the same response
-        variable. Example: `{"mu": "y ~ s(x1)", "sigma": "y ~ s(x2)"}`
+        variable. Example: `{"mu": "y ~ s(x1)", "sigma": "y ~ s(x2)"}`. The set of keys must match
+        `family.parameter_names` exactly.
     family:
-        A `GAMLSSFamily` specifying the distributional model. Defaults to `GaussianLS()` (Gaussian
-        location-scale).
+        A `GAMLSSFamily` specifying the distributional model, including the number and names of
+        parameters, their link functions, and log-likelihood derivatives used by the RS algorithm.
+        Defaults to `GaussianLS()` (Gaussian location-scale, i.e. `mu` and `sigma` both modeled).
+
+    Notes
+    -----
+    Rigby & Stasinopoulos (2005) formulate GAMLSS fitting as penalized maximum likelihood. Within
+    each outer RS iteration, and for each parameter `theta_k` in turn, a working response and weight
+    are formed from the score and Fisher information of the log-likelihood with respect to `theta_k`:
+
+    $$z_k = \eta_k + \frac{\partial \ell / \partial \theta_k}{\partial^2 \ell / \partial \theta_k^2}
+    \cdot g_k'(\theta_k), \qquad w_k = -\frac{\partial^2 \ell}{\partial \theta_k^2}
+    \Big/ g_k'(\theta_k)^2$$
+
+    and a penalized weighted least squares problem is solved for `beta_k`, with all other parameters
+    held at their current fitted values. Smoothing parameters for each parameter's smooth terms can be
+    selected by GCV, REML, or ML at every inner iteration. The algorithm alternates over parameters
+    until the global deviance `-2 * log_likelihood` stops improving.
 
     Examples
     --------
-    >>> model = GAMLSS(
-    ...     formulas={"mu": "y ~ s(x)", "sigma": "y ~ s(x)"},
-    ...     family=GaussianLS(),
-    ... )
-    >>> model.fit(data, method="REML")
-    >>> pred = model.predict(new_data)
+    ```{python}
+    import numpy as np
+    from whittaker.gamlss import GAMLSS
+    from whittaker.families.gaussian_ls import GaussianLS
+
+    rng = np.random.default_rng(0)
+    n = 500
+    x = rng.uniform(0, 1, n)
+    mu = np.sin(2 * np.pi * x)
+    sigma = np.exp(-1 + 2 * x)
+    y = rng.normal(mu, sigma)
+
+    model = GAMLSS(
+        formulas={"mu": "y ~ s(x)", "sigma": "y ~ s(x)"},
+        family=GaussianLS(),
+    )
+    model.fit({"x": x, "y": y}, method="REML")
+    pred = model.predict({"x": x[:5]})
+    print(pred.values)
+    ```
     """
 
     def __init__(
@@ -151,26 +204,42 @@ class GAMLSS:
         tol: float = 1e-6,
         select: bool = False,
     ) -> GAMLSS:
-        """Fit the GAMLSS model.
+        r"""Fit the GAMLSS model via the RS algorithm.
+
+        Parses each parameter's formula, builds its model matrix (basis functions, penalties, and
+        any parametric terms), and then runs the outer Rigby & Stasinopoulos loop: for each
+        parameter in turn, forms the working response and IRLS weights from the family's likelihood
+        derivatives, selects smoothing parameters (if the formula includes smooth terms), and solves
+        a penalized weighted least squares problem, holding the other parameters fixed. This repeats
+        until the global deviance stabilizes or `max_outer` iterations are reached.
 
         Parameters
         ----------
         data:
-            Column-oriented data dict.
+            Column-oriented data dict (or any type accepted by `prepare_data`) containing the shared
+            response column and all covariates referenced in `formulas`.
         method:
-            Smoothing parameter selection: `"GCV"`, `"REML"`, or `"ML"`.
+            Smoothing parameter selection method applied to every parameter's smooth terms:
+            `"GCV"` (generalized cross-validation, the default), `"REML"` (restricted maximum
+            likelihood), or `"ML"` (maximum likelihood).
         max_outer:
-            Maximum outer RS iterations.
+            Maximum number of outer RS iterations (full passes over all parameters).
         max_inner:
-            Maximum inner iterations per parameter per outer step.
+            Maximum inner iterations per parameter within a single outer step, used to converge the
+            penalized IRLS fit for that parameter before moving to the next one.
         tol:
-            Convergence tolerance.
+            Relative convergence tolerance, applied both to the coefficient update within a
+            parameter's inner loop and to the change in overall log-likelihood between outer
+            iterations.
         select:
-            Whether to add shrinkage penalties for smooth selection.
+            If `True`, add an extra shrinkage penalty to each smooth's null space so that terms can
+            be shrunk essentially to zero, enabling automatic term selection.
 
         Returns
         -------
-        self
+        GAMLSS
+            Returns `self`, with `is_fitted` now `True` and per-parameter results accessible via
+            `coefficients()`, `fitted_values()`, `edf()`, and related accessors.
         """
         data = prepare_data(data)
         response_name = None
@@ -212,21 +281,31 @@ class GAMLSS:
         parameter: str | None = None,
         se: bool = False,
     ) -> GAMLSSPrediction | NDArray:
-        """Predict distributional parameters for new data.
+        r"""Predict distributional parameters for new data.
+
+        For each parameter `theta_k`, builds the prediction design matrix from the fitted basis
+        (using the same knots/constraints as training), forms the linear predictor
+        `eta_k = X_new @ beta_k` (plus any offset), and maps it back to the response scale via the
+        parameter's inverse link, `theta_k = g_k^{-1}(eta_k)`. When `se=True`, the standard error of
+        `eta_k` is also computed from the Bayesian posterior covariance of `beta_k`.
 
         Parameters
         ----------
         new_data:
-            Column-oriented new data dict.
+            Column-oriented new data dict containing all covariates used in the fitted formulas.
         parameter:
-            If given, return only this parameter's predicted values as an array. Otherwise return a
-            `GAMLSSPrediction` with all parameters.
+            If given, return only this parameter's predicted values as an array on the response
+            scale. Otherwise return a `GAMLSSPrediction` with all parameters.
         se:
-            If `True`, compute standard errors on the linear predictor scale for each parameter.
+            If `True`, compute standard errors on the linear predictor scale for each parameter,
+            using the Bayesian covariance `V_beta_k = (X_k' W_k X_k + S_k)^{-1}` implied by the final
+            IRLS weights and smoothing parameters for that parameter.
 
         Returns
         -------
-        `GAMLSSPrediction` or `NDArray`
+        GAMLSSPrediction or NDArray
+            A `GAMLSSPrediction` with all parameters' values, linear predictors, and (optionally)
+            standard errors, or a single `NDArray` of predicted values if `parameter` is given.
         """
         self._check_fitted()
         new_data = prepare_data(new_data)
@@ -282,6 +361,18 @@ class GAMLSS:
 
     def simulate(self, n_sim: int = 1, *, seed: int | None = None) -> NDArray:
         """Simulate responses from the fitted model.
+
+        Draws `n_sim` independent replicate response vectors from the fitted distribution, using
+        each observation's fitted parameter values (`mu`, `sigma`, and any shape parameters) as the
+        distribution's parameters. This is useful for posterior-predictive checks, e.g. comparing
+        the distribution of simulated data against the observed response.
+
+        Parameters
+        ----------
+        n_sim:
+            Number of independent simulated replicates to draw per observation.
+        seed:
+            Random seed for reproducibility.
 
         Returns
         -------
