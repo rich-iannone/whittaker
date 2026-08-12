@@ -328,12 +328,33 @@ class CyclicCRS(SmoothBasis):
 
     @property
     def n_basis(self) -> int:
-        """Total number of basis functions, `k - 1` after the cyclic constraint."""
+        """Total number of basis functions.
+
+        Equal to `k - 1`: the periodicity constraint `f(x_min) = f(x_max)`
+        identifies the last knot with the first, so only `k - 1` of the `k`
+        knot values are free coefficients.
+
+        Returns
+        -------
+        int
+            The basis dimension `k - 1`.
+        """
         return self.k - 1
 
     @property
     def knots(self) -> NDArray:
-        """Knot locations set during `fit()`, length `k`."""
+        """Knot locations used by the fitted basis.
+
+        The `k` locations, placed at evenly-spaced quantiles of the training
+        data (or an evenly-spaced grid as a fallback), spanning one full
+        period `[x_min, x_max]`. The last knot is identified with the first
+        under the periodicity constraint, leaving `k - 1` free coefficients.
+
+        Returns
+        -------
+        NDArray
+            Strictly increasing knot locations, shape `(k,)`.
+        """
         self._check_fitted()
         return self._knots.copy()
 
@@ -583,7 +604,18 @@ class CyclicPSpline(SmoothBasis):
 
     @property
     def n_basis(self) -> int:
-        """Total number of periodic basis functions `k`."""
+        """Total number of periodic basis functions.
+
+        Equal to `k`: unlike `CyclicCRS`, the periodic B-spline construction
+        folds the extra "wrapped" columns back into the leading `degree`
+        columns during basis construction, so no coefficients are dropped and
+        the basis dimension is exactly `k`.
+
+        Returns
+        -------
+        int
+            The basis dimension `k`.
+        """
         return self.k
 
     @staticmethod
