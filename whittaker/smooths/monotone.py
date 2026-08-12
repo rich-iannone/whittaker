@@ -91,9 +91,33 @@ class MonotonePSpline(PSpline):
 
     @property
     def constraint_direction(self) -> int:
+        """Sign convention used by the PAVA projection.
+
+        Returns `-1` when `decreasing=True` (the coefficients are projected onto the
+        non-increasing cone by negating, applying PAVA, and negating back) or `1` for the default
+        non-decreasing case. Consulted by `whittaker.fitting.pirls` when applying
+        `project_monotone` to this term's coefficient block.
+
+        Returns
+        -------
+        int
+            `-1` for monotone decreasing, `1` for monotone increasing.
+        """
         return -1 if self.decreasing else 1
 
     def null_space_dimension(self) -> int:
+        """Return the dimension of the basis's unpenalized null space.
+
+        The monotonicity constraint is enforced by post-hoc projection rather than by removing
+        degrees of freedom from the penalty, so the underlying P-spline penalty null space is
+        treated as fully absorbed elsewhere in the model; this basis reports `0` so it does not
+        additionally compete with a model intercept for identifiability.
+
+        Returns
+        -------
+        int
+            Always `0`.
+        """
         return 0
 
 
@@ -167,13 +191,47 @@ class ConvexPSpline(PSpline):
 
     @property
     def constraint_direction(self) -> int:
+        """Sign convention used by the second-difference PAVA projection.
+
+        Returns `-1` when `concave=True` (the first differences of the coefficients are negated
+        before and after the PAVA projection, yielding non-positive second differences) or `1`
+        for the default convex case. Consulted by `project_convex` and by
+        `whittaker.fitting.pirls` when projecting this term's coefficient block each iteration.
+
+        Returns
+        -------
+        int
+            `-1` for concave, `1` for convex.
+        """
         return -1 if self.concave else 1
 
     @property
     def constraint_order(self) -> int:
+        """Order of the difference constraint enforced by projection.
+
+        Always `2`: convexity/concavity is a constraint on the *second* differences of the
+        coefficients (equivalently, the first differences must form a monotone sequence), as
+        opposed to `MonotonePSpline`'s first-order (`1`) constraint.
+
+        Returns
+        -------
+        int
+            Always `2`.
+        """
         return 2
 
     def null_space_dimension(self) -> int:
+        """Return the dimension of the basis's unpenalized null space.
+
+        As with `MonotonePSpline`, the shape constraint is enforced by post-hoc projection of the
+        coefficients rather than by removing degrees of freedom from the penalty, so this basis
+        reports `0` unpenalized dimensions.
+
+        Returns
+        -------
+        int
+            Always `0`.
+        """
         return 0
 
 
