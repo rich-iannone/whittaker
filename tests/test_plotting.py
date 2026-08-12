@@ -116,19 +116,17 @@ class TestPartialEffects:
 
 
 class TestCheck:
-    def test_returns_altair_vconcatchart(self) -> None:
-
+    def test_returns_list_of_charts(self) -> None:
         model = _fitted_gaussian()
-        chart = model.check()
-        assert isinstance(chart, alt.VConcatChart)
+        charts = model.check()
+        assert isinstance(charts, list)
+        for chart in charts:
+            assert isinstance(chart, (alt.Chart, alt.LayerChart))
 
     def test_has_four_panels(self) -> None:
         model = _fitted_gaussian()
-        spec = model.check().to_dict()
-        vconcat = spec.get("vconcat", [])
-        assert len(vconcat) == 2
-        for row in vconcat:
-            assert len(row.get("hconcat", [])) == 2
+        charts = model.check()
+        assert len(charts) == 4
 
     def test_unfitted_raises(self) -> None:
         model = GAM("y ~ s(x)")
@@ -137,18 +135,29 @@ class TestCheck:
 
     def test_binomial_check(self) -> None:
         model = _fitted_binomial()
-        chart = model.check()
-        assert chart.to_dict() is not None
+        charts = model.check()
+        assert len(charts) == 4
+        for chart in charts:
+            assert chart.to_dict() is not None
 
     def test_poisson_check(self) -> None:
         model = _fitted_poisson()
-        chart = model.check()
-        assert chart.to_dict() is not None
+        charts = model.check()
+        assert len(charts) == 4
+        for chart in charts:
+            assert chart.to_dict() is not None
 
     def test_multi_smooth_check(self) -> None:
         model = _fitted_multi()
-        chart = model.check()
-        assert chart.to_dict() is not None
+        charts = model.check()
+        assert len(charts) == 4
+        for chart in charts:
+            assert chart.to_dict() is not None
+
+    def test_plots_subset(self) -> None:
+        model = _fitted_gaussian()
+        charts = model.check(plots=["qq", "histogram"])
+        assert len(charts) == 2
 
 
 # ---------------------------------------------------------------------------
