@@ -174,12 +174,32 @@ class PolarsGAM(BigGAM):
 
     @property
     def chunk_size(self) -> int:
-        """Chunk size for streaming iteration."""
+        """Chunk size used when converting the Polars source to NumPy arrays.
+
+        This is the `chunk_size` value passed to `__init__`: the number of rows per slice that
+        `_lazyframe_to_dict` requests from `LazyFrame.iter_slices` while converting the collected
+        frame into the `dict[str, numpy.ndarray]` consumed by fitting.
+
+        Returns
+        -------
+        int
+            The configured slice size, in rows.
+        """
         return self._chunk_size
 
     @property
     def n_rows(self) -> int:
-        """Total number of rows in the source."""
+        """Total number of rows in the source used by the most recent fit.
+
+        Populated by `fit()` via `_count_lazy`, which evaluates `lf.select(pl.len())` with
+        Polars' streaming engine before collecting the data. Remains `0` until `fit()` has been
+        called at least once.
+
+        Returns
+        -------
+        int
+            Row count of the `LazyFrame`, `DataFrame`, or file passed to `fit()`.
+        """
         return self._n_rows
 
     def fit(
