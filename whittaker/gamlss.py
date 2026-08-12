@@ -136,10 +136,27 @@ class GAMLSS:
 
     @property
     def is_fitted(self) -> bool:
+        """Whether `fit()` has been called successfully.
+
+        Returns
+        -------
+        bool
+            `True` once a fit result is available, `False` otherwise. All other accessors
+            (`coefficients()`, `fitted_values()`, `edf()`, etc.) raise `RuntimeError` when this
+            is `False`.
+        """
         return self._fit_result is not None
 
     @property
     def family(self) -> GAMLSSFamily:
+        """The `GAMLSSFamily` used to build this model.
+
+        Returns
+        -------
+        GAMLSSFamily
+            The distributional family passed to (or defaulted in) `__init__`, giving the
+            parameter names, link functions, and likelihood used by the RS fitting algorithm.
+        """
         return self._family
 
     def _check_fitted(self) -> None:
@@ -148,47 +165,159 @@ class GAMLSS:
 
     @property
     def log_likelihood(self) -> float:
+        """Log-likelihood of the fitted model at convergence.
+
+        Returns
+        -------
+        float
+            The (penalized) log-likelihood evaluated at the final RS iteration's coefficients
+            and smoothing parameters, related to `global_deviance` by
+            `global_deviance = -2 * log_likelihood`.
+        """
         self._check_fitted()
         return self._fit_result.log_likelihood
 
     @property
     def aic(self) -> float:
+        """Akaike information criterion of the fitted model.
+
+        Computed from the global deviance and the total effective degrees of freedom summed
+        across all distributional parameters' smooth and parametric terms, and can be used to
+        compare GAMLSS models fit with different formulas or families on the same data.
+
+        Returns
+        -------
+        float
+            `AIC = global_deviance + 2 * edf_total`, lower values indicating a better
+            deviance/complexity trade-off.
+        """
         self._check_fitted()
         return self._fit_result.aic
 
     @property
     def bic(self) -> float:
+        """Bayesian information criterion of the fitted model.
+
+        Like `aic`, but penalizes model complexity more heavily (using `log(n)` instead of `2`
+        as the multiplier on total effective degrees of freedom), so it tends to favor simpler
+        models when comparing fits.
+
+        Returns
+        -------
+        float
+            `BIC = global_deviance + log(n) * edf_total`.
+        """
         self._check_fitted()
         return self._fit_result.bic
 
     @property
     def global_deviance(self) -> float:
+        """Global deviance of the fitted model.
+
+        The RS algorithm minimizes this quantity at each outer iteration; it is defined as
+        `-2 * log_likelihood` and is the primary measure of fit used to check convergence.
+
+        Returns
+        -------
+        float
+            The deviance at the final RS iteration.
+        """
         self._check_fitted()
         return self._fit_result.global_deviance
 
     @property
     def converged(self) -> bool:
+        """Whether the RS algorithm converged before hitting `max_outer` iterations.
+
+        Returns
+        -------
+        bool
+            `True` if the change in global deviance between successive outer iterations fell
+            below `tol` before `max_outer` was reached, `False` otherwise.
+        """
         self._check_fitted()
         return self._fit_result.converged
 
     @property
     def n_iter(self) -> int:
+        """Number of outer RS iterations actually performed.
+
+        Returns
+        -------
+        int
+            Count of full passes over all distributional parameters carried out during fitting,
+            at most `max_outer`.
+        """
         self._check_fitted()
         return self._fit_result.n_iter
 
     def coefficients(self, parameter: str) -> NDArray:
+        """Fitted basis coefficients for one distributional parameter.
+
+        Parameters
+        ----------
+        parameter:
+            Name of the distributional parameter (must be one of `family.parameter_names`), e.g.
+            `"mu"` or `"sigma"`.
+
+        Returns
+        -------
+        NDArray
+            Coefficient vector `beta_k` for that parameter's linear predictor
+            `eta_k = X_k @ beta_k`, in the order of its model matrix's columns.
+        """
         self._check_fitted()
         return self._fit_result.params[parameter].coefficients
 
     def smoothing_params(self, parameter: str) -> list[float]:
+        """Fitted smoothing parameters for one distributional parameter's smooth terms.
+
+        Parameters
+        ----------
+        parameter:
+            Name of the distributional parameter, e.g. `"mu"` or `"sigma"`.
+
+        Returns
+        -------
+        list[float]
+            One smoothing parameter (`lambda`) per smooth term in that parameter's formula, in
+            the order the terms were declared. Empty if the formula has no smooth terms.
+        """
         self._check_fitted()
         return self._fit_result.params[parameter].smoothing_params
 
     def edf(self, parameter: str) -> list[float]:
+        """Effective degrees of freedom per smooth term for one distributional parameter.
+
+        Parameters
+        ----------
+        parameter:
+            Name of the distributional parameter, e.g. `"mu"` or `"sigma"`.
+
+        Returns
+        -------
+        list[float]
+            EDF of each smooth term in that parameter's formula, reflecting how much smoothing
+            was applied (lower values indicate heavier penalization toward linearity).
+        """
         self._check_fitted()
         return self._fit_result.params[parameter].edf
 
     def fitted_values(self, parameter: str | None = None) -> dict[str, NDArray] | NDArray:
+        """Fitted values on the response scale for one or all distributional parameters.
+
+        Parameters
+        ----------
+        parameter:
+            If given, return only this parameter's fitted values as a single array. If `None`
+            (default), return a dict of fitted values for every distributional parameter.
+
+        Returns
+        -------
+        dict[str, NDArray] or NDArray
+            `theta_k = g_k^{-1}(eta_k)` for the requested parameter(s), evaluated at the training
+            covariate values used in `fit()`.
+        """
         self._check_fitted()
         if parameter is not None:
             return self._fit_result.params[parameter].fitted_values
@@ -386,7 +515,17 @@ class GAMLSS:
         return sims
 
     def summary(self) -> str:
-        """Return a text summary of the fitted model."""
+        """Return a text summary of the fitted model.
+
+        Includes global fit statistics (global deviance, AIC, BIC, log-likelihood, convergence
+        status and iteration count) followed by a per-parameter section listing the total
+        effective degrees of freedom and, if present, the EDF of each individual smooth term.
+
+        Returns
+        -------
+        str
+            Multi-line, human-readable summary suitable for printing.
+        """
         self._check_fitted()
         fr = self._fit_result
         lines = ["GAMLSS fit summary", "=" * 40]
