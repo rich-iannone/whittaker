@@ -34,9 +34,9 @@ it.
 import numpy as np
 import whittaker as wk
 
-rng = np.random.default_rng(42)
-n = 200        # number of observations
-T = 50         # number of grid points per curve
+rng = np.random.default_rng(23)
+n = 200  # number of observations
+T = 50  # number of grid points per curve
 t_grid = np.linspace(0, 1, T)
 
 # True coefficient function: a sine wave
@@ -134,7 +134,7 @@ truth = alt.Chart({"values": true_data}).mark_line(
 ).encode(x="t:Q", y="beta:Q")
 
 (band + estimate + truth).properties(
-    width=500, height=300,
+    width="container", height=300,
     title="Estimated coefficient function (blue) vs. truth (red dashed)"
 )
 ```
@@ -175,7 +175,7 @@ ref_line = alt.Chart({"values": line_data}).mark_line(
     strokeDash=[4, 4], color="firebrick"
 ).encode(x="v:Q", y="v:Q")
 
-(points + ref_line).properties(width=300, height=300, title="Predicted vs. observed")
+(points + ref_line).properties(width="container", height=300, title="Predicted vs. observed")
 ```
 
 ## Using a Fourier basis
@@ -211,7 +211,7 @@ You can include more than one functional covariate:
 
 ```{python}
 # Two functional predictors
-rng = np.random.default_rng(42)
+rng = np.random.default_rng(23)
 T2 = 30
 t2 = np.linspace(0, 2, T2)
 beta2 = t2**2 - t2  # quadratic coefficient function on [0, 2]
@@ -252,7 +252,7 @@ truth1 = alt.Chart({"values": true1_data}).mark_line(
     color="firebrick", strokeDash=[4, 4], strokeWidth=1.5
 ).encode(x="t:Q", y="beta:Q")
 
-panel1 = (est1 + truth1).properties(width=300, height=250, title="f1: sin(2*pi*t)")
+panel1 = (est1 + truth1).properties(width="container", height=250, title="f1: sin(2*pi*t)")
 
 # Panel for f2: estimated vs. true beta = t^2 - t
 cf2_data = [{"t": float(cf2.grid[i]), "beta": float(cf2.values[i]), "type": "Estimated"} for i in range(len(cf2.grid))]
@@ -265,7 +265,7 @@ truth2 = alt.Chart({"values": true2_data}).mark_line(
     color="firebrick", strokeDash=[4, 4], strokeWidth=1.5
 ).encode(x="t:Q", y="beta:Q")
 
-panel2 = (est2 + truth2).properties(width=300, height=250, title="f2: t^2 - t")
+panel2 = (est2 + truth2).properties(width="container", height=250, title="f2: t^2 - t")
 
 panel1 | panel2
 ```
