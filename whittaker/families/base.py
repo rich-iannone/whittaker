@@ -77,39 +77,129 @@ class Family(ABC):
 
     @abstractmethod
     def link(self, mu: NDArray) -> NDArray:
-        """Apply the link function: η = g(μ)."""
+        r"""Apply the link function $g(\mu)$, mapping the conditional mean to the linear predictor.
+
+        The link function defines the relationship $\eta = g(\mu)$ between the mean of the
+        response and the linear predictor. Each family provides a canonical or default link;
+        for example, the identity link for Gaussian, the log link for Poisson, and the logit
+        link for Binomial.
+
+        Parameters
+        ----------
+        mu
+            Conditional mean values $\mu$, shape `(n,)`. Must lie in the valid range for
+            the family (e.g., $\mu > 0$ for Poisson, $0 < \mu < 1$ for Binomial).
+
+        Returns
+        -------
+        NDArray
+            Linear predictor values $\eta = g(\mu)$, shape `(n,)`.
+        """
         ...
 
     @abstractmethod
     def link_inverse(self, eta: NDArray) -> NDArray:
-        """Apply the inverse link: μ = g⁻¹(η)."""
+        r"""Apply the inverse link $g^{-1}(\eta)$, mapping the linear predictor back to the mean.
+
+        This is the transformation applied to the fitted linear predictor to recover fitted
+        values `mu` on the response scale, e.g. after `GAM.predict()` computes `eta`.
+
+        Parameters
+        ----------
+        eta
+            Linear predictor values $\eta$, shape `(n,)`.
+
+        Returns
+        -------
+        NDArray
+            Conditional mean values $\mu = g^{-1}(\eta)$, shape `(n,)`.
+        """
         ...
 
     @abstractmethod
     def link_derivative(self, mu: NDArray) -> NDArray:
-        """Derivative of the link function: dη/dμ = g'(μ)."""
+        r"""Derivative of the link function, $g'(\mu) = d\eta/d\mu$.
+
+        Used by the P-IRLS fitting loop to form the working response `z` and working weights
+        `W` at each iteration, via a first-order (delta-method) linearization of the link
+        function around the current fit.
+
+        Parameters
+        ----------
+        mu
+            Conditional mean values $\mu$, shape `(n,)`.
+
+        Returns
+        -------
+        NDArray
+            Derivative values $g'(\mu)$, shape `(n,)`.
+        """
         ...
 
     @abstractmethod
     def variance(self, mu: NDArray) -> NDArray:
-        """Variance function V(μ).
+        r"""Variance function $V(\mu)$ relating the response variance to its mean.
 
-        For the Gaussian family this is constant (1); for Poisson it is μ, etc.
+        The conditional variance of the response is $\operatorname{Var}(Y) = \phi \, V(\mu)$,
+        where $\phi$ is the dispersion (scale) parameter. For the Gaussian family this is
+        constant (`1`); for Poisson it is `mu`; for Gamma it is `mu^2`, etc. `variance` is used
+        by P-IRLS to form the working weights.
+
+        Parameters
+        ----------
+        mu
+            Conditional mean values $\mu$, shape `(n,)`.
+
+        Returns
+        -------
+        NDArray
+            Variance function values $V(\mu)$, shape `(n,)`.
         """
         ...
 
     @abstractmethod
     def deviance(self, y: NDArray, mu: NDArray, *, weights: NDArray | None = None) -> float:
-        """Total (unscaled) deviance: 2 * Σ [ℓ(y; y) − ℓ(y; μ)].
+        r"""Total (unscaled) deviance $D(y, \hat\mu) = 2 \sum_i [\ell(y_i; y_i) - \ell(y_i; \hat\mu_i)]$.
 
-        When *weights* is given the deviance is Σ w_i d_i.
+        The deviance measures the discrepancy between the fitted model and a saturated model
+        that fits the data exactly. It is used by `GAM.fit()` for smoothing parameter selection
+        (GCV) and by `GAM.summary()` for goodness-of-fit reporting.
+
+        Parameters
+        ----------
+        y
+            Observed response values, shape `(n,)`.
+        mu
+            Fitted conditional mean values, shape `(n,)`.
+        weights
+            Optional prior weights, shape `(n,)`. When given, the deviance is
+            $\sum_i w_i d_i$ rather than $\sum_i d_i$.
+
+        Returns
+        -------
+        float
+            The total deviance.
         """
         ...
 
     def unit_deviance(self, y: NDArray, mu: NDArray) -> NDArray:
-        """Per-observation deviance contributions d_i (before summing).
+        r"""Per-observation deviance contributions $d_i$, before summing over observations.
 
-        Default implementation: `(y - mu)^2` (Gaussian). Override for other families.
+        The total deviance returned by `deviance` is $\sum_i d_i$ (or the weighted sum). The
+        default implementation here is `(y - mu)^2`, appropriate for the Gaussian family;
+        concrete families with a different deviance formula override this method.
+
+        Parameters
+        ----------
+        y
+            Observed response values, shape `(n,)`.
+        mu
+            Fitted conditional mean values, shape `(n,)`.
+
+        Returns
+        -------
+        NDArray
+            Per-observation deviance contributions $d_i$, shape `(n,)`.
         """
         return (y - mu) ** 2
 
@@ -117,15 +207,39 @@ class Family(ABC):
     def log_likelihood(
         self, y: NDArray, mu: NDArray, scale: float, *, weights: NDArray | None = None
     ) -> float:
-        """Log-likelihood ℓ(y; μ, φ) evaluated at the given scale parameter φ.
+        r"""Log-likelihood $\ell(y; \mu, \phi)$ evaluated at the given scale parameter $\phi$.
 
-        When *weights* is given the log-likelihood is Σ w_i ℓ_i.
+        Used by `GAM.fit()` for REML/ML-based smoothing parameter selection and by
+        `GAM.summary()` for reporting AIC and related fit statistics.
+
+        Parameters
+        ----------
+        y
+            Observed response values, shape `(n,)`.
+        mu
+            Fitted conditional mean values, shape `(n,)`.
+        scale
+            Dispersion (scale) parameter $\phi$.
+        weights
+            Optional prior weights, shape `(n,)`. When given, the log-likelihood is
+            $\sum_i w_i \ell_i$ rather than $\sum_i \ell_i$.
+
+        Returns
+        -------
+        float
+            The total log-likelihood.
         """
         ...
 
     @property
     def scale_known(self) -> bool:
-        """Whether the scale parameter is fixed (True for Binomial, Poisson)."""
+        """Whether the dispersion (scale) parameter is fixed rather than estimated.
+
+        Returns `True` for families with no free dispersion parameter (e.g. `Binomial`,
+        `Poisson`), in which case the scale is always `1` and is not estimated during fitting.
+        Returns `False` (the default) for families such as `Gaussian` and `Gamma`, whose scale
+        is estimated from the data.
+        """
         return False
 
     @abstractmethod
@@ -151,16 +265,47 @@ class Family(ABC):
     def irls_update(self, y: NDArray, mu: NDArray, eta: NDArray) -> tuple[NDArray, NDArray] | None:
         """Custom IRLS pseudo-response and working weights.
 
-        Override in families whose loss is not a standard GLM deviance (e.g. quantile regression).
-        Return `(z, W)` where *z* is the pseudo-response and *W* is the diagonal working-weight
-        vector. Return `None` to use the default GLM formula.
+        Override in families whose loss does not fit the standard GLM deviance framework (e.g.
+        `QuantileFamily`, `CoxPH`, `OrderedCategorical`, `Multinomial`), to supply the working
+        response `z` and working weights `W` directly rather than deriving them from `link`,
+        `link_derivative`, and `variance`. Returning `None` (the default) tells the P-IRLS loop
+        to fall back to the standard GLM formula
+        `z = eta + (y - mu) * link_derivative(mu)`, `W = 1 / (link_derivative(mu)^2 * variance(mu))`.
+
+        Parameters
+        ----------
+        y
+            Observed response values, shape `(n,)`.
+        mu
+            Current fitted mean values, shape `(n,)`.
+        eta
+            Current linear predictor values, shape `(n,)`.
+
+        Returns
+        -------
+        tuple of NDArray, or None
+            `(z, W)`, the pseudo-response and diagonal working-weight vector, each shape `(n,)`,
+            or `None` to use the default GLM formula.
         """
         return None
 
     def initialize(self, y: NDArray) -> NDArray:
-        """Starting values for μ given the response *y*.
+        """Compute starting values for `mu` given the observed response `y`.
 
-        The default returns *y* unchanged, which is appropriate for Gaussian with identity link.
-        Families with non-identity links or constrained means should override this.
+        Called once before the first P-IRLS iteration to seed the mean. The default
+        implementation returns `y` unchanged, which is appropriate for the `Gaussian` family
+        with its identity link. Families with non-identity links or constrained means (e.g.
+        `Poisson`, `Binomial`, `Gamma`) override this to nudge `y` into the valid range and
+        avoid numerical issues (such as `log(0)`) on the first iteration.
+
+        Parameters
+        ----------
+        y
+            Observed response values, shape `(n,)`.
+
+        Returns
+        -------
+        NDArray
+            Starting values for `mu`, shape `(n,)`.
         """
         return y.copy()
