@@ -1,4 +1,4 @@
-"""Gamma family with log link."""
+r"""Gamma family with log link."""
 
 from __future__ import annotations
 
@@ -11,13 +11,68 @@ _EPS = np.finfo(float).eps
 
 
 class Gamma(Family):
-    """Gamma family with log (canonical) link.
+    r"""Gamma family with log link.
 
-    For the Gamma family:
+    The Gamma family models strictly positive, continuous, right-skewed responses — for
+    example, insurance claim sizes, waiting times, rainfall amounts, or other quantities that
+    are bounded below by zero and become more variable as their mean grows. Although the
+    canonical link for the Gamma distribution is the inverse, Whittaker uses the log link by
+    default, since it guarantees positive fitted values and is generally easier to interpret
+    (coefficients act multiplicatively on the response, as with `Poisson`). Use `Gamma` when the
+    response is positive and continuous and its coefficient of variation is roughly constant
+    across the range of fitted values; if instead the variance grows linearly with the mean,
+    `Poisson` or `Tweedie` with `1 < p < 2` may fit better.
 
-    - Link: g(μ) = log(μ)
-    - Variance function: V(μ) = μ²
-    - Deviance: 2 Σ [-log(y/μ) + (y − μ)/μ]
+    Parameters
+    ----------
+    None
+        `Gamma` takes no constructor arguments. The dispersion parameter `phi = 1/alpha` (the
+        inverse of the shape parameter) is estimated from the data during fitting (see
+        `scale_known`).
+
+    Notes
+    -----
+    The (non-canonical, but default) link is the natural logarithm:
+
+    $$
+    g(\mu) = \log(\mu)
+    $$
+
+    The variance function grows with the square of the mean:
+
+    $$
+    V(\mu) = \mu^2, \qquad \operatorname{Var}(Y) = \phi \, \mu^2,
+    $$
+
+    so the coefficient of variation $\sqrt{\operatorname{Var}(Y)} / \mu = \sqrt{\phi}$ is
+    constant. The deviance is
+
+    $$
+    D(y, \hat\mu) = 2 \sum_i \left[ -\log\!\left(\frac{y_i}{\hat\mu_i}\right)
+    + \frac{y_i - \hat\mu_i}{\hat\mu_i} \right] .
+    $$
+
+    Examples
+    --------
+    Fit a GAM to positive, right-skewed data with a smooth trend:
+
+    ```{python}
+    import numpy as np
+    import whittaker as wk
+
+    rng = np.random.default_rng(0)
+    n = 200
+    x = np.linspace(0, 2 * np.pi, n)
+    mu = np.exp(0.5 + 0.4 * np.sin(x))
+    shape = 4.0
+    y = rng.gamma(shape, mu / shape)
+
+    data = {"x": x, "y": y}
+
+    model = wk.GAM("y ~ s(x)", family=wk.Gamma())
+    model.fit(data, method="REML")
+    print(model.summary())
+    ```
     """
 
     def link(self, mu: NDArray) -> NDArray:
