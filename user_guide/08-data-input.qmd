@@ -103,7 +103,7 @@ array. This means conversion is essentially free for typical numerical data.
 ## Prediction data
 
 The `predict()` method accepts the same dictionary format. You only need to include the covariate
-columns; the response column is not required for prediction.
+columns (the response column is not required for prediction).
 
 ```{python}
 # Predict on new data (only covariate columns are needed)
@@ -171,8 +171,8 @@ print(f"After cleaning: {len(clean_data['x'])} rows")
 ## Data types
 
 All values are converted to `float64` internally. Integer arrays, boolean arrays, and other numeric
-types are converted automatically. Non-numeric data (strings, objects) cannot be used directly;
-encode categorical variables as numeric indicators before passing them to Whittaker.
+types are converted automatically. Non-numeric data (strings, objects) cannot be used directly.
+Encode categorical variables as numeric indicators before passing them to Whittaker.
 
 ```{python}
 # Integer data is converted to float automatically
