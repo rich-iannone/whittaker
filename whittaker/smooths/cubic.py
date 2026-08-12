@@ -201,14 +201,21 @@ def _crs_basis_matrix(
 
 
 class CRS(SmoothBasis):
-    """Cubic Regression Splines (natural cubic splines with quantile knots).
+    r"""Cubic Regression Splines (natural cubic splines with quantile knots).
 
-    Equivalent to mgcv's `bs="cr"` basis. The basis is parameterized by the spline values at k knots
-    placed at evenly-spaced quantiles of the training data. Only univariate covariates are
-    supported.
+    A cubic regression spline is a piecewise-cubic function that is twice continuously
+    differentiable, with a roughness penalty based on the integrated squared second derivative
+    (classical smoothing-spline theory). Equivalent to mgcv's `bs="cr"` basis. Unlike `TPRS`, which
+    avoids explicit knot placement, CRS parameterizes the spline directly by its values at `k` knots
+    placed at evenly-spaced quantiles of the training data, so it is cheaper to fit for a single
+    covariate and gives a basis whose coefficients have a direct interpretation as function values at
+    the knots. Choose CRS over `TPRS` when you have exactly one covariate, want knot-based
+    interpretability, or need a classical natural-cubic-spline basis for compatibility with other
+    software; choose `TPRS` for multivariate smooths or when knot placement is undesirable. Only
+    univariate covariates are supported.
 
     The first two columns of the basis matrix correspond to the linear null space of the penalty
-    ({1, x}); the remaining k - 2 columns are penalized.
+    (`{1, x}`); the remaining `k - 2` columns are penalized.
 
     Note that unlike TPRS, the null-space columns are **not** stored as the leading columns. The
     full k-column basis is used directly, with the penalty having a 2-dimensional null space.
@@ -216,20 +223,60 @@ class CRS(SmoothBasis):
     Parameters
     ----------
     k:
-        Number of basis functions (= number of knots). Must be ≥ 3. The default is `10`.
+        Number of basis functions (equivalently, the number of knots). Must be at least `3`
+        (fewer knots cannot support a cubic spline with a nontrivial penalized part). Larger `k`
+        places more knots and allows more local flexibility at the cost of more parameters to
+        estimate; as with all penalized bases, the penalty (not `k`) is what ultimately controls
+        the smoothness of the fitted curve once `lambda` is chosen. The default is `10`.
+
+    Notes
+    -----
+    Knots `t_0 < t_1 < \cdots < t_{k-1}` are placed at evenly-spaced quantiles of the training
+    data `x` (falling back to an evenly-spaced grid over `[min(x), max(x)]` if quantile ties would
+    otherwise produce duplicate knots). Basis construction follows the classical natural cubic
+    spline parameterization by function values at the knots (de Boor; Wood, *Generalized Additive
+    Models*, 2nd ed., §5.3.1):
+
+    1. The interior second derivatives `\mathbf{d} = (f''(t_1), \ldots, f''(t_{k-2}))^\top` are
+       related to the coefficient vector `\boldsymbol{\beta}` (the spline values at the knots) by
+       a tridiagonal linear system `\mathbf{R} \mathbf{d} = \mathbf{Q}^\top \boldsymbol{\beta}`,
+       where `Q` (the `k \times (k-2)` matrix built by `_build_Q()`) and `R` (the `(k-2) \times
+       (k-2)` symmetric positive-definite tridiagonal matrix built by `_build_R()`) are determined
+       entirely by the knot spacings `h_l = t_{l+1} - t_l`.
+    2. Natural boundary conditions (`f''(t_0) = f''(t_{k-1}) = 0`) pad `\mathbf{d}` with zeros at
+       both ends to give the full `k \times k` second-derivative operator `\mathbf{A}` such that
+       `\mathbf{d}_{\text{full}} = \mathbf{A} \boldsymbol{\beta}`.
+    3. Within each knot interval the spline is the unique cubic determined by the function values
+       and second derivatives at the two endpoints; outside `[t_0, t_{k-1}]` the natural boundary
+       conditions force the spline to continue linearly, so CRS extrapolates linearly rather than
+       polynomially beyond the training range.
+
+    The roughness penalty is the integral of squared second derivative,
+    `\int f''(x)^2 \, dx = \boldsymbol{\beta}^\top \mathbf{S} \boldsymbol{\beta}`, with
+
+    $$
+    \mathbf{S} = \mathbf{Q} \mathbf{R}^{-1} \mathbf{Q}^\top,
+    $$
+
+    a `k \times k` positive semi-definite matrix of rank `k - 2`. Its two-dimensional null space is
+    spanned by the constant and linear functions evaluated at the knots (any straight line has zero
+    second derivative everywhere, hence zero penalty). Because `S` is built from tridiagonal `Q`
+    and `R`, it is well-conditioned and cheap to compute even for large `k`; the main numerical
+    caveat is that near-duplicate knots (from heavily tied data) can make `R` ill-conditioned, which
+    is why `fit()` falls back to an evenly-spaced knot grid when quantile knots would collide.
 
     Examples
     --------
-    >>> import numpy as np
-    >>> from whittaker.smooths import CRS
-    >>> x = np.linspace(0, 1, 100)
-    >>> basis = CRS(k=10).fit(x)
-    >>> B = basis.basis_matrix(x)
-    >>> B.shape
-    (100, 10)
-    >>> S = basis.penalty_matrix()
-    >>> S.shape
-    (10, 10)
+    ```{python}
+    import numpy as np
+    from whittaker.smooths import CRS
+
+    x = np.linspace(0, 1, 100)
+    basis = CRS(k=10).fit(x)
+    B = basis.basis_matrix(x)
+    S = basis.penalty_matrix()
+    B.shape, S.shape
+    ```
     """
 
     def __init__(self, k: int = 10) -> None:
@@ -332,14 +379,31 @@ class CRS(SmoothBasis):
         return self._S.copy()
 
     def null_space_dimension(self) -> int:
-        """Return 2: the constant and linear functions are unpenalized."""
+        """Return the dimension of the penalty null space.
+
+        For CRS this is always `2`: the constant and linear functions of `x` both have zero second
+        derivative everywhere, so they are unpenalized regardless of `k` or the knot locations.
+
+        Returns
+        -------
+        int
+            Always `2`.
+        """
         return 2
 
     def identifiability_constraints(self) -> NDArray | None:
         """Return the sum-to-zero constraint row for the intercept.
 
-        Returns a `(1, k)` matrix whose product with the coefficient vector is zero when the smooth
-        has mean zero over the training data.
+        Evaluates the fitted basis at the training knots and averages each column, giving a `(1,
+        k)` row `C` such that `C @ beta == 0` constrains the smooth to have mean zero over the
+        knots. This is the constraint typically imposed when a smooth term must be identifiable
+        alongside a separate model intercept.
+
+        Returns
+        -------
+        NDArray
+            Shape `(1, k)` constraint matrix whose product with the coefficient vector equals zero
+            when the smooth has mean zero over the training data.
         """
         self._check_fitted()
         B_train = self.basis_matrix(self._knots)
