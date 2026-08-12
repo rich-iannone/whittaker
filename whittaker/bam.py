@@ -1,12 +1,18 @@
 """BigGAM: large-scale GAM fitting via discretized covariates.
 
 Provides `BigGAM`, a drop-in replacement for `~whittaker.gam.GAM` that avoids materializing the full
-*n x p* design matrix. Instead, each covariate is rounded to a grid of *n_discrete* representative
-values and the basis functions are evaluated only at the unique grid points. This makes memory usage
-roughly *O(d p)* instead of *O(n p)* (where *d << n*) and speeds up the X'WX accumulation
-proportionally.
+`n x p` design matrix. Instead, each covariate is rounded (independently, then combined) to a grid of
+at most `n_discrete` representative values, and the smooth basis is evaluated only once per unique
+combination of discretized values rather than once per observation. Each observation is mapped back
+to its bin through an index array, and the `X'WX` cross-product needed by P-IRLS is accumulated
+directly from the per-bin basis rows and bin membership counts (see `_compute_XtWX` and
+`build_discretized_model_matrix`). This makes memory usage roughly `O(d p)` instead of `O(n p)`
+(where `d` is the number of unique discretized rows and `d << n` for large datasets), and speeds up
+the `X'WX` accumulation proportionally, since the cost scales with the number of unique bins rather
+than the number of observations.
 
-Use BigGAM when the standard GAM runs out of memory or is too slow because *n* is large (>1M).
+Use `BigGAM` when the standard `GAM` runs out of memory or is too slow because `n` is large (roughly
+`n > 1_000_000`).
 """
 
 from __future__ import annotations
@@ -54,10 +60,42 @@ def build_discretized_model_matrix(
 ) -> DiscretizedModelMatrix:
     """Build a compressed model matrix by discretizing covariates.
 
-    Follows the same logic as :func:`~whittaker.model_matrix.build_model_matrix` but evaluates each
+    Follows the same logic as `~whittaker.model_matrix.build_model_matrix` but evaluates each
     smooth's basis only at unique discretized covariate values, producing a
-    `~whittaker.fitting.bam.DiscretizedModelMatrix` that never stores the full *n x p* design
-    matrix.
+    `~whittaker.fitting.bam.DiscretizedModelMatrix` that never stores the full `n x p` design
+    matrix. Parametric (linear, interaction, offset) terms are still expanded to full columns, since
+    they are cheap to store; only smooth terms are discretized and bin-compressed.
+
+    Parameters
+    ----------
+    formula : Formula
+        Parsed model formula describing the response, smooth terms, linear terms, and any
+        `offset()` terms.
+    data : dict[str, numpy.ndarray]
+        Column-oriented data with one entry per variable referenced by `formula`. All arrays must
+        have equal length.
+    n_discrete : int
+        Maximum number of unique representative values per covariate (or per combination of
+        covariates, for multi-dimensional smooths). Each covariate is rounded onto an
+        equally-spaced grid of this size before the basis is evaluated. Defaults to `200`.
+    apply_constraints : bool
+        If `True` (the default), apply each smooth's identifiability constraints (e.g. sum-to-zero)
+        to the discretized basis and penalty matrices, matching the behavior of
+        `~whittaker.model_matrix.build_model_matrix`. Terms with a `by=` variable are left
+        unconstrained, as in the non-discretized path.
+    select : bool
+        If `True`, augment each smooth's penalty with an additional null-space penalty so the term
+        can be shrunk to exactly zero (double-penalty selection), matching the `select` argument of
+        `~whittaker.gam.GAM.fit`.
+
+    Returns
+    -------
+    DiscretizedModelMatrix
+        A compressed model matrix holding, for each smooth term, a `DiscretizedBlock` with the
+        unique basis rows, the per-observation bin index array, and the term's column range, plus
+        the full parametric columns, penalty matrices, and bookkeeping (column names, response,
+        offset) needed to fit and predict from the model without ever forming the dense `n x p`
+        design matrix.
     """
     lengths = {name: len(arr) for name, arr in data.items()}
     unique_lengths = set(lengths.values())
@@ -332,21 +370,80 @@ def build_discretized_model_matrix(
 
 
 class BigGAM(GAM):
-    """GAM for large datasets using discretized fitting.
+    r"""GAM for large datasets using discretized fitting.
 
-    Uses the bam approach (Wood, Li, & Shaddick, 2017): discretizes covariates to a grid of
-    *n_discrete* points and evaluates basis functions only at the unique grid values. The full
-    *n x p* design matrix is never materialized.
+    `BigGAM` is a drop-in subclass of `~whittaker.gam.GAM` for datasets too large to fit
+    comfortably with the standard dense design matrix (roughly `n > 1_000_000`). It uses the `bam`
+    approach of Wood, Li, & Shaddick (2017): each covariate is rounded onto a grid of at most
+    `n_discrete` representative values, and the smooth basis is evaluated only once per unique
+    (combination of) discretized value(s) rather than once per observation. An index array records,
+    for every observation, which unique bin it fell into (see `DiscretizedBlock.indices` in
+    `build_discretized_model_matrix`).
+
+    Fitting still runs penalized iteratively reweighted least squares (P-IRLS), exactly as in
+    `~whittaker.gam.GAM.fit`, alternating an inner coefficient update with an outer smoothing
+    parameter selection. The difference is purely computational: instead of forming the full
+    `n x p` design matrix `X` and computing `X'WX` and `X'Wz` directly, `bam_fit` (in
+    `whittaker.fitting.bam`) accumulates these quantities per bin — for each smooth's discretized
+    block, observation weights are aggregated into per-bin totals via `numpy.bincount` over the bin
+    indices, and the resulting `d x d` cross-products of unique basis rows (`d` = number of unique
+    bins) are scattered into the correct `p x p` block of `X'WX` (see `_compute_XtWX`). Because
+    `d` can be orders of magnitude smaller than `n`, this reduces the memory needed for the
+    cross-product step from `O(n p)` to `O(d p)`, and the resulting fit closely approximates the
+    exact (non-discretized) GAM fit on the same data.
+
+    `BigGAM` is a drop-in subclass of `GAM`: `predict()`, `summary()`, `plot()`, and `check()` all
+    work the same way as for `GAM`. The one internal difference is that `self._model_matrix.X` is
+    an empty array (the dense design matrix is never materialized) so operations that would
+    otherwise reconstruct per-term columns (e.g. `smooth_tests()`) instead re-expand each smooth's
+    columns on demand from its `DiscretizedBlock` via `_expand_block_columns`.
 
     Parameters
     ----------
-    formula:
-        Model formula (same as `~whittaker.gam.GAM`).
-    family:
-        Response distribution family.
-    n_discrete:
-        Number of grid points per covariate for discretization. Higher values give results closer
-        to the exact GAM at the cost of more memory and computation.
+    formula
+        Model formula as a string (e.g. `"y ~ s(x1) + s(x2) + x3"`), or an already-parsed `Formula`
+        object. Same syntax as `~whittaker.gam.GAM`.
+    family
+        Response distribution family, e.g. `Gaussian()`, `Binomial()`, `Poisson()`, `Gamma()`, or
+        `Tweedie()`. Defaults to `Gaussian()`.
+    n_discrete
+        Maximum number of unique representative values per covariate (or per combination of
+        covariates, for multi-dimensional smooths). Defaults to `200`.
+
+    Notes
+    -----
+    `n_discrete` controls the accuracy/memory tradeoff directly. Larger values give a discretized
+    grid that more finely resolves each covariate's range, so the fit approaches the exact
+    (non-discretized) GAM fit at the cost of more unique bins `d` and therefore more memory and
+    computation in the `X'WX` accumulation step. Smaller values reduce memory and speed up fitting,
+    but coarsen the covariate resolution: because all observations within a bin share the same
+    basis row, this can slightly bias smooths with high curvature or steep local features, since
+    fine-scale variation within a bin is averaged away. The default of `200` is usually more than
+    enough resolution for typical smooth terms; it rarely needs to be increased unless a covariate
+    has an unusually large number of important local features. The benefit of discretization
+    (versus plain `GAM`) is only realized once `n` is much larger than `n_discrete`, i.e. for large
+    datasets — for small or moderate `n`, `GAM` is simpler and just as fast.
+
+    Examples
+    --------
+    ```{python}
+    import numpy as np
+    import whittaker as wt
+    from whittaker.bam import BigGAM
+
+    rng = np.random.default_rng(0)
+    n = 5_000
+    x1 = rng.uniform(0, 1, n)
+    x2 = rng.uniform(0, 1, n)
+    y = np.sin(2 * np.pi * x1) + x2**2 + rng.normal(scale=0.2, size=n)
+
+    model = BigGAM("y ~ s(x1) + s(x2)", n_discrete=100).fit({"x1": x1, "x2": x2, "y": y})
+    print(model.summary())
+    ```
+
+    This example uses a modest `n` for speed, but `BigGAM`'s memory and speed advantage over plain
+    `GAM` really shows up once `n` reaches into the millions, where materializing the full design
+    matrix would be impractical.
     """
 
     def __init__(
@@ -376,23 +473,34 @@ class BigGAM(GAM):
     ) -> BigGAM:
         """Fit the BigGAM using discretized P-IRLS.
 
+        Builds a `DiscretizedModelMatrix` via `build_discretized_model_matrix` and fits it with
+        `bam_fit`, which accumulates `X'WX` and `X'Wz` from per-bin basis blocks instead of the
+        full design matrix (see the class docstring for how the discretization and cross-product
+        accumulation work).
+
         Parameters
         ----------
-        data:
-            Column-oriented data (dict, DataFrame, etc.).
-        smoothing_params:
-            Fixed smoothing parameters. If `None`, selected automatically.
-        method:
-            Smoothing selection method: `"fREML"` (default), `"REML"`, `"ML"`, or `"GCV"`.
-        weights:
-            Observation weights, shape `(n,)`.
-        select:
-            If `True`, enable double-penalty variable selection.
+        data : dict[str, numpy.ndarray] or InputData
+            Column-oriented data as `{name: 1-D array}` (or any `InputData`-compatible object).
+            All columns referenced by the formula must be present and of equal length.
+        smoothing_params : list of float, optional
+            Fixed smoothing parameters `lambda_j`, one per smooth term, in formula order. If
+            `None` (the default), smoothing parameters are selected automatically according to
+            `method`.
+        method : str
+            Criterion used to select smoothing parameters when `smoothing_params` is `None`. One
+            of `"fREML"` (default, fast discretized REML), `"REML"`, `"ML"`, or `"GCV"`. See
+            `~whittaker.gam.GAM.fit` for a description of each criterion.
+        weights : numpy.ndarray, optional
+            Observation (prior) weights, shape `(n,)`. Must be strictly positive.
+        select : bool
+            If `True`, add an extra penalty on each smooth's null space so the term can be shrunk
+            to exactly zero (double-penalty selection). Defaults to `False`.
 
         Returns
         -------
         BigGAM
-            Returns `self` for method chaining.
+            Returns `self` for method chaining, e.g. `model = BigGAM("y ~ s(x)").fit(data)`.
         """
         data = prepare_data(data)
         self._data = data
