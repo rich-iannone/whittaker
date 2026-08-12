@@ -16,8 +16,8 @@ for reproducing results later without re-fitting. Whittaker provides two seriali
 
 - **Native format** (`save_gam` / `load_gam`): round-trips a fitted GAM to a compact `.npz` archive.
   Fast, lossless, Python-only.
-- **mgcv interchange** (`to_mgcv_dict` / `from_mgcv_dict`): converts between Whittaker GAMs and
-  R's mgcv `gam` object structure. Useful for cross-language workflows.
+- **`mgcv` interchange** (`to_mgcv_dict` / `from_mgcv_dict`): converts between Whittaker GAMs and
+  R's `mgcv` `gam` object structure. Useful for cross-language workflows.
 
 ## Saving and loading a fitted GAM
 
@@ -27,7 +27,7 @@ import whittaker as wk
 import tempfile, pathlib
 
 # Fit a model
-rng = np.random.default_rng(42)
+rng = np.random.default_rng(23)
 n = 300
 x = np.linspace(0, 2 * np.pi, n)
 y = np.sin(x) + rng.normal(0, 0.3, n)
@@ -96,7 +96,7 @@ alt.Chart({"values": plot_data}).mark_line(strokeWidth=2).encode(
     strokeDash=alt.condition(
         alt.datum.source == "Truth", alt.value([4, 4]), alt.value([0])
     ),
-).properties(width=500, height=300, title="Predictions from loaded model")
+).properties(width="container", height=300, title="Predictions from loaded model")
 ```
 
 ### Standard errors from loaded models
@@ -115,7 +115,7 @@ print(f"Mean SE: {pred_se.se.mean():.4f}")
 
 ```{python}
 # Poisson model
-rng = np.random.default_rng(42)
+rng = np.random.default_rng(23)
 mu = np.exp(0.5 + 0.8 * np.sin(x))
 y_pois = rng.poisson(mu).astype(float)
 
@@ -175,7 +175,7 @@ print(f"JSON size: {len(json_str):,} characters")
 ::: {.callout-note}
 ## Using in R
 
-In R, load the JSON and use it with mgcv:
+In R, load the JSON and use it with `mgcv`:
 
 ```r
 library(jsonlite)
