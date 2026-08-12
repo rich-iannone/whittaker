@@ -336,23 +336,46 @@ def _apply_constraint_to_penalty(S: NDArray, C: NDArray) -> NDArray:
 
 @dataclass
 class SmoothInfo:
-    """Metadata and matrices for a single smooth term in the model.
+    """Metadata describing where one smooth term lives inside a `ModelMatrix`.
+
+    Each `~whittaker.formula.terms.SmoothTerm` in a formula (an `s()`, `te()`, `ti()`, or `t2()` call)
+    expands into several columns of the full design matrix `X` — one per basis function of the fitted
+    `SmoothBasis`. A `SmoothInfo` records the bookkeeping needed to make sense of that expansion after
+    the fact: which contiguous slice `X[:, col_start:col_end]` belongs to this term, the fitted
+    `SmoothBasis` instance itself (so the exact same knots and constraints can be reused later), and
+    which entries of `ModelMatrix.penalties` hold this term's own penalty block(s). `build_model_matrix`
+    creates one `SmoothInfo` per smooth term (or per `by=` level, for factor-by smooths) and stores the
+    list on `ModelMatrix.smooths`; `predict_matrix` later reads these back to evaluate each smooth's
+    basis on new data without needing the original `Formula` object.
 
     Attributes
     ----------
-    term:
+    term : SmoothTerm
         The parsed `SmoothTerm` this info belongs to.
-    basis:
-        The fitted `SmoothBasis` instance.
-    col_start:
+    basis : SmoothBasis
+        The fitted `SmoothBasis` instance for this term. Retained so that `predict_matrix` can call
+        `basis.basis_matrix()` on new covariate values using the exact knots, degrees of freedom, and
+        identifiability constraints learned during fitting, rather than re-fitting a new basis.
+    col_start : int
         Start column index (inclusive) in the full model matrix `X`.
-    col_end:
+    col_end : int
         End column index (exclusive) in the full model matrix `X`.
-    null_space_dim:
-        Dimension of the penalty null space for this smooth.
-    penalty_indices:
-        Indices into `ModelMatrix.penalties` that belong to this smooth. For `s()` terms this is a
-        single index; for `te()` terms it is one index per marginal direction.
+    null_space_dim : int
+        Dimension of the penalty null space for this smooth, i.e. the number of basis directions
+        (after identifiability constraints) that the penalty does not shrink at all. For an ordinary
+        cubic or thin-plate spline this is typically the "linear" part of the smooth; for shrinkage
+        bases (`bs="ts"`, `bs="cs"`) and random-effect/factor-smooth bases (`bs="re"`, `bs="fs"`) it is
+        `0` because every direction is already penalized.
+    penalty_indices : list of int
+        Indices into `ModelMatrix.penalties` that belong to this smooth. For `s()` terms this is
+        usually a single index (or two, if `select=True` added a null-space penalty); for `te()` terms
+        it is one index per marginal direction.
+    by_var : str or None
+        Name of the `by=` variable for this term, or `None` if the term has no `by=` modifier.
+    by_level : str or None
+        For factor `by=` variables, the specific level this `SmoothInfo` corresponds to (one
+        `SmoothInfo` is created per level); `None` for continuous `by=` variables or terms without a
+        `by=` modifier.
     """
 
     term: SmoothTerm
@@ -367,28 +390,40 @@ class SmoothInfo:
 
 @dataclass
 class ModelMatrix:
-    """Result of :func:`build_model_matrix`.
+    """Numeric design matrix, penalties, and metadata produced by :func:`build_model_matrix`.
+
+    A `ModelMatrix` is the numeric form of a fitted `~whittaker.gam.GAM`'s formula: the design matrix
+    `X` such that the linear predictor is `eta = X @ beta` (plus an optional offset), together with one
+    quadratic penalty matrix per smooth term and enough metadata (`smooths`, `column_names`) to later
+    build a matching prediction matrix or attribute coefficients back to individual terms. `GAM.fit()`
+    calls `build_model_matrix` once and stores the result so that `predict()`, `summary()`, and
+    `plot()` can all refer back to the same column layout.
 
     Attributes
     ----------
-    X:
-        Full design matrix, shape `(n, p)` where *p* is the total number of columns (intercept +
-        parametric + all constrained smooth bases).
-    penalties:
-        List of `(p, p)` penalty matrices, one per smooth term, each containing that term's penalty
-        embedded in the appropriate block of the full model dimension.
-    smooths:
+    X : numpy.ndarray
+        Full design matrix, shape `(n, p)` where *n* is the number of observations and *p* is the
+        total number of columns (intercept + parametric + all constrained smooth bases).
+    penalties : list of numpy.ndarray
+        List of `(p, p)` penalty matrices, one per smooth term (or per marginal/null-space penalty
+        within a term), each containing that term's penalty embedded in the appropriate block of the
+        full model dimension so `beta.T @ S_j @ beta` depends only on that term's coefficients.
+    smooths : list of SmoothInfo
         Per-smooth metadata (`SmoothInfo`) in formula order.
-    column_names:
-        Human-readable label for each column of `X`, in order.
-    has_intercept:
+    column_names : list of str
+        Human-readable label for each column of `X`, in order, e.g. `"(Intercept)"`, a covariate name
+        for a linear term, or `"s(x)[0]"` for the first basis function of a smooth term.
+    has_intercept : bool
         Whether column 0 is the intercept.
-    n_parametric:
+    n_parametric : int
         Number of parametric (linear + interaction) columns, not counting the intercept.
-    offset:
+    offset : numpy.ndarray or None
         Offset vector of shape `(n,)`, or `None` if no offset term.
-    response:
-        The response column as a 1-D float array (`numpy.ndarray`).
+    offset_expressions : list of str
+        Column expressions summed to form `offset`, retained so `predict_offset` can reconstruct the
+        offset for new data.
+    response : numpy.ndarray
+        The response column as a 1-D float array.
     """
 
     X: NDArray
@@ -440,19 +475,44 @@ def build_model_matrix(
     apply_constraints: bool = True,
     select: bool = False,
 ) -> ModelMatrix:
-    """Assemble the full design matrix and penalty structure from a formula.
+    r"""Assemble the full design matrix and penalty structure from a formula.
+
+    A generalized additive model is fit by turning the covariates into a purely numeric *model
+    matrix* (also called a *design matrix*) `X` — an `(n, p)` array of `n` observations by `p`
+    coefficients — such that the linear predictor is simply a matrix-vector product:
+
+    $$
+    \eta = X \beta + \text{offset}
+    $$
+
+    Every term in the formula contributes one or more columns to `X`. An intercept contributes a
+    single column of ones; a linear term `x3` contributes the column `x3` itself; an interaction
+    `x1:x2` contributes the elementwise product `x1 * x2`. A smooth term such as `s(x)`, by contrast,
+    expands into *several* columns: the basis functions of the underlying spline (or other smooth)
+    basis, evaluated at each observation's value of `x`. Fitting a GAM is then no different from
+    fitting a (penalized) linear model in these expanded columns — the non-linearity of `f(x)` lives
+    entirely in how the basis functions are constructed, not in how the coefficients enter the model.
+
+    `build_model_matrix` is the bridge between a parsed `~whittaker.formula.terms.Formula` and the
+    numeric matrices the P-IRLS fitting engine (`~whittaker.pirls.pirls_fit`) actually needs: the
+    design matrix `X` plus, for each smooth term, a quadratic penalty matrix `S_j` that penalizes
+    wiggliness via `beta.T @ S_j @ beta`. Each `S_j` starts out sized to just that term's own basis
+    functions but is expanded ("embedded") to the full `(p, p)` model dimension, with zeros
+    everywhere outside that term's column block, so that summing `lambda_j * S_j` over all terms
+    gives a single penalty matrix that can be added directly to the unpenalized normal equations.
 
     Parameters
     ----------
-    formula:
-        A parsed `~whittaker.formula.Formula`.
-    data:
+    formula : Formula
+        A parsed `~whittaker.formula.terms.Formula`, typically produced by
+        `~whittaker.formula.parser.parse`.
+    data : dict[str, numpy.ndarray]
         Column-oriented data as `{name: 1-D array}`. Every column referenced by the formula must be
         present. All arrays must have the same length.
-    apply_constraints:
+    apply_constraints : bool
         If `True` (the default), apply sum-to-zero identifiability constraints to each smooth term
         so the intercept is identifiable.
-    select:
+    select : bool
         If `True`, add an extra penalty on each smooth's null space so that terms can be penalized
         to zero entirely (double penalty approach, Marra & Wood 2011). This enables automatic smooth
         selection via GCV or REML. Smooths that already have `null_space_dim == 0` (e.g. `bs="ts"`,
@@ -469,6 +529,46 @@ def build_model_matrix(
         If a required column is missing from *data*.
     ValueError
         If an unsupported basis type is requested.
+
+    Notes
+    -----
+    An ordinary smoothing penalty `S` for a term like `s(x)` typically has a non-trivial null space —
+    directions in coefficient space that the penalty does not shrink at all (e.g. the linear
+    component of a cubic spline). This means increasing that term's smoothing parameter `lambda_j`
+    can flatten the smooth toward a straight line, but never all the way to zero, so ordinary GCV/REML
+    smoothing-parameter selection cannot remove an irrelevant term from the model entirely.
+
+    When `select=True`, `build_model_matrix` adds a second penalty matrix per term (see
+    `_null_space_penalty`) built from the eigendecomposition of the term's own penalty `S`: the
+    eigenvectors with (numerically) zero eigenvalue span exactly the null space of `S`, and projecting
+    onto that eigenspace gives a penalty `S_null` that penalizes only those previously-unpenalized
+    directions. With both `S` and `S_null` present (each with its own smoothing parameter), driving
+    both `lambda_j` and the null-space smoothing parameter to large values shrinks the *entire* term,
+    including its linear component, to zero — allowing REML- or GCV-based fitting to perform automatic
+    term selection much like a lasso penalty does for linear models. See Marra, G. and Wood, S.N.
+    (2011), "Practical variable selection for generalized additive models", *Computational Statistics
+    & Data Analysis*, 55(7), 2372-2387.
+
+    Examples
+    --------
+    ```{python}
+    import numpy as np
+    from whittaker.formula.parser import parse
+    from whittaker.model_matrix import build_model_matrix
+
+    rng = np.random.default_rng(0)
+    x = np.sort(rng.uniform(0, 1, 50))
+    y = np.sin(2 * np.pi * x) + rng.normal(scale=0.2, size=50)
+
+    formula = parse("y ~ s(x)")
+    model_matrix = build_model_matrix(formula, {"x": x, "y": y})
+
+    model_matrix.X.shape
+    ```
+
+    ```{python}
+    model_matrix.column_names[:5]
+    ```
     """
     # --- validate lengths ---------------------------------------------------
     lengths = {name: len(arr) for name, arr in data.items()}
@@ -707,20 +807,65 @@ def predict_matrix(
 ) -> NDArray:
     """Build the prediction design matrix for new data.
 
-    Re-uses the fitted smooth bases stored in *model* to evaluate basis matrices at new covariate
-    values, then assembles the same column structure as the training matrix.
+    Predicting from a fitted GAM requires evaluating each term at new covariate values in *exactly*
+    the same numeric representation used during fitting. For a linear term this is trivial (just
+    read off the new column), but for a smooth term it is not: simply re-fitting a fresh basis on the
+    new data would choose different knots, degrees of freedom, and identifiability constraints,
+    producing a matrix whose columns don't line up with the fitted coefficients `beta` at all.
+    `predict_matrix` avoids this by reusing the exact `SmoothBasis` objects stored on
+    `model.smooths[i].basis` — the same knots and constraints the model was fitted with — and simply
+    evaluating `basis.basis_matrix()` at the new covariate values, so the resulting columns are
+    directly compatible with the training-time coefficients.
+
+    Because a `ModelMatrix` does not retain the original `~whittaker.formula.terms.Formula` object
+    (only its numeric consequences), `predict_matrix` first calls `_reconstruct_formula` to rebuild an
+    equivalent `Formula` from `model.column_names` and `model.smooths`, then walks that formula's terms
+    in order — extracting linear/interaction columns directly from `new_data` and re-evaluating each
+    smooth's stored basis — to assemble a new design matrix with the same column layout as `model.X`.
 
     Parameters
     ----------
-    model:
+    model : ModelMatrix
         A `ModelMatrix` previously returned by `build_model_matrix()`.
-    new_data:
-        Column-oriented new data.
+    new_data : dict[str, numpy.ndarray]
+        Column-oriented new data. Must contain every covariate column referenced by the original
+        formula (the response column is not needed).
 
     Returns
     -------
-    NDArray
+    numpy.ndarray
         Design matrix of shape `(n_new, p)` with the same column layout as `model.X`.
+
+    Notes
+    -----
+    `_reconstruct_formula` infers term boundaries purely from `column_names` and the stored
+    `SmoothInfo` objects, not from any record of the literal original formula string. In practice this
+    reconstruction always agrees with the training matrix's column layout, since it is derived from
+    the very structures that layout was built from — but the reconstructed `Formula`'s term order and
+    string labels are *inferred*, and should not be treated as a faithful reproduction of the original
+    formula object passed to `build_model_matrix` (for example, `full=True` interactions are not
+    reconstructed exactly as originally specified).
+
+    Examples
+    --------
+    Continuing from the `build_model_matrix` example above, predict at new values of `x` using the
+    same fitted basis:
+
+    ```{python}
+    import numpy as np
+    from whittaker.formula.parser import parse
+    from whittaker.model_matrix import build_model_matrix, predict_matrix
+
+    rng = np.random.default_rng(0)
+    x = np.sort(rng.uniform(0, 1, 50))
+    y = np.sin(2 * np.pi * x) + rng.normal(scale=0.2, size=50)
+
+    model_matrix = build_model_matrix(parse("y ~ s(x)"), {"x": x, "y": y})
+
+    new_x = np.linspace(0, 1, 5)
+    X_new = predict_matrix(model_matrix, {"x": new_x})
+    X_new.shape
+    ```
     """
     lengths = {name: len(arr) for name, arr in new_data.items()}
     unique_lengths = set(lengths.values())
