@@ -48,7 +48,7 @@ too high is harmless because the penalty takes care of the rest.
 
 ## Thin plate regression splines (TPRS): `bs="tp"` {#tprs}
 
-TPRS is the default basis in Whittaker, as it is in mgcv. It is an **optimal** smoother: for a
+TPRS is the default basis in Whittaker, as it is in `mgcv`. It is an **optimal** smoother: for a
 given number of basis functions, TPRS minimizes a global measure of roughness without requiring you
 to choose knot locations. This makes it an excellent default for exploratory work.
 
@@ -62,7 +62,7 @@ import whittaker as wk
 import altair as alt
 
 # Generate data from a noisy sine curve
-rng = np.random.default_rng(42)
+rng = np.random.default_rng(23)
 n = 200
 x = np.linspace(0, 2 * np.pi, n)
 y = np.sin(x) + rng.normal(0, 0.3, n)
@@ -126,7 +126,7 @@ true_line = alt.Chart({"values": true_data}).mark_line(
 
 # Combine layers
 (band + points + line + true_line).properties(
-    width=550, height=320,
+    width="container", height=320,
     title="TPRS smooth (default): y ~ s(x)"
 )
 ```
@@ -141,7 +141,7 @@ If the true function is more complex, increase `k`:
 
 ```{python}
 # A more complex function needs more basis functions
-rng = np.random.default_rng(42)
+rng = np.random.default_rng(23)
 n = 400
 x = np.linspace(0, 4 * np.pi, n)
 y = np.sin(x) + 0.5 * np.sin(3 * x) + rng.normal(0, 0.3, n)
@@ -168,7 +168,7 @@ alt.Chart({"values": comp_data}).mark_line(strokeWidth=2).encode(
     x=alt.X("x:Q", title="x"),
     y=alt.Y("fit:Q", title="f(x)"),
     color=alt.Color("model:N", title="Basis dimension"),
-).properties(width=550, height=300, title="Effect of basis dimension k")
+).properties(width="container", height=300, title="Effect of basis dimension k")
 ```
 
 With `k=10`, the smooth cannot fully capture the higher-frequency component, but `k=25` captures
@@ -188,7 +188,7 @@ placement.
 
 ```{python}
 # Generate data
-rng = np.random.default_rng(42)
+rng = np.random.default_rng(23)
 n = 200
 x = np.linspace(0, 1, n)
 y = np.exp(2 * x) * np.sin(6 * x) + rng.normal(0, 0.5, n)
@@ -228,7 +228,7 @@ band = alt.Chart({"values": fit_data}).mark_area(
 ).encode(x="x:Q", y="lower:Q", y2="upper:Q")
 
 (band + points + line).properties(
-    width=550, height=320,
+    width="container", height=320,
     title="Cubic regression spline: s(x, bs='cr', k=15)"
 )
 ```
@@ -249,7 +249,7 @@ because the B-spline basis is banded.
 
 ```{python}
 # Generate evenly-spaced data (typical for time series)
-rng = np.random.default_rng(42)
+rng = np.random.default_rng(23)
 n = 300
 x = np.linspace(0, 10, n)
 y = 2 * np.sin(x) + 0.3 * x + rng.normal(0, 0.5, n)
@@ -298,7 +298,7 @@ band = alt.Chart({"values": fit_data}).mark_area(
 ).encode(x="x:Q", y="lower:Q", y2="upper:Q")
 
 (band + points + line).properties(
-    width=550, height=320,
+    width="container", height=320,
     title="P-spline smooth: s(x, bs='ps', k=20)"
 )
 ```
@@ -323,7 +323,7 @@ constrained so that $f$ and its first derivative match at the endpoints of the c
 
 ```{python}
 # Simulate periodic data: temperature over a year
-rng = np.random.default_rng(42)
+rng = np.random.default_rng(23)
 n = 365
 day = np.linspace(0, 365, n, endpoint=False)
 # True seasonal pattern: warm in summer, cold in winter
@@ -362,7 +362,7 @@ band = alt.Chart({"values": fit_data}).mark_area(
 ).encode(x="day:Q", y="lower:Q", y2="upper:Q")
 
 (band + points + line).properties(
-    width=550, height=320,
+    width="container", height=320,
     title="Cyclic cubic spline: temperature by day of year"
 )
 ```
@@ -387,7 +387,7 @@ The key distinction between `te()` and `ti()`:
 
 ```{python}
 # Generate 2D data: f(x1, x2) = sin(x1) * cos(x2)
-rng = np.random.default_rng(42)
+rng = np.random.default_rng(23)
 n = 500
 x1 = rng.uniform(0, 2 * np.pi, n)
 x2 = rng.uniform(0, 2 * np.pi, n)
@@ -423,7 +423,7 @@ alt.Chart({"values": grid_data}).mark_rect().encode(
     x=alt.X("x1:Q", bin=alt.Bin(maxbins=n_grid), title="x1"),
     y=alt.Y("x2:Q", bin=alt.Bin(maxbins=n_grid), title="x2"),
     color=alt.Color("mean(f_hat):Q", scale=alt.Scale(scheme="viridis"), title="f(x1, x2)"),
-).properties(width=400, height=400, title="Tensor product surface: te(x1, x2)")
+).properties(width="container", height=400, title="Tensor product surface: te(x1, x2)")
 ```
 
 ::: {.callout-tip}
@@ -457,7 +457,7 @@ zero rather than to a residual linear trend.
 
 ```{python}
 # Generate data where x2 is uninformative
-rng = np.random.default_rng(42)
+rng = np.random.default_rng(23)
 n = 300
 x1 = np.linspace(0, 2 * np.pi, n)
 x2 = rng.uniform(0, 1, n)  # pure noise predictor
@@ -494,7 +494,7 @@ fitting a generalized additive mixed model (GAMM) without switching to a differe
 
 ```{python}
 # Generate grouped data: 5 groups with different intercepts
-rng = np.random.default_rng(42)
+rng = np.random.default_rng(23)
 n_per_group = 50
 n_groups = 5
 n = n_per_group * n_groups
@@ -531,7 +531,7 @@ concave. Shape-constrained smooths enforce these restrictions in the basis const
 
 ```{python}
 # Generate data from a monotone increasing function
-rng = np.random.default_rng(42)
+rng = np.random.default_rng(23)
 n = 200
 x = np.linspace(0, 5, n)
 y = np.log1p(x) + rng.normal(0, 0.2, n)
@@ -562,7 +562,7 @@ alt.Chart({"values": comp_data}).mark_line(strokeWidth=2).encode(
     x=alt.X("x:Q", title="x"),
     y=alt.Y("fit:Q", title="f(x)"),
     color=alt.Color("model:N", title="Smooth type"),
-).properties(width=550, height=300, title="Shape-constrained vs. unconstrained smooth")
+).properties(width="container", height=300, title="Shape-constrained vs. unconstrained smooth")
 ```
 
 For this data, both models give similar results because the true function is monotone. The
@@ -580,7 +580,7 @@ When `by=` names a categorical variable, Whittaker fits a **separate smooth** fo
 
 ```{python}
 # Generate data where the smooth shape differs by group
-rng = np.random.default_rng(42)
+rng = np.random.default_rng(23)
 n_per = 150
 x_a = np.linspace(0, 2 * np.pi, n_per)
 x_b = np.linspace(0, 2 * np.pi, n_per)
@@ -635,7 +635,7 @@ lines = alt.Chart({"values": fit_data}).mark_line(
 )
 
 (points + lines).properties(
-    width=500, height=300,
+    width="container", height=300,
     title="Factor by-variable smooth: s(x, by=group)"
 )
 ```
@@ -650,7 +650,7 @@ This is useful for varying-coefficient models.
 
 ```{python}
 # Varying-coefficient model: effect of x depends on z
-rng = np.random.default_rng(42)
+rng = np.random.default_rng(23)
 n = 300
 x = np.linspace(0, 2 * np.pi, n)
 z = rng.uniform(0.5, 2.0, n)
@@ -683,7 +683,7 @@ alt.Chart({"values": fit_data}).mark_line(strokeWidth=2).encode(
     y=alt.Y("fit:Q", title="f(x) scaled by z"),
     color=alt.Color("z:N", title="z value"),
 ).properties(
-    width=500, height=300,
+    width="container", height=300,
     title="Varying-coefficient smooth: effect of x at different z levels"
 )
 ```
@@ -708,7 +708,7 @@ degree of freedom is consumed by the identifiability constraint).
 
 ```{python}
 # Checking basis dimension adequacy
-rng = np.random.default_rng(42)
+rng = np.random.default_rng(23)
 n = 300
 x = np.linspace(0, 4 * np.pi, n)
 y = np.sin(x) + 0.5 * np.sin(3 * x) + rng.normal(0, 0.3, n)
@@ -718,7 +718,7 @@ model_check = wk.GAM("y ~ s(x)")
 model_check.fit({"x": x, "y": y}, method="REML")
 
 # Check for basis dimension adequacy
-print(model_check.check())
+model_check.check()
 ```
 
 ::: {.callout-warning}
