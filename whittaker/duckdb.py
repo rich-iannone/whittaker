@@ -1,9 +1,10 @@
 """DuckDB out-of-core GAM fitting.
 
-Provides `DuckDBGAM`, a GAM variant that reads data from a DuckDB table or query.
-Data is fetched via DuckDB's Arrow streaming interface and the model is fit using
-discretized basis evaluation (same approach as `BigGAM`), so the full *n x p*
-design matrix is never materialized.
+Provides `DuckDBGAM`, a GAM variant that reads data from a DuckDB table, view, or
+arbitrary SQL query. Data is fetched via DuckDB's Arrow streaming interface, in
+`chunk_size`-row batches, and the model is fit using discretized basis evaluation
+(the same approach as `BigGAM`), so the full *n x p* design matrix is never
+materialized.
 
 The key memory savings: raw data is *n x d* (d covariates), while the design matrix
 is *n x p* (p basis functions, often p >> d). By streaming the raw data and
@@ -75,32 +76,90 @@ def _stream_as_dict(conn, source_query: str, chunk_size: int = 100_000) -> Inter
 
 
 class DuckDBGAM(BigGAM):
-    """GAM that reads data from a DuckDB table or query.
+    r"""GAM that reads data directly from DuckDB via SQL.
 
-    Data is fetched via DuckDB's Arrow interface and the model is fit using
-    discretized basis evaluation (same as `BigGAM`), so the full design matrix
-    is never materialized. This is useful when data lives in Parquet files,
-    remote tables, or is produced by complex SQL transformations.
+    `DuckDBGAM` is a SQL-native variant of `BigGAM` for fitting a GAM without first
+    loading the source data into pandas or polars. `fit()` accepts either a bare
+    table/view name or an arbitrary `SELECT` query — anything expressible in SQL,
+    including joins, filters, aggregations, and window functions — and DuckDB does
+    the work of producing the resulting rows. Internally, `_stream_as_dict` reads
+    those rows through DuckDB's Arrow batch interface
+    (`conn.sql(query).fetch_arrow_reader(batch_size=chunk_size)`), concatenating
+    `chunk_size`-row Arrow batches into the column-oriented dict that
+    `build_discretized_model_matrix` and `bam_fit` (the same discretized-basis
+    machinery used by `BigGAM`) consume to fit the model. Use `DuckDBGAM` whenever
+    the training data already lives in DuckDB, in Parquet/CSV files DuckDB can scan
+    directly, or in a view/query that would be expensive to materialize by hand
+    before fitting.
 
     Parameters
     ----------
-    formula:
-        Model formula (same as `~whittaker.gam.GAM`).
-    family:
-        Response distribution family.
-    n_discrete:
-        Number of discretization grid points per covariate.
-    chunk_size:
-        Number of rows per Arrow batch when streaming from DuckDB.
+    formula : str or Formula
+        Model formula (same syntax as `~whittaker.gam.GAM`), e.g.
+        `"y ~ s(x1) + s(x2)"`. The left-hand side names the response column that
+        must be selectable from `source`; the right-hand side lists smooth terms,
+        linear terms, and interactions in `mgcv`-style syntax.
+    family : Family, optional
+        Response distribution family, e.g. `Gaussian()`, `Binomial()`, `Poisson()`,
+        or `Gamma()`. Defaults to `Gaussian()` (identity link).
+    n_discrete : int
+        Number of discretization grid points per covariate used when building the
+        discretized model matrix (see `build_discretized_model_matrix`). Larger
+        values give a more accurate approximation to the exact basis evaluation at
+        the cost of a larger `grid_size * p` term in memory and compute. Defaults
+        to `200`, which is adequate for most smooths.
+    chunk_size : int
+        Number of rows per Arrow batch fetched from DuckDB while streaming
+        (see `Notes` below). Larger values reduce Python-level batch-processing
+        overhead but increase peak memory per batch; smaller values do the
+        opposite. Defaults to `100_000`.
+
+    Notes
+    -----
+    Memory usage during fitting is bounded by *O(n d + grid_size * p)* rather than
+    *O(n p)*, where *n* is the row count, *d* the number of raw covariates, *p* the
+    number of basis functions, and *grid_size* the discretization resolution
+    (`n_discrete`). The `n d` term comes from streaming the raw columns rather than
+    an *n x p* design matrix; the `grid_size * p` term comes from evaluating the
+    basis only at the discretization grid. `_stream_as_dict` is what keeps the raw
+    data at `O(n d)` rather than materializing a full *n x p* matrix twice as
+    `conn.sql(...).df()` would: it pulls one `chunk_size`-row Arrow batch at a time
+    from `fetch_arrow_reader` and appends each batch's columns to a list, so DuckDB
+    never has to build (and Python never has to hold) more than one batch's worth
+    of Arrow data plus the columns accumulated so far.
 
     Examples
     --------
-    >>> import duckdb
-    >>> conn = duckdb.connect()
-    >>> conn.sql("CREATE TABLE data AS SELECT * FROM 'large_dataset.parquet'")
-    >>> model = DuckDBGAM("y ~ s(x1) + s(x2)")
-    >>> model.fit("data", conn)
-    >>> predictions = model.predict(new_data)
+    ```{python}
+    import duckdb
+    import numpy as np
+
+    import whittaker as wt
+    from whittaker.duckdb import DuckDBGAM
+
+    conn = duckdb.connect()
+    rng = np.random.default_rng(0)
+    conn.execute(
+        "CREATE TABLE data AS "
+        "SELECT i AS id, (i / 100.0) AS x, "
+        "sin(2 * pi() * i / 100.0) + ? * random() AS y "
+        "FROM range(200) AS t(i)",
+        [0.2],
+    )
+
+    model = DuckDBGAM("y ~ s(x)").fit("data", conn)
+    print(model.summary())
+    ```
+
+    A query can be used directly in place of a table name, e.g. to filter or join
+    before fitting:
+
+    ```{python}
+    model2 = DuckDBGAM("y ~ s(x)").fit_query(
+        "SELECT x, y FROM data WHERE x < 0.8", conn
+    )
+    print(model2.n_rows)
+    ```
     """
 
     def __init__(
@@ -137,27 +196,41 @@ class DuckDBGAM(BigGAM):
     ) -> DuckDBGAM:
         """Fit the GAM by reading data from DuckDB.
 
-        Data is streamed in Arrow batches of `chunk_size` rows, then discretized and fit using the
-        BigGAM approach.
+        Data is streamed in Arrow batches of `chunk_size` rows (see `_stream_as_dict`), then
+        discretized and fit using the `BigGAM` approach (`build_discretized_model_matrix` +
+        `bam_fit`). The full design matrix is never materialized.
 
         Parameters
         ----------
-        source:
-            DuckDB table name or SQL query (e.g. `"my_table"` or
-            `"SELECT * FROM my_table WHERE year > 2020"`).
-        conn:
-            DuckDB connection object (`duckdb.DuckDBPyConnection`).
-        smoothing_params:
+        source : str
+            DuckDB table or view name, or a full `SELECT` query. A bare name such as
+            `"my_table"` is normalized by `_normalize_source` into
+            `"SELECT * FROM my_table"`; a string that already starts with `SELECT`
+            (case-insensitive) is used as-is, e.g.
+            `"SELECT * FROM my_table WHERE year > 2020"`. Any query DuckDB can execute
+            is accepted, including joins, aggregations, and window functions, as long
+            as its output columns cover every variable referenced by `formula`.
+        conn : duckdb.DuckDBPyConnection
+            A live DuckDB connection (as returned by `duckdb.connect()`) against which
+            `source` is resolved. The connection must remain open for the duration of
+            `fit()`; it is not closed or modified by this method beyond issuing read
+            queries.
+        smoothing_params : list of float, optional
             Fixed smoothing parameters. If `None`, selected automatically.
-        method:
+        method : str
             Smoothing selection method: `"fREML"` (default), `"REML"`, `"ML"`, or `"GCV"`.
-        select:
+        select : bool
             If `True`, enable double-penalty variable selection.
 
         Returns
         -------
         DuckDBGAM
             Returns `self` for method chaining.
+
+        Notes
+        -----
+        When `source` is unambiguously a SQL query rather than a table/view name,
+        `fit_query()` is a thin, more explicit alias for this method.
         """
         _import_duckdb()
         self._source = source
@@ -203,9 +276,26 @@ class DuckDBGAM(BigGAM):
         conn,
         **kwargs,
     ) -> DuckDBGAM:
-        """Convenience method: fit from an explicit SQL query.
+        """Fit the GAM from an explicit SQL query.
 
-        Equivalent to `fit(query, conn, ...)` but makes the intent clearer
-        when the source is a query rather than a table name.
+        Equivalent to calling `fit(query, conn, ...)` directly; this method exists purely to
+        document intent at the call site when `source` is unambiguously a SQL query (e.g. one
+        with a `WHERE`, `JOIN`, or aggregation) rather than a bare table or view name.
+
+        Parameters
+        ----------
+        query : str
+            A full `SELECT` query, e.g. `"SELECT * FROM my_table WHERE year > 2020"`. Its
+            output columns must cover every variable referenced by `formula`.
+        conn : duckdb.DuckDBPyConnection
+            A live DuckDB connection against which `query` is executed.
+        **kwargs
+            Additional keyword arguments forwarded to `fit()`: `smoothing_params`, `method`,
+            and `select`.
+
+        Returns
+        -------
+        DuckDBGAM
+            Returns `self` for method chaining.
         """
         return self.fit(query, conn, **kwargs)
