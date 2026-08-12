@@ -37,7 +37,7 @@ import numpy as np
 import whittaker as wk
 
 # Simulate a dataset large enough to demonstrate discretised fitting
-rng = np.random.default_rng(42)
+rng = np.random.default_rng(23)
 n = 2_000
 x1 = rng.uniform(0, 2 * np.pi, n)
 x2 = rng.uniform(0, 1, n)
@@ -108,7 +108,7 @@ alt.Chart({"values": plot_data}).mark_line(strokeWidth=2).encode(
     strokeDash=alt.condition(
         alt.datum.source == "Truth", alt.value([4, 4]), alt.value([0])
     ),
-).properties(width=500, height=300, title="BigGAM fit vs. truth (2,000 observations)")
+).properties(width="container", height=300, title="BigGAM fit vs. truth (2,000 observations)")
 ```
 
 ## PolarsGAM: fitting from Polars and files
@@ -249,7 +249,7 @@ Scalable backends work with all response families:
 
 ```{python}
 # Poisson counts
-rng = np.random.default_rng(42)
+rng = np.random.default_rng(23)
 n_pois = 2_000
 x = rng.uniform(0, 2 * np.pi, n_pois)
 mu = np.exp(0.5 + 0.8 * np.sin(x))
