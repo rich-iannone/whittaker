@@ -440,7 +440,18 @@ class SoapFilm(SmoothBasis):
 
     @property
     def n_basis(self) -> int:
-        """Number of basis functions, equal to the number of interior knots."""
+        """Number of basis functions in the fitted soap film basis.
+
+        Equal to the number of interior knots used during `fit()`, which may be
+        fewer than the `k` requested at construction time if automatic knot
+        placement retained fewer points, or exactly `len(knots)` if knots were
+        supplied explicitly.
+
+        Returns
+        -------
+        int
+            The basis dimension, i.e. the number of interior knots.
+        """
         return self._n_interior
 
     def __repr__(self) -> str:
