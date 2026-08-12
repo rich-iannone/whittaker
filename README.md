@@ -85,12 +85,22 @@ model.summary()
 ```
 
 ```python
-# Check model adequacy
-model.check()
-
 # Predict with standard errors
 preds = model.predict({"x": np.linspace(0, 2 * np.pi, 50)}, se=True)
 ```
+
+<p align="center">
+<img src="https://raw.githubusercontent.com/rich-iannone/whittaker/main/assets/readme_partial_effects.png" alt="Partial effects plot" width="700">
+</p>
+
+```python
+# Check model adequacy
+model.check()
+```
+
+<p align="center">
+<img src="https://raw.githubusercontent.com/rich-iannone/whittaker/main/assets/readme_diagnostics.png" alt="Diagnostic plots" width="700">
+</p>
 
 See the [user guide](https://rich-iannone.github.io/whittaker/user-guide/get-started.html) for a comprehensive tour of all features, from basic smoothing to distributional regression and causal inference.
 
