@@ -272,7 +272,17 @@ class GaussianProcess(SmoothBasis):
 
     @property
     def n_basis(self) -> int:
-        """Number of basis functions `k` (may be smaller than requested if `n < k`)."""
+        """Number of basis functions retained by this Gaussian process basis.
+
+        Equal to the number of leading eigenfunctions of the covariance matrix kept
+        during `fit()`. This is the requested `k` unless `fit()` was called with
+        fewer training points than `k`, in which case it is silently reduced to `n`.
+
+        Returns
+        -------
+        int
+            The basis dimension `k`.
+        """
         return self._k
 
     def __repr__(self) -> str:
