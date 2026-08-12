@@ -1,5 +1,5 @@
 ---
-title: Whittaker
+title: ""
 toc: false
 ---
 
@@ -20,12 +20,13 @@ implementation.
 - **Works with your dataframe library**: Pandas, Polars, PyArrow, or any
   [Narwhals](https://narwhals-dev.github.io/narwhals/)-compatible frame.
 - **Full smooth catalog**: thin plate regression splines, cubic splines, P-splines, tensor products,
-cyclic splines, random effects, and more (matching mgcv's complete offering).
-- **Principled smoothness selection**: REML by default, with GCV, ML, and UBRE as alternatives.
+cyclic splines, random effects, factor smooths, and more (matching mgcv's complete offering).
+- **Principled smoothness selection**: REML by default, with GCV, ML, and fREML as alternatives.
 - **Beautiful diagnostics**: `model.check()` and `model.plot()` produce interactive Altair charts
 right in your notebook.
+- **Goes beyond the mean**: distributional regression (GAMLSS), quantile regression, conformal
+prediction, causal inference, streaming GAMs, and functional regression are all built in.
 - **Type-safe**: full annotations, strict Pyright-clean codebase.
-- **Production-ready**: serialization, scikit-learn compatibility, ONNX export (planned).
 
 ## The analytical pipeline
 
@@ -39,36 +40,176 @@ contributions.
 
 ## A first look
 
-::: {.callout-note}
-The API is under active development. The snippets below show the intended interface but not all
-features are implemented yet.
-:::
+Here's a complete example: generate data with a smooth pattern, fit a GAM, inspect the results, and
+predict on new observations.
 
-**Fit a simple GAM to the motorcycle acceleration dataset**
+**Step 1: Fit a GAM to noisy sinusoidal data**
 
-```python
+```{python}
+import numpy as np
 import whittaker as wk
-import polars as pl
 
-mcycle = wk.load_dataset("mcycle", backend="polars")
+rng = np.random.default_rng(42)
+x = np.linspace(0, 2 * np.pi, 200)
+y = np.sin(x) + rng.normal(0, 0.3, 200)
 
-model = wk.GAM("accel ~ s(times)")
-model.fit(mcycle)
+model = wk.GAM("y ~ s(x)")
+model.fit({"x": x, "y": y}, method="REML")
 model.summary()
 ```
 
-**Inspect the smooth and check model adequacy**
+**Step 2: Check basis dimension adequacy**
 
-```python
-model.plot()    # partial-effect plot with 95% confidence band
-model.check()   # basis dimension test, residual plots, convergence
+```{python}
+model.check()
 ```
 
-**Predict on new data**
+**Step 3: Predict with standard errors and visualize the fit**
 
-```python
-import narwhals as nw
+```{python}
+import altair as alt
 
-new_data = pl.DataFrame({"times": [10.0, 20.0, 30.0]})
-preds = model.predict(new_data, se=True)
+x_grid = np.linspace(0, 2 * np.pi, 200)
+preds = model.predict({"x": x_grid}, se=True)
+
+plot_data = [
+    {"x": float(x_grid[i]), "fit": float(preds.values[i]),
+     "lower": float(preds.values[i] - 1.96 * preds.se[i]),
+     "upper": float(preds.values[i] + 1.96 * preds.se[i])}
+    for i in range(len(x_grid))
+]
+
+obs_data = [{"x": float(x[i]), "y": float(y[i])} for i in range(len(x))]
+
+band = alt.Chart({"values": plot_data}).mark_area(
+    opacity=0.2, color="darkorange"
+).encode(x=alt.X("x:Q", title="x"), y=alt.Y("lower:Q", title="y"), y2="upper:Q")
+
+line = alt.Chart({"values": plot_data}).mark_line(
+    color="darkorange", strokeWidth=2
+).encode(x="x:Q", y="fit:Q")
+
+pts = alt.Chart({"values": obs_data}).mark_circle(
+    size=15, opacity=0.3, color="steelblue"
+).encode(x="x:Q", y="y:Q")
+
+(band + pts + line).properties(width=550, height=300, title="Fitted GAM with 95% confidence band")
+```
+
+**Step 4: Try a non-Gaussian family with multiple predictors**
+
+```{python}
+n = 500
+x1 = rng.uniform(0, 2 * np.pi, n)
+x2 = rng.uniform(0, 1, n)
+mu = np.exp(0.5 + 0.8 * np.sin(x1) + 2 * x2)
+counts = rng.poisson(mu).astype(float)
+
+model_pois = wk.GAM("y ~ s(x1) + s(x2)", family=wk.Poisson())
+model_pois.fit({"x1": x1, "x2": x2, "y": counts}, method="REML")
+model_pois.summary()
+```
+
+**Step 5: Cross-validate and save the model**
+
+```{python}
+cv = wk.cross_validate(
+    "y ~ s(x1) + s(x2)",
+    {"x1": x1, "x2": x2, "y": counts},
+    family=wk.Poisson(),
+    n_folds=5,
+)
+print(f"CV deviance: {cv.cv_score:.4f} (SE: {cv.cv_se:.4f})")
+
+wk.save_gam(model_pois, "/tmp/poisson_model.npz")
+loaded = wk.load_gam("/tmp/poisson_model.npz")
+print(f"Loaded model EDF: {loaded.edf_total:.1f}")
+```
+
+## What's inside
+
+**Core GAM fitting**: fit penalized regression splines with automatic smoothness selection (REML,
+GCV, ML, fREML). R-style formula syntax with smooth terms, tensor products, linear terms,
+interactions, offsets, and by-variable smooths. Full summary with EDF and significance tests.
+
+**Smooth basis types**: thin plate regression splines (TPRS), cubic regression splines, P-splines,
+cyclic variants, shrinkage smooths, Duchon splines, Gaussian processes, soap film smooths, Markov
+random fields, adaptive TPRS, random effects, factor smooths, and tensor products.
+
+**Response families**: Gaussian, Poisson, Binomial, Gamma, Negative Binomial, Beta, Tweedie,
+Inverse Gaussian, Cox PH, Ordered Categorical, and Multinomial. Each with appropriate link functions
+and variance structure.
+
+**Shape constraints**: monotone increasing/decreasing, convex, and concave smooths via constrained
+P-splines with PAVA projection.
+
+**Prediction and inference**: point estimates, standard errors, confidence intervals (pointwise and
+simultaneous), prediction intervals, and term-level contributions. All on response or link scale.
+
+**Model diagnostics**: `model.summary()` for EDF and significance tests, `model.check()` for basis
+dimension adequacy (k-index test), concurvity analysis, and residual plots.
+
+**Distributional regression (GAMLSS)**: model location, scale, and shape simultaneously with
+Gaussian, Gamma, Beta, zero-inflated Poisson, and zero-inflated Negative Binomial families.
+
+**Quantile regression**: fit conditional quantiles with ELF loss, optional non-crossing constraints,
+and sigma calibration.
+
+**Conformal prediction**: distribution-free prediction intervals via split, CV+, and jackknife+
+methods.
+
+**Causal inference**: double/debiased machine learning for ATE and CATE estimation, with mediation
+analysis.
+
+**Streaming and online GAMs**: incremental fitting via sufficient statistics with exponential decay
+for tracking distribution shift.
+
+**Multi-response models**: joint fitting of multiple responses with optional residual correlation
+modeling.
+
+**Functional regression**: scalar-on-function regression with B-spline or Fourier bases for
+functional covariates.
+
+**Large datasets**: `BigGAM` (discretized P-IRLS), `PolarsGAM` (streaming from Polars/files), and
+`DuckDBGAM` (SQL-native streaming) for datasets that exceed memory.
+
+**Cross-validation**: k-fold CV with deviance, MSE, or MAE scoring.
+
+**Serialization**: save and load fitted models as compact `.npz` archives, and convert to/from
+mgcv-compatible dictionaries for R interoperability.
+
+**scikit-learn integration**: `GAMRegressor` and `GAMClassifier` for use in pipelines and grid
+search.
+
+## Next steps
+
+- **Installation**: get started with `pip install whittaker` or see [Installation](user-guide/installation.qmd).
+- **Quick tour**: new to Whittaker? Start with the [Quick start](user-guide/quick-start.qmd) for a fast hands-on tour (5 min read).
+- **Learn the smooth catalog**: see [Smooth terms](user-guide/smooth-terms.qmd) for a detailed look at every basis type.
+- **Beyond the mean**: explore [Distributional regression (GAMLSS)](user-guide/distributional-regression-gamlss.qmd), [Quantile regression](user-guide/quantile-regression.qmd), and [Conformal prediction](user-guide/conformal-prediction.qmd).
+- **Scale up**: learn about [Large datasets](user-guide/large-datasets.qmd) for fitting on data that exceeds memory.
+- **Explore everything**: see the full [User Guide](user-guide/get-started.qmd) for comprehensive coverage of all features.
+- **API reference**: browse the [Python API reference](reference/) for function signatures and detailed documentation.
+
+## Key features at a glance
+
+```{=html}
+<table style="width: 100%; border-collapse: collapse;">
+  <tr style="border-bottom: 2px solid #e1e4e8;">
+    <td style="padding: 12px 0;">✓ Full mgcv-class smooth catalog</td>
+    <td style="padding: 12px 0; text-align: right;">✓ Principled smoothness selection (REML)</td>
+  </tr>
+  <tr style="border-bottom: 1px solid #e1e4e8;">
+    <td style="padding: 12px 0;">✓ Narwhals-native dataframe agility</td>
+    <td style="padding: 12px 0; text-align: right;">✓ Interactive Altair visualization</td>
+  </tr>
+  <tr style="border-bottom: 1px solid #e1e4e8;">
+    <td style="padding: 12px 0;">✓ GAMLSS, quantile, conformal, causal</td>
+    <td style="padding: 12px 0; text-align: right;">✓ Streaming and scalable backends</td>
+  </tr>
+  <tr>
+    <td style="padding: 12px 0;">✓ Shape constraints and factor smooths</td>
+    <td style="padding: 12px 0; text-align: right;">✓ scikit-learn and R interop</td>
+  </tr>
+</table>
 ```
