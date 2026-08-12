@@ -1,4 +1,4 @@
-"""Conformal prediction intervals for GAMs.
+r"""Conformal prediction intervals for GAMs.
 
 Provides distribution-free prediction intervals with finite-sample coverage guarantees. Three
 methods are available:
@@ -35,24 +35,32 @@ class ConformalMethod(Enum):
 
 @dataclass
 class ConformalResult:
-    """Result of conformal prediction.
+    r"""Result of conformal prediction.
+
+    Returned by `ConformalPredictor.predict()`. Holds point predictions together with
+    distribution-free prediction intervals whose coverage is guaranteed (under exchangeability) to
+    be at least the nominal `level`, regardless of whether the underlying `GAM` is correctly
+    specified.
 
     Attributes
     ----------
     values:
-        Point predictions (response scale).
+        Point predictions (response scale); for `"cv+"` and `"jackknife+"` this is the average of
+        the fold/leave-one-out models' predictions.
     lower:
         Lower prediction bounds.
     upper:
         Upper prediction bounds.
     level:
-        Nominal coverage level.
+        Nominal coverage level (e.g. `0.95`).
     method:
-        Conformal method used.
+        Conformal method used (`"split"`, `"cv+"`, or `"jackknife+"`).
     calibration_scores:
-        Conformity scores from the calibration step.
+        Conformity scores (absolute residuals) from the calibration step.
     quantile:
-        The calibration quantile used for interval width.
+        The calibration quantile used for interval width (only meaningful for the `"split"` method,
+        where the interval is `values +/- quantile`; for `"cv+"`/`"jackknife+"` interval bounds vary
+        per observation and are not simply `values +/- quantile`).
     """
 
     values: NDArray
@@ -66,10 +74,30 @@ class ConformalResult:
 
 @dataclass
 class ConformalPredictor:
-    """A calibrated conformal predictor ready to produce intervals.
+    r"""A calibrated conformal predictor ready to produce intervals.
 
-    Created by `conformal_fit()`. Call `predict()` on new data to get distribution-free prediction
-    intervals.
+    Created by `conformal_fit()`. Wraps a fitted `GAM` (or, for `"cv+"`/`"jackknife+"`, an ensemble
+    of fold/leave-one-out GAMs) together with the conformity scores from calibration, so that
+    `predict()` on new data returns intervals with a finite-sample marginal coverage guarantee that
+    does not rely on the GAM's error distribution being correctly specified — only on the
+    calibration and test data being exchangeable.
+
+    Attributes
+    ----------
+    model:
+        The GAM used for point predictions: fit on the training split for `"split"`, or on the full
+        data for `"cv+"`/`"jackknife+"` (in which case predictions are instead ensembled from the
+        per-fold/per-observation models).
+    calibration_scores:
+        Absolute residuals from the calibration step (calibration split, K-fold, or leave-one-out,
+        depending on `method`).
+    quantile:
+        The calibration quantile of `calibration_scores` used to set interval half-width (`"split"`
+        only).
+    level:
+        Nominal coverage level.
+    method:
+        Conformal method: `"split"`, `"cv+"`, or `"jackknife+"`.
     """
 
     model: GAM
@@ -82,7 +110,12 @@ class ConformalPredictor:
     _fold_ids: NDArray | None = None
 
     def predict(self, new_data: InputData) -> ConformalResult:
-        """Produce conformal prediction intervals on new data.
+        r"""Produce conformal prediction intervals on new data.
+
+        Dispatches to the interval construction appropriate for `self.method`: simple
+        `values +/- quantile` bands for `"split"`, or the min/max-based `"cv+"` and `"jackknife+"`
+        constructions that combine every fold/leave-one-out model's prediction with every
+        calibration residual.
 
         Parameters
         ----------
@@ -194,7 +227,24 @@ def conformal_fit(
     select: bool = False,
     seed: int | None = None,
 ) -> ConformalPredictor:
-    """Fit a GAM with conformal calibration.
+    r"""Fit a GAM with conformal calibration.
+
+    Fits a `GAM` and calibrates it so that `ConformalPredictor.predict()` returns prediction
+    intervals with a distribution-free, finite-sample marginal coverage guarantee, using one of
+    three conformal methods:
+
+    - **Split conformal**: the data is randomly split into a training set (fit the GAM) and a
+      calibration set (compute absolute residuals). The interval half-width is the
+      `ceil((n_cal+1) * level) / n_cal` empirical quantile of the calibration residuals, giving
+      intervals of constant width `values +/- quantile`. Simple and fast, but "wastes" data on the
+      calibration split and can be less efficient than the alternatives.
+    - **CV+**: the data is split into `n_folds` folds; each fold is used to compute out-of-fold
+      residuals from a model trained on the rest. At prediction time, all fold models' predictions
+      are combined with all fold residuals via a min/max construction (Barber et al. 2021), giving
+      tighter, per-observation intervals without a dedicated calibration split.
+    - **Jackknife+**: the leave-one-out analogue of CV+, using `n` individual leave-one-out refits.
+      Provides the tightest intervals of the three but is the most computationally expensive since
+      it requires `n` refits.
 
     Parameters
     ----------
@@ -221,10 +271,41 @@ def conformal_fit(
     seed:
         Random seed for data splitting.
 
+    Notes
+    -----
+    Split conformal computes the calibration quantile as
+
+    $$\hat q = \left\lceil (n_{\text{cal}} + 1) \cdot \text{level} \right\rceil \big/ n_{\text{cal}}
+    \quad \text{quantile of} \quad \{|y_i - \hat\mu(x_i)| : i \in \text{calibration set}\},$$
+
+    which, under exchangeability of calibration and test points, guarantees
+    `P(y \in [\hat\mu(x) - \hat q, \hat\mu(x) + \hat q]) \ge \text{level}` marginally over new draws.
+    CV+ and jackknife+ replace this single quantile with, for each test point, the appropriate
+    quantile of the `n` (or `n_folds`) values `{fold/LOO prediction +/- that fold's residual}`,
+    trading extra computation for tighter, locally-adapted intervals while retaining the same
+    finite-sample coverage guarantee.
+
     Returns
     -------
     ConformalPredictor
         A calibrated predictor that can produce intervals on new data.
+
+    Examples
+    --------
+    ```{python}
+    import numpy as np
+    from whittaker.conformal import conformal_fit, conformal_coverage
+
+    rng = np.random.default_rng(0)
+    n = 500
+    x = rng.uniform(0, 1, n)
+    y = np.sin(2 * np.pi * x) + rng.normal(scale=0.3, size=n)
+
+    predictor = conformal_fit("y ~ s(x)", {"x": x, "y": y}, method="split", level=0.9, seed=0)
+    result = predictor.predict({"x": x[:5]})
+    print(result.lower, result.upper)
+    print(conformal_coverage(predictor, {"x": x, "y": y}, response="y"))
+    ```
     """
     method_lower = method.lower()
     if method_lower not in ("split", "cv+", "jackknife+"):
@@ -398,7 +479,12 @@ def conformal_coverage(
     data: InputData,
     response: str,
 ) -> float:
-    """Compute empirical coverage of conformal intervals on held-out data.
+    r"""Compute empirical coverage of conformal intervals on held-out data.
+
+    A useful sanity check that the realized coverage on a given dataset is close to (at least) the
+    nominal `predictor.level`; systematic under-coverage may indicate a violation of the
+    exchangeability assumption underlying conformal prediction (e.g. distribution shift between
+    calibration and test data).
 
     Parameters
     ----------
