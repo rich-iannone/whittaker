@@ -1,4 +1,4 @@
-"""Functional regression via GAMs.
+r"""Functional regression via GAMs.
 
 Scalar-on-function regression where the response is scalar but predictors include functional
 covariates (curves observed over a domain). Each functional term contributes a linear functional
@@ -42,7 +42,11 @@ class _FunctionalSmoothInfo:
 
 @dataclass
 class FunctionalTerm:
-    """Specification for a functional covariate.
+    r"""Specification for a functional covariate.
+
+    Describes how one functional (curve-valued) predictor should enter a `FunctionalGAM`: which
+    basis to expand its coefficient function `beta(t)` in, over what domain, at what resolution, and
+    with what roughness penalty.
 
     Attributes
     ----------
@@ -50,15 +54,17 @@ class FunctionalTerm:
         Name of the functional covariate in the data dict. The corresponding data entry should be
         a 2-D array of shape `(n, T)` where `T` is the number of grid points.
     basis:
-        Basis type for expanding beta(t): `"bspline"` (default) or `"fourier"`.
+        Basis type for expanding beta(t): `"bspline"` (default), a B-spline basis with a difference
+        penalty, or `"fourier"`, a sine/cosine basis with a penalty on higher frequencies.
     domain:
         Tuple `(t_min, t_max)` specifying the domain of the functional argument. Grid points are
         assumed equally spaced over this domain.
     n_basis:
-        Number of basis functions. Defaults to 15.
+        Number of basis functions used to represent `beta(t)`. Defaults to 15. Must be `>= 3`.
     penalty_order:
-        Order of the difference penalty (for B-spline) or derivative penalty (for Fourier).
-        Defaults to 2.
+        Order of the difference penalty (for B-spline) or derivative penalty (for Fourier), controlling
+        how strongly higher-order wiggliness in `beta(t)` is penalized. Defaults to 2 (penalizes
+        curvature).
     """
 
     name: str
@@ -70,22 +76,26 @@ class FunctionalTerm:
 
 @dataclass
 class CoefficientFunction:
-    """Estimated coefficient function beta(t) for a functional term.
+    r"""Estimated coefficient function beta(t) for a functional term.
+
+    Returned by `FunctionalGAM.coefficient_function()`. Represents the fitted weight that each point
+    `t` along a functional covariate's domain contributes to the scalar response, together with
+    pointwise confidence bands derived from the model's coefficient covariance.
 
     Attributes
     ----------
     grid:
         Evaluation grid on the functional domain, shape `(T,)`.
     values:
-        Estimated beta(t) values at grid points, shape `(T,)`.
+        Estimated `beta(t)` values at grid points, shape `(T,)`.
     se:
-        Standard errors of beta(t), shape `(T,)`, or `None`.
+        Standard errors of `beta(t)`, shape `(T,)`, or `None`.
     lower:
-        Lower confidence bound, shape `(T,)`, or `None`.
+        Lower confidence bound, `values - z * se`, shape `(T,)`, or `None`.
     upper:
-        Upper confidence bound, shape `(T,)`, or `None`.
+        Upper confidence bound, `values + z * se`, shape `(T,)`, or `None`.
     term_name:
-        Name of the functional term.
+        Name of the functional term this coefficient function belongs to.
     """
 
     grid: NDArray
@@ -183,22 +193,74 @@ def _build_functional_design(
 
 
 class FunctionalGAM:
-    """Scalar-on-function GAM.
+    r"""Scalar-on-function GAM.
 
-    Fits a model where the response is scalar and predictors include functional covariates
-    (curves). Each functional covariate contributes a linear functional effect via numerical
-    integration against a smooth coefficient function.
+    Fits a model where the response is scalar but one or more predictors are functional, i.e. each
+    observation carries an entire curve `X_i(t)` measured over a domain (such as a temperature
+    profile over time, or a spectral curve over wavelength), rather than a single number. Each
+    functional covariate contributes a linear functional term to the predictor,
+
+    $$\int X_i(t)\,\beta(t)\,dt,$$
+
+    where `beta(t)` is an unknown smooth coefficient function that must itself be estimated. This
+    integral is approximated numerically (trapezoidal quadrature over the observed grid) and
+    `beta(t)` is expanded in a B-spline or Fourier basis with a roughness penalty, turning the
+    infinite-dimensional problem of estimating a function into a finite penalized regression that
+    can be fit with the same machinery as any other GAM smooth term.
+
+    Use `FunctionalGAM` when your predictors are naturally curves or profiles rather than scalars,
+    and you want to recover how different regions of the domain contribute to the response (e.g.
+    "does temperature early in the season matter more than temperature late in the season?").
 
     Parameters
     ----------
     response:
         Name of the scalar response variable.
     functional_terms:
-        List of `FunctionalTerm` specifications (or dicts with the same keys).
+        List of `FunctionalTerm` specifications (or dicts with the same keys), one per functional
+        covariate.
     scalar_terms:
-        Optional formula string for scalar smooth/linear terms (e.g. `"s(temperature) + humidity"`).
+        Optional formula string for additional scalar smooth/linear terms (e.g.
+        `"s(temperature) + humidity"`) fit alongside the functional terms.
     family:
         Response distribution family. Defaults to `Gaussian()`.
+
+    Notes
+    -----
+    For each functional term, the coefficient function is expanded as
+    `\beta(t) = \sum_{k=1}^{K} c_k \phi_k(t)` in a basis `\{\phi_k\}` (B-spline or Fourier), so the
+    functional effect for observation `i` becomes a finite inner product with a numerically
+    integrated design column:
+
+    $$\int X_i(t)\,\beta(t)\,dt \;\approx\; \sum_{k=1}^{K} c_k \underbrace{\sum_t X_i(t)\,\phi_k(t)\,
+    w_t}_{J_{i,k}}$$
+
+    where `w_t` are trapezoidal quadrature weights. The coefficients `c_k` are penalized by a
+    difference penalty (B-spline) or a frequency-based penalty (Fourier) of order `penalty_order`,
+    controlling the smoothness of the recovered `beta(t)`. All functional and scalar design columns
+    are combined into one design matrix and fit jointly via penalized IRLS (`pirls_fit`), so the
+    smoothing parameters for each functional term's coefficient function, and for any scalar smooth
+    terms, are selected simultaneously.
+
+    Examples
+    --------
+    ```{python}
+    import numpy as np
+    from whittaker.functional import FunctionalGAM, FunctionalTerm
+
+    rng = np.random.default_rng(0)
+    n, T = 300, 50
+    t_grid = np.linspace(0, 1, T)
+    beta_true = np.sin(2 * np.pi * t_grid)
+
+    X_curves = rng.normal(size=(n, T)) + np.sin(3 * t_grid)
+    y = X_curves @ beta_true / T + rng.normal(scale=0.3, size=n)
+
+    model = FunctionalGAM("y", [FunctionalTerm(name="X_curves", n_basis=12)])
+    model.fit({"y": y, "X_curves": X_curves})
+    cf = model.coefficient_function("X_curves")
+    print(cf.values[:5])
+    ```
     """
 
     def __init__(
@@ -262,7 +324,13 @@ class FunctionalGAM:
         method: str = "REML",
         select: bool = False,
     ) -> FunctionalGAM:
-        """Fit the functional GAM.
+        r"""Fit the functional GAM.
+
+        For each functional term, builds its basis matrix and penalty over the observed grid,
+        computes the numerically integrated functional design columns (mean-centered for
+        identifiability), and combines them with any scalar terms into a single design matrix. The
+        combined model is then fit by penalized IRLS (`pirls_fit`), jointly selecting smoothing
+        parameters for every functional term's coefficient function and any scalar smooths.
 
         Parameters
         ----------
@@ -270,9 +338,9 @@ class FunctionalGAM:
             Column-oriented data. Scalar covariates and the response are 1-D arrays. Functional
             covariates are 2-D arrays of shape `(n, T)` where `T` is the number of grid points.
         method:
-            Smoothing parameter selection method.
+            Smoothing parameter selection method (e.g. `"REML"`, `"GCV"`, `"ML"`).
         select:
-            Enable variable selection.
+            Enable double-penalty variable selection for the scalar terms.
 
         Returns
         -------
@@ -406,14 +474,20 @@ class FunctionalGAM:
         *,
         se: bool = False,
     ) -> NDArray:
-        """Predict on new data.
+        r"""Predict on new data.
+
+        Rebuilds the functional design columns for `new_data` using the basis matrices fit on the
+        training data (so no new basis/penalty is estimated), forms the linear predictor, and maps
+        it through the family's inverse link to the response scale.
 
         Parameters
         ----------
         new_data:
             Data dict with the same functional and scalar covariates as training data.
         se:
-            If `True`, return `(predictions, standard_errors)` instead of just predictions.
+            If `True`, return `(predictions, standard_errors)` instead of just predictions, where
+            standard errors are computed on the linear predictor scale from the reconstructed
+            training-data information matrix `(X'WX + S)`.
 
         Returns
         -------
