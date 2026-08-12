@@ -108,14 +108,42 @@ class Multinomial(Family):
 
     @property
     def n_categories(self) -> int:
+        """Number of response categories `K`.
+
+        Returns
+        -------
+        int
+            The value passed to the `Multinomial` constructor, i.e. the number of
+            unordered categories in the response, including the reference category `K`.
+        """
         return self._K
 
     @property
     def category_intercepts(self) -> NDArray | None:
+        """Fitted per-category intercepts `alpha_1, ..., alpha_{K-1}`.
+
+        Returns
+        -------
+        NDArray | None
+            Array of length `K - 1` holding the intercept for each non-reference
+            category, or `None` if the family has not yet been fitted (i.e.
+            `irls_update` or `initialize` has not been called). The reference category
+            `K` is fixed at `alpha_K = 0` and is not included in this array.
+        """
         return self._alphas
 
     @property
     def category_loadings(self) -> NDArray | None:
+        """Fitted per-category loading coefficients `beta_1, ..., beta_{K-1}`.
+
+        Returns
+        -------
+        NDArray | None
+            Array of length `K - 1` holding the coefficient that rescales the shared
+            linear predictor `eta` for each non-reference category, or `None` if the
+            family has not yet been fitted. The reference category `K` is fixed at
+            `beta_K = 0` and is not included in this array.
+        """
         return self._betas
 
     def _category_probs(self, eta: NDArray) -> NDArray:
@@ -161,18 +189,117 @@ class Multinomial(Family):
         self._betas = result.x[K - 1 :]
 
     def link(self, mu: NDArray) -> NDArray:
+        r"""Identity link, implementing the family-specific `link` for `Multinomial`.
+
+        Because `mu` here already represents the shared linear predictor `eta` fed into
+        the per-category softmax (rather than a mean response on the natural scale), the
+        link is the identity: $g(\mu) = \mu$.
+
+        Parameters
+        ----------
+        mu : NDArray
+            Linear predictor values.
+
+        Returns
+        -------
+        NDArray
+            The input `mu`, unchanged.
+        """
         return mu
 
     def link_inverse(self, eta: NDArray) -> NDArray:
+        r"""Identity inverse link, implementing the family-specific `link_inverse` for `Multinomial`.
+
+        Complements `link`: since `eta` is passed straight through to `_category_probs`
+        for the softmax computation, the inverse link is also the identity,
+        $g^{-1}(\eta) = \eta$.
+
+        Parameters
+        ----------
+        eta : NDArray
+            Linear predictor values.
+
+        Returns
+        -------
+        NDArray
+            The input `eta`, unchanged.
+        """
         return eta
 
     def link_derivative(self, mu: NDArray) -> NDArray:
+        r"""Derivative of the identity link, implementing the family-specific version for `Multinomial`.
+
+        Since `link` is the identity, $g'(\mu) = 1$ everywhere.
+
+        Parameters
+        ----------
+        mu : NDArray
+            Linear predictor values (only used to determine output shape).
+
+        Returns
+        -------
+        NDArray
+            Array of ones with the same shape as `mu`.
+        """
         return np.ones_like(mu)
 
     def variance(self, mu: NDArray) -> NDArray:
+        """Constant variance function, implementing the family-specific `variance` for `Multinomial`.
+
+        The multinomial log-likelihood does not follow the mean-variance relationship
+        used by standard GLM families; the working weights used by P-IRLS are instead
+        derived directly from the curvature of the multinomial log-likelihood in
+        `irls_update`. This method simply returns an array of ones so it is a no-op
+        wherever a generic variance function might otherwise be referenced.
+
+        Parameters
+        ----------
+        mu : NDArray
+            Linear predictor values (only used to determine output shape).
+
+        Returns
+        -------
+        NDArray
+            Array of ones with the same shape as `mu`.
+        """
         return np.ones_like(mu)
 
     def irls_update(self, y: NDArray, mu: NDArray, eta: NDArray) -> tuple[NDArray, NDArray]:
+        r"""Compute the P-IRLS working response and weights, implementing the family-specific update for `Multinomial`.
+
+        Overrides the default GLM IRLS step: because the multinomial deviance is not a
+        standard exponential-family deviance in `eta`, this method first re-estimates the
+        per-category intercepts `alpha` and loadings `beta` by maximum likelihood (via
+        `_update_params`), initializing them on the first call (via `_init_params`). It
+        then computes, for each observation `i` with observed category `k = y_i - 1` and
+        fitted probabilities `p = P(Y_i = \cdot \mid \eta_i)`, the gradient and negative
+        curvature of the multinomial log-likelihood with respect to `eta_i`:
+
+        $$
+        \frac{\partial \ell_i}{\partial \eta_i} = \sum_{j=1}^{K-1} \beta_j \left(
+        \mathbb{1}[j = k] - p_j \right), \qquad
+        -\frac{\partial^2 \ell_i}{\partial \eta_i^2} = \sum_{j=1}^{K-1} \beta_j^2 p_j
+        (1 - p_j) - 2 \sum_{j < l} \beta_j \beta_l p_j p_l.
+        $$
+
+        The working weight `W` is the (clipped) negative curvature, and the working
+        response is the Newton step `z = eta + grad / W`; both feed into the outer
+        P-IRLS smoothing loop.
+
+        Parameters
+        ----------
+        y : NDArray
+            Observed categories, coded `1, 2, ..., K`.
+        mu : NDArray
+            Unused; present for interface compatibility with other families.
+        eta : NDArray
+            Current linear predictor values.
+
+        Returns
+        -------
+        tuple[NDArray, NDArray]
+            The working response `z` and working weights `W`, both of shape `(n,)`.
+        """
         if self._alphas is None:
             self._init_params(y)
 
@@ -207,6 +334,34 @@ class Multinomial(Family):
         return z, W
 
     def deviance(self, y: NDArray, mu: NDArray, *, weights: NDArray | None = None) -> float:
+        r"""Total multinomial deviance, implementing the family-specific `deviance` for `Multinomial`.
+
+        Computes $-2$ times the multinomial log-likelihood of the observed categories
+        `y` under the fitted category probabilities implied by the linear predictor
+        `eta = mu`:
+
+        $$
+        D(y, \hat P) = -2 \sum_{i=1}^{n} \log \hat P(Y_i = y_i \mid \eta_i).
+        $$
+
+        Returns `float(len(y))` as a placeholder if the family has not yet been fitted.
+
+        Parameters
+        ----------
+        y : NDArray
+            Observed categories, coded `1, 2, ..., K`.
+        mu : NDArray
+            Linear predictor `eta` (this family uses the identity link, so `mu` and
+            `eta` coincide).
+        weights : NDArray | None, optional
+            Accepted for interface compatibility; does not currently affect the
+            computed deviance.
+
+        Returns
+        -------
+        float
+            The total deviance.
+        """
         if self._alphas is None:
             return float(len(y))
         eta = mu
@@ -223,6 +378,25 @@ class Multinomial(Family):
         return dev
 
     def unit_deviance(self, y: NDArray, mu: NDArray) -> NDArray:
+        r"""Per-observation deviance contributions, implementing the family-specific version for `Multinomial`.
+
+        For each observation `i`, returns $-2 \log \hat P(Y_i = y_i \mid \eta_i)$, the
+        per-observation contribution to `deviance`. Returns an array of ones if the
+        family has not yet been fitted.
+
+        Parameters
+        ----------
+        y : NDArray
+            Observed categories, coded `1, 2, ..., K`.
+        mu : NDArray
+            Linear predictor `eta` (this family uses the identity link).
+
+        Returns
+        -------
+        NDArray
+            Array of shape `(n,)` with the deviance contribution of each observation;
+            these sum to the value returned by `deviance`.
+        """
         if self._alphas is None:
             return np.ones_like(y)
         eta = mu
@@ -236,13 +410,70 @@ class Multinomial(Family):
     def log_likelihood(
         self, y: NDArray, mu: NDArray, scale: float, *, weights: NDArray | None = None
     ) -> float:
+        r"""Multinomial log-likelihood, implementing the family-specific version for `Multinomial`.
+
+        Recovers the log-likelihood from `deviance` via $\ell = -D / 2$, since
+        `deviance` is defined as $-2$ times the log-likelihood.
+
+        Parameters
+        ----------
+        y : NDArray
+            Observed categories, coded `1, 2, ..., K`.
+        mu : NDArray
+            Linear predictor `eta`.
+        scale : float
+            Unused; present for interface compatibility with other families (the
+            multinomial scale parameter is fixed, see `scale_known`).
+        weights : NDArray | None, optional
+            Forwarded to `deviance`.
+
+        Returns
+        -------
+        float
+            The total log-likelihood of `y` under the fitted model.
+        """
         return -0.5 * self.deviance(y, mu, weights=weights)
 
     @property
     def scale_known(self) -> bool:
+        """Whether the dispersion/scale parameter is fixed rather than estimated.
+
+        Returns
+        -------
+        bool
+            Always `True`: the multinomial family has no free scale parameter, since
+            its log-likelihood is fully determined by the fitted category
+            probabilities.
+        """
         return True
 
     def simulate(self, mu: NDArray, scale: float, rng: object) -> NDArray:
+        """Draw random responses from the fitted category probabilities, implementing the family-specific `simulate` for `Multinomial`.
+
+        For each observation, computes the category probabilities from the linear
+        predictor `eta = mu` via `_category_probs` and draws one category from
+        `{1, ..., K}` according to those probabilities using `rng.choice`.
+
+        Parameters
+        ----------
+        mu : NDArray
+            Linear predictor `eta` at which to simulate.
+        scale : float
+            Unused; present for interface compatibility with other families.
+        rng : object
+            A random number generator exposing a `choice(a, p=...)` method (e.g. a
+            NumPy `Generator`).
+
+        Returns
+        -------
+        NDArray
+            Simulated categories, coded `1, 2, ..., K`, one per row of `mu`.
+
+        Raises
+        ------
+        RuntimeError
+            If called before the family has been fitted.
+        """
         if self._alphas is None:
             raise RuntimeError("Model must be fitted before simulation.")
         eta = mu
@@ -254,6 +485,25 @@ class Multinomial(Family):
         return y
 
     def initialize(self, y: NDArray) -> NDArray:
+        """Initialize category parameters and the starting linear predictor.
+
+        Implements the family-specific `initialize` for `Multinomial`: estimates
+        starting intercepts `alpha` (from empirical log-odds relative to the reference
+        category) and loadings `beta` (set to `1`) via `_init_params`, then returns a
+        starting linear predictor of all zeros for the outer P-IRLS loop to refine.
+
+        Parameters
+        ----------
+        y : NDArray
+            Observed categories, coded `1, 2, ..., K`, used to compute starting
+            intercepts.
+
+        Returns
+        -------
+        NDArray
+            Initial linear predictor `eta`, an array of zeros with the same shape as
+            `y`.
+        """
         self._init_params(y)
         return np.zeros_like(y)
 
