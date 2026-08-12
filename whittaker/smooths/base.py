@@ -104,39 +104,82 @@ class SmoothBasis(ABC):
 
     @abstractmethod
     def penalty_matrix(self) -> NDArray:
-        """Return the `(k, k)` penalty matrix S.
+        r"""Return the `(k, k)` roughness penalty matrix `S`.
 
-        The total penalty contribution for smoothing parameter λ is
-        `λ * β @ S @ β`.
+        `S` encodes the quadratic wiggliness penalty applied to the basis
+        coefficients: the total penalty contribution for smoothing
+        parameter `lambda` is `lambda * beta.T @ S @ beta`. `S` is always
+        symmetric positive semi-definite, with `null_space_dimension()`
+        zero eigenvalues corresponding to the unpenalized functions (e.g.
+        low-order polynomials) that the basis can represent for free.
+
+        Returns
+        -------
+        NDArray
+            Symmetric positive semi-definite matrix of shape `(k, k)`
+            where `k = self.n_basis`.
         """
         ...
 
     @abstractmethod
     def null_space_dimension(self) -> int:
-        """Return the dimension M of the penalty null space.
+        """Return the dimension `M` of the penalty null space.
 
-        The first M columns of the basis matrix correspond to the
-        unpenalized polynomial null space.
+        The null space is the subspace of basis coefficients for which
+        the roughness penalty is exactly zero — typically the low-order
+        polynomials (e.g. constants and straight lines under a
+        second-derivative penalty). By convention the first `M` columns of
+        the basis matrix span this null space, so `S[:M, :M]` and the
+        corresponding rows/columns of `S` involving those columns vanish.
+
+        Returns
+        -------
+        int
+            The null space dimension `M`, satisfying `0 <= M < k`.
         """
         ...
 
     def identifiability_constraints(self) -> NDArray | None:
-        """Return constraint matrix C such that `C @ β = 0`, or `None`.
+        """Return a constraint matrix `C` such that `C @ beta = 0`, or `None`.
 
-        Subclasses may override this to supply sum-to-zero or other
-        identifiability constraints for use during model fitting.
+        Some bases are not identifiable on their own once combined with
+        other terms in a model (for example, several smooths sharing an
+        intercept), and must be constrained — typically to have mean zero
+        over the training data — before fitting. Subclasses may override
+        this method to supply such sum-to-zero or other linear
+        identifiability constraints; the default implementation returns
+        `None`, meaning no constraint is required.
+
+        Returns
+        -------
+        NDArray or None
+            Constraint matrix of shape `(n_constraints, k)`, or `None` if
+            the basis needs no identifiability constraint.
         """
         return None
 
     @property
     @abstractmethod
     def n_basis(self) -> int:
-        """Number of basis functions k."""
+        """Number of basis functions `k`.
+
+        This is the number of columns returned by `basis_matrix()` and the
+        size of the (square) `penalty_matrix()`. It is fixed at
+        construction time (e.g. via a `k` argument) and does not change
+        after `fit()` is called.
+        """
         ...
 
     @property
     def is_fitted(self) -> bool:
-        """`True` after `fit()` has been called."""
+        """`True` after `fit()` has been called.
+
+        Used internally (via `_check_fitted()`) to guard methods such as
+        `basis_matrix()` and `penalty_matrix()` that depend on state
+        computed during `fit()` (e.g. knot locations or transformation
+        matrices), raising a clear error instead of failing on missing
+        attributes when called out of order.
+        """
         return bool(getattr(self, "_fitted", False))
 
     # ------------------------------------------------------------------
