@@ -324,12 +324,29 @@ class PSpline(SmoothBasis):
 
     @property
     def n_basis(self) -> int:
-        """Total number of B-spline basis functions `k`."""
+        """Total number of B-spline basis functions.
+
+        Equal to `k`, the requested basis dimension: every B-spline
+        coefficient column is retained (no null-space or wrap-around columns
+        are dropped, unlike some of the other smooth bases).
+
+        Returns
+        -------
+        int
+            The basis dimension `k`.
+        """
         return self.k
 
     @property
     def is_fitted(self) -> bool:
-        """`True` after `fit()` has been called."""
+        """Whether the basis has been fitted.
+
+        Returns
+        -------
+        bool
+            `True` once `fit()` has been called and the knot vector and
+            penalty matrix have been computed; `False` otherwise.
+        """
         return self._fitted
 
     # ------------------------------------------------------------------
@@ -338,13 +355,32 @@ class PSpline(SmoothBasis):
 
     @property
     def knots(self) -> NDArray:
-        """Full augmented knot vector (length `k + degree + 1`)."""
+        """Full augmented B-spline knot vector.
+
+        Includes the `degree + 1` repeated boundary knots at each end
+        (needed for the clamped B-spline construction) as well as the
+        equally-spaced interior knots.
+
+        Returns
+        -------
+        NDArray
+            Knot vector, shape `(k + degree + 1,)`.
+        """
         self._check_fitted()
         return self._t.copy()
 
     @property
     def interior_knots(self) -> NDArray:
-        """Interior knots only (excludes the repeated boundary knots)."""
+        """Interior knot locations only.
+
+        Excludes the repeated boundary knots at `x_min` and `x_max`, leaving
+        just the `k - degree - 1` equally-spaced knots strictly between them.
+
+        Returns
+        -------
+        NDArray
+            Interior knot locations, shape `(k - degree - 1,)`.
+        """
         self._check_fitted()
         d = self.degree
         return self._t[d + 1 : -(d + 1)].copy()
