@@ -98,28 +98,119 @@ class Tweedie(Family):
 
     @property
     def p(self) -> float:
-        """Variance power."""
+        r"""Variance power $p$ in $V(\mu) = \mu^p$.
+
+        Determines the shape of the Tweedie distribution: `1 < p < 2` gives the compound
+        Poisson-Gamma case with a point mass at zero, `p = 3` corresponds to the Inverse
+        Gaussian, and other `p > 2` give heavier-tailed positive continuous distributions.
+        """
         return self._p
 
     def link(self, mu: NDArray) -> NDArray:
+        r"""Apply the log link: $\eta = \log(\mu)$.
+
+        Parameters
+        ----------
+        mu
+            Conditional mean values, shape `(n,)`. Must be positive.
+
+        Returns
+        -------
+        NDArray
+            Linear predictor values $\eta = \log(\mu)$, shape `(n,)`.
+        """
         return np.log(np.maximum(mu, _EPS))
 
     def link_inverse(self, eta: NDArray) -> NDArray:
+        r"""Apply the inverse log link: $\mu = e^{\eta}$.
+
+        The linear predictor is clipped to `[-30, 30]` before exponentiating to guard against
+        overflow while fitting.
+
+        Parameters
+        ----------
+        eta
+            Linear predictor values, shape `(n,)`.
+
+        Returns
+        -------
+        NDArray
+            Conditional mean values $\mu = e^{\eta}$, shape `(n,)`.
+        """
         return np.exp(np.clip(eta, -30.0, 30.0))
 
     def link_derivative(self, mu: NDArray) -> NDArray:
+        r"""Derivative of the log link: $g'(\mu) = 1/\mu$.
+
+        Parameters
+        ----------
+        mu
+            Conditional mean values, shape `(n,)`.
+
+        Returns
+        -------
+        NDArray
+            Derivative values $1/\mu$, shape `(n,)`.
+        """
         return 1.0 / np.maximum(mu, _EPS)
 
     def variance(self, mu: NDArray) -> NDArray:
+        r"""Tweedie variance function: $V(\mu) = \mu^p$ for the current variance power `p`.
+
+        Parameters
+        ----------
+        mu
+            Conditional mean values, shape `(n,)`.
+
+        Returns
+        -------
+        NDArray
+            Variance values $\mu^p$, shape `(n,)`.
+        """
         return np.maximum(mu, _EPS) ** self._p
 
     def deviance(self, y: NDArray, mu: NDArray, *, weights: NDArray | None = None) -> float:
+        r"""Total Tweedie deviance, the (weighted) sum of `unit_deviance`.
+
+        Parameters
+        ----------
+        y
+            Observed response values (non-negative), shape `(n,)`.
+        mu
+            Fitted conditional mean values, shape `(n,)`.
+        weights
+            Optional prior weights, shape `(n,)`.
+
+        Returns
+        -------
+        float
+            The total (weighted) deviance.
+        """
         d = self.unit_deviance(y, mu)
         if weights is not None:
             d = weights * d
         return float(np.sum(d))
 
     def unit_deviance(self, y: NDArray, mu: NDArray) -> NDArray:
+        r"""Per-observation Tweedie deviance contributions.
+
+        Computes
+        $d_i = 2 \left[ \frac{y_i^{2-p}}{(1-p)(2-p)} - \frac{y_i\,\hat\mu_i^{1-p}}{1-p}
+        + \frac{\hat\mu_i^{2-p}}{2-p} \right]$ for the current variance power `p`, with the
+        convention that the first term vanishes when $y_i = 0$.
+
+        Parameters
+        ----------
+        y
+            Observed response values (non-negative), shape `(n,)`.
+        mu
+            Fitted conditional mean values, shape `(n,)`.
+
+        Returns
+        -------
+        NDArray
+            Per-observation deviance contributions, shape `(n,)`.
+        """
         p = self._p
         mu_c = np.maximum(mu, _EPS)
         y_c = np.maximum(y, 0.0)
@@ -132,6 +223,28 @@ class Tweedie(Family):
     def log_likelihood(
         self, y: NDArray, mu: NDArray, scale: float, *, weights: NDArray | None = None
     ) -> float:
+        r"""Tweedie log-likelihood via the Dunn & Smyth (2005) saddlepoint approximation.
+
+        Since the Tweedie density has no closed form for `1 < p < 2`, the log-density at each
+        observation is approximated by `_saddlepoint_log_density` and summed (optionally
+        weighted) over observations.
+
+        Parameters
+        ----------
+        y
+            Observed response values (non-negative), shape `(n,)`.
+        mu
+            Fitted conditional mean values, shape `(n,)`.
+        scale
+            Dispersion parameter $\phi$.
+        weights
+            Optional prior weights, shape `(n,)`.
+
+        Returns
+        -------
+        float
+            The total (approximate) log-likelihood.
+        """
         ll_i = self._saddlepoint_log_density(y, mu, scale)
         if weights is not None:
             ll_i = weights * ll_i
@@ -156,9 +269,36 @@ class Tweedie(Family):
 
     @property
     def scale_known(self) -> bool:
+        """Whether the dispersion parameter is fixed. Always `False` for Tweedie.
+
+        The dispersion `phi` is estimated from the data during fitting rather than fixed,
+        independently of whether the variance power `p` itself is fixed or estimated (see
+        `TweedieEstimated`).
+        """
         return False
 
     def simulate(self, mu: NDArray, scale: float, rng: object) -> NDArray:
+        r"""Simulate Tweedie-distributed response values with mean `mu` and dispersion `scale`.
+
+        For `1 < p < 2` (compound Poisson-Gamma), a Poisson number of claims is drawn for each
+        observation and each claim's size is drawn from a Gamma distribution, matching the
+        point mass at zero characteristic of this regime. For `p > 2`, values are drawn
+        directly from a Gamma distribution matched to the Tweedie mean and variance.
+
+        Parameters
+        ----------
+        mu
+            Mean (fitted values), shape `(n,)`.
+        scale
+            Dispersion parameter $\phi$.
+        rng
+            A `numpy.random.Generator` instance.
+
+        Returns
+        -------
+        NDArray
+            Simulated response values, shape `(n,)`.
+        """
         p = self._p
         mu_c = np.maximum(mu, _EPS)
         n = len(mu_c)
@@ -181,6 +321,22 @@ class Tweedie(Family):
             return rng.gamma(gamma_shape, gamma_scale)
 
     def initialize(self, y: NDArray) -> NDArray:
+        """Starting values for `mu`: `y` nudged away from zero.
+
+        Since the log link requires strictly positive `mu`, values (including structural
+        zeros typical of compound Poisson-Gamma data) are pushed away from zero to avoid
+        `log(0)` on the first P-IRLS iteration.
+
+        Parameters
+        ----------
+        y
+            Observed response values (non-negative), shape `(n,)`.
+
+        Returns
+        -------
+        NDArray
+            Starting values for `mu`, shape `(n,)`.
+        """
         y_init = np.maximum(y, 0.1)
         return y_init + 0.1
 
