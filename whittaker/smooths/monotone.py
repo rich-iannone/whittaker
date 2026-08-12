@@ -315,8 +315,8 @@ def _pava(x: NDArray) -> NDArray:
                 prev = i - 1
                 while prev >= 0 and block_size[prev] == 0:
                     prev -= 1
-                if prev < 0:
-                    break
+                if prev < 0:  # pragma: no cover - block_size[0] is never zeroed, so this
+                    break  # defensive guard against walking past the start is unreachable.
                 if result[prev] > result[i]:
                     total = result[prev] * block_size[prev] + result[i] * block_size[i]
                     new_size = block_size[prev] + block_size[i]
@@ -335,6 +335,6 @@ def _pava(x: NDArray) -> NDArray:
         if block_size[i] > 0:
             out[i : i + block_size[i]] = result[i]
             i += block_size[i]
-        else:
-            i += 1
+        else:  # pragma: no cover - merged blocks are always contiguous, so a zero-size
+            i += 1  # entry not immediately consumed by the previous block never occurs.
     return out
