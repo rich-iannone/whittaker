@@ -733,11 +733,11 @@ def to_mgcv_dict(model: Any) -> dict[str, Any]:
             s["by.level"] = si.by_level
 
         if hasattr(si.basis, "_knots"):
-            s["knots"] = si.basis._knots.tolist()
+            s["knots"] = si.basis._knots.tolist()  # type: ignore[attr-defined]
         if hasattr(si.basis, "_x_train"):
-            s["X"] = si.basis._x_train.tolist()
+            s["X"] = si.basis._x_train.tolist()  # type: ignore[attr-defined]
         if hasattr(si.basis, "_levels"):
-            s["levels"] = si.basis._levels.tolist()
+            s["levels"] = si.basis._levels.tolist()  # type: ignore[attr-defined]
 
         for pi in si.penalty_indices:
             pen = mm.penalties[pi]
@@ -752,9 +752,9 @@ def to_mgcv_dict(model: Any) -> dict[str, Any]:
     family_name = type(model._family).__name__
     family_dict: dict[str, Any] = {"family": family_name}
     if hasattr(model._family, "_p"):
-        family_dict["power"] = float(model._family._p)
+        family_dict["power"] = float(model._family._p)  # type: ignore[attr-defined]
     if hasattr(model._family, "theta"):
-        family_dict["theta"] = float(model._family.theta)
+        family_dict["theta"] = float(model._family.theta)  # type: ignore[attr-defined]
 
     result: dict[str, Any] = {
         "coefficients": fr.coefficients.tolist(),

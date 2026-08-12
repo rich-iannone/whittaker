@@ -704,6 +704,12 @@ def pirls_fit(
         n_iter = 0
         beta = np.zeros(p)
 
+        dev = np.inf
+        z = eta.copy()
+        W_total = pw if pw is not None else np.ones(n, dtype=float)
+        hat_arr = np.zeros(p)
+        inner_converged = False
+
         for _outer in range(max_outer):
             dev_old = np.inf
             inner_converged = False

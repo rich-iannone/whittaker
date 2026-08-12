@@ -278,7 +278,7 @@ class BetaLS(GAMLSSFamily):
         phi_init = np.full_like(y_safe, max(phi_est, 1.0))
         return {"mu": mu_init, "phi": phi_init}
 
-    def simulate(self, params: dict[str, NDArray], rng: object) -> NDArray:
+    def simulate(self, params: dict[str, NDArray], rng: np.random.Generator) -> NDArray:
         """Simulate response values from a Beta distribution with the given `mu`, `phi`.
 
         Converts to the shape parameterization (`a = mu * phi`, `b = (1 - mu) * phi`)

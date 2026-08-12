@@ -191,7 +191,7 @@ class Gaussian(Family):
             ll_i = weights * ll_i
         return float(np.sum(ll_i))
 
-    def simulate(self, mu: NDArray, scale: float, rng: object) -> NDArray:
+    def simulate(self, mu: NDArray, scale: float, rng: np.random.Generator) -> NDArray:
         """Simulate Gaussian response values `N(mu, scale)`.
 
         Parameters

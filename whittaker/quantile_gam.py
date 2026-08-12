@@ -382,7 +382,9 @@ class QuantileGAM:
 
         results: dict[float, PredictionResult] = {}
         for tau in self._quantiles:
-            results[tau] = self._models[tau].predict(new_data, se=se)
+            result = self._models[tau].predict(new_data, se=se)
+            assert isinstance(result, PredictionResult)
+            results[tau] = result
 
         if self._non_crossing:
             fitted = {tau: results[tau].values for tau in self._quantiles}

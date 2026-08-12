@@ -257,7 +257,7 @@ class GaussianLS(GAMLSSFamily):
             "sigma": np.full_like(y, np.std(y, ddof=1)),
         }
 
-    def simulate(self, params: dict[str, NDArray], rng: object) -> NDArray:
+    def simulate(self, params: dict[str, NDArray], rng: np.random.Generator) -> NDArray:
         """Simulate response values from `Normal(mu, sigma)`.
 
         Parameters

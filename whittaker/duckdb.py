@@ -205,7 +205,7 @@ class DuckDBGAM(BigGAM):
         """
         return self._n_rows
 
-    def fit(
+    def fit(  # type: ignore[override]
         self,
         source: str,
         conn,
@@ -222,7 +222,7 @@ class DuckDBGAM(BigGAM):
 
         Parameters
         ----------
-        source : str
+        data : str
             DuckDB table or view name, or a full `SELECT` query. A bare name such as
             `"my_table"` is normalized by `_normalize_source` into
             `"SELECT * FROM my_table"`; a string that already starts with `SELECT`
@@ -232,13 +232,15 @@ class DuckDBGAM(BigGAM):
             as its output columns cover every variable referenced by `formula`.
         conn : duckdb.DuckDBPyConnection
             A live DuckDB connection (as returned by `duckdb.connect()`) against which
-            `source` is resolved. The connection must remain open for the duration of
+            `data` is resolved. The connection must remain open for the duration of
             `fit()`; it is not closed or modified by this method beyond issuing read
             queries.
         smoothing_params : list of float, optional
             Fixed smoothing parameters. If `None`, selected automatically.
         method : str
             Smoothing selection method: `"fREML"` (default), `"REML"`, `"ML"`, or `"GCV"`.
+        weights : numpy.ndarray, optional
+            Observation (prior) weights, shape `(n,)`. Must be strictly positive.
         select : bool
             If `True`, enable double-penalty variable selection.
 
@@ -249,7 +251,7 @@ class DuckDBGAM(BigGAM):
 
         Notes
         -----
-        When `source` is unambiguously a SQL query rather than a table/view name,
+        When `data` is unambiguously a SQL query rather than a table/view name,
         `fit_query()` is a thin, more explicit alias for this method.
         """
         _import_duckdb()
@@ -258,14 +260,15 @@ class DuckDBGAM(BigGAM):
 
         self._n_rows = _count_rows(conn, source_query)
 
-        data = _stream_as_dict(conn, source_query, self._chunk_size)
-        self._data = data
+        col_data = _stream_as_dict(conn, source_query, self._chunk_size)
+        self._data = col_data
 
-        if hasattr(self._family, "set_data"):
-            self._family.set_data(data)
+        _set_data = getattr(self._family, "set_data", None)
+        if _set_data is not None:
+            _set_data(col_data)
 
         self._disc_model = build_discretized_model_matrix(
-            self._formula, data, n_discrete=self._n_discrete, select=select
+            self._formula, col_data, n_discrete=self._n_discrete, select=select
         )
 
         self._fit_result = bam_fit(

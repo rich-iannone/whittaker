@@ -231,7 +231,7 @@ class Binomial(Family):
         """
         return True
 
-    def simulate(self, mu: NDArray, scale: float, rng: object) -> NDArray:
+    def simulate(self, mu: NDArray, scale: float, rng: np.random.Generator) -> NDArray:
         """Simulate Bernoulli response values with success probability `mu`.
 
         Parameters

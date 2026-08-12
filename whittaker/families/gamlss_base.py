@@ -3,8 +3,12 @@ r"""Abstract base class for GAMLSS distributional families."""
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from typing import TYPE_CHECKING
 
 from numpy.typing import NDArray
+
+if TYPE_CHECKING:
+    import numpy as np
 
 
 class GAMLSSFamily(ABC):
@@ -251,7 +255,7 @@ class GAMLSSFamily(ABC):
         ...
 
     @abstractmethod
-    def simulate(self, params: dict[str, NDArray], rng: object) -> NDArray:
+    def simulate(self, params: dict[str, NDArray], rng: np.random.Generator) -> NDArray:
         """Simulate response values from the distribution.
 
         Draws one random sample per observation from the response distribution at the

@@ -24,7 +24,7 @@ from numpy.typing import NDArray
 from whittaker.data import InputData, prepare_data
 from whittaker.families.base import Family
 from whittaker.families.gaussian import Gaussian
-from whittaker.gam import GAM
+from whittaker.gam import GAM, PredictionResult
 
 
 class ConformalMethod(Enum):
@@ -135,6 +135,7 @@ class ConformalPredictor:
     def _predict_split(self, new_data: InputData) -> ConformalResult:
         new_data = prepare_data(new_data)
         pred = self.model.predict(new_data)
+        assert isinstance(pred, PredictionResult)
         mu = pred.values
         return ConformalResult(
             values=mu,
@@ -148,13 +149,16 @@ class ConformalPredictor:
 
     def _predict_cv_plus(self, new_data: InputData) -> ConformalResult:
         new_data = prepare_data(new_data)
+        assert self._models is not None
         len(self.calibration_scores)
         n_folds = len(self._models)
         n_new = len(next(iter(new_data.values())))
 
         fold_preds = np.zeros((n_folds, n_new))
         for k, m in enumerate(self._models):
-            fold_preds[k] = m.predict(new_data).values
+            p = m.predict(new_data)
+            assert isinstance(p, PredictionResult)
+            fold_preds[k] = p.values
 
         mu_ensemble = np.mean(fold_preds, axis=0)
 
@@ -182,12 +186,15 @@ class ConformalPredictor:
 
     def _predict_jackknife_plus(self, new_data: InputData) -> ConformalResult:
         new_data = prepare_data(new_data)
+        assert self._models is not None
         n_loo = len(self._models)
         n_new = len(next(iter(new_data.values())))
 
         loo_preds = np.zeros((n_loo, n_new))
         for i, m in enumerate(self._models):
-            loo_preds[i] = m.predict(new_data).values
+            p = m.predict(new_data)
+            assert isinstance(p, PredictionResult)
+            loo_preds[i] = p.values
 
         mu_ensemble = np.mean(loo_preds, axis=0)
         residuals = self.calibration_scores
@@ -363,7 +370,9 @@ def _split_conformal(
     model = GAM(formula, family=family)
     model.fit(train_data, method=fit_method, select=select)
 
-    cal_pred = model.predict(cal_data).values
+    cal_pred_result = model.predict(cal_data)
+    assert isinstance(cal_pred_result, PredictionResult)
+    cal_pred = cal_pred_result.values
     cal_residuals = np.abs(y[cal_idx] - cal_pred)
 
     q = np.ceil((n_cal + 1) * level) / n_cal
@@ -410,8 +419,9 @@ def _cv_plus_conformal(
         model.fit(train_data, method=fit_method, select=select)
         fold_models.append(model)
 
-        pred = model.predict(test_data).values
-        loo_residuals[test] = np.abs(y[test] - pred)
+        fold_pred = model.predict(test_data)
+        assert isinstance(fold_pred, PredictionResult)
+        loo_residuals[test] = np.abs(y[test] - fold_pred.values)
 
     full_model = GAM(formula, family=family)
     full_model.fit(arrays, method=fit_method, select=select)
@@ -455,8 +465,9 @@ def _jackknife_plus_conformal(
         loo_models.append(model)
 
         single = {k: v[i : i + 1] for k, v in arrays.items()}
-        pred = model.predict(single).values[0]
-        loo_residuals[i] = abs(y[i] - pred)
+        single_pred = model.predict(single)
+        assert isinstance(single_pred, PredictionResult)
+        loo_residuals[i] = abs(y[i] - single_pred.values[0])
 
     full_model = GAM(formula, family=family)
     full_model.fit(arrays, method=fit_method, select=select)

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
 
 import numpy as np
 from numpy.typing import NDArray
@@ -12,6 +13,9 @@ from scipy.stats import t as t_dist
 
 from whittaker.fitting.pirls import FitResult
 from whittaker.model_matrix import ModelMatrix
+
+if TYPE_CHECKING:
+    from whittaker.families.base import Family
 
 
 @dataclass
@@ -191,7 +195,7 @@ def _unconditional_covariance(
 
     M = np.zeros((p, n_sp))
     for j, (lam_j, pen_j) in enumerate(zip(sp, penalties, strict=False)):
-        M[:, j] = -A_inv @ (lam_j * pen_j @ beta)
+        M[:, j] = -(A_inv @ (lam_j * pen_j @ beta)).astype(float)
 
     ml = method.upper() == "ML"
 
@@ -833,7 +837,7 @@ def _k_index_1d(residuals: NDArray, covariate: NDArray) -> float:
     resid_var = np.var(residuals, ddof=1)
     if resid_var < 1e-15:
         return 1.0
-    return neighbor_var / resid_var
+    return float(neighbor_var / resid_var)
 
 
 def _k_index_nd(residuals: NDArray, covariates: list[NDArray]) -> float:
@@ -852,7 +856,7 @@ def _k_index_nd(residuals: NDArray, covariates: list[NDArray]) -> float:
     resid_var = np.var(residuals, ddof=1)
     if resid_var < 1e-15:
         return 1.0
-    return neighbor_var / resid_var
+    return float(neighbor_var / resid_var)
 
 
 def k_check(
@@ -890,6 +894,8 @@ def k_check(
         variables = info.term.variables
         k_prime = info.col_end - info.col_start
 
+        cov: NDArray = np.empty(0)
+        covs: list[NDArray] = []
         if len(variables) == 1:
             cov = np.asarray(data[variables[0]], dtype=float)
             k_obs = _k_index_1d(residuals, cov)
@@ -995,7 +1001,7 @@ def influence(fit: FitResult, mm: ModelMatrix) -> InfluenceResult:
 def quantile_residuals(
     fit: FitResult,
     mm: ModelMatrix,
-    family: object,
+    family: Family,
     *,
     seed: int | None = None,
 ) -> NDArray:
@@ -1074,7 +1080,7 @@ class DispersionTestResult:
     p_value: float
 
 
-def dispersion_test(fit: FitResult, mm: ModelMatrix, family: object) -> DispersionTestResult:
+def dispersion_test(fit: FitResult, mm: ModelMatrix, family: Family) -> DispersionTestResult:
     """Test for overdispersion in Poisson or Binomial models."""
     y = mm.response
     mu = fit.fitted_values

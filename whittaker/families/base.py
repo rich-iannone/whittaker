@@ -3,8 +3,12 @@ r"""Abstract base class for response distribution families."""
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from typing import TYPE_CHECKING
 
 from numpy.typing import NDArray
+
+if TYPE_CHECKING:
+    import numpy as np
 
 
 class Family(ABC):
@@ -245,7 +249,7 @@ class Family(ABC):
         return False
 
     @abstractmethod
-    def simulate(self, mu: NDArray, scale: float, rng: object) -> NDArray:
+    def simulate(self, mu: NDArray, scale: float, rng: np.random.Generator) -> NDArray:
         """Simulate response values from the distribution.
 
         Parameters

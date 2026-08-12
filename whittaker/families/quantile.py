@@ -383,7 +383,7 @@ class QuantileFamily(Family):
         """
         return True
 
-    def simulate(self, mu: NDArray, scale: float, rng: object) -> NDArray:
+    def simulate(self, mu: NDArray, scale: float, rng: np.random.Generator) -> NDArray:
         r"""Draw random samples from the Asymmetric Laplace distribution.
 
         Implements the family-specific sampler by inverting the CDF of the

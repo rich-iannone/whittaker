@@ -297,7 +297,7 @@ class ZeroInflatedPoisson(GAMLSSFamily):
             "pi": np.full_like(y, np.clip(zero_frac * 0.5, 0.01, 0.5), dtype=float),
         }
 
-    def simulate(self, params: dict[str, NDArray], rng: object) -> NDArray:
+    def simulate(self, params: dict[str, NDArray], rng: np.random.Generator) -> NDArray:
         """Draw a random sample of counts from the fitted zero-inflated Poisson model.
 
         For each observation, flips a `pi`-weighted coin to decide whether it is a
@@ -657,7 +657,7 @@ class ZeroInflatedNegativeBinomial(GAMLSSFamily):
             "pi": np.full_like(y, np.clip(zero_frac * 0.5, 0.01, 0.5), dtype=float),
         }
 
-    def simulate(self, params: dict[str, NDArray], rng: object) -> NDArray:
+    def simulate(self, params: dict[str, NDArray], rng: np.random.Generator) -> NDArray:
         """Draw a random sample of counts from the fitted zero-inflated NB model.
 
         For each observation, flips a `pi`-weighted coin to decide whether it is a

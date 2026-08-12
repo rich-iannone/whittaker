@@ -182,7 +182,8 @@ class TensorProductBasis(SmoothBasis):
             The `(k, k)` sum of all per-marginal penalty matrices.
         """
         pens = self.penalty_matrices()
-        return sum(pens)
+        result: NDArray = sum(pens[1:], pens[0])
+        return result
 
     def penalty_matrices(self) -> list[NDArray]:
         """Return one penalty matrix per marginal direction.
@@ -248,11 +249,13 @@ class TensorProductBasis(SmoothBasis):
         self._check_fitted()
         n_train = None
         for m in self._marginals:
-            if hasattr(m, "_x_train"):
-                n_train = len(m._x_train)
+            x_train = getattr(m, "_x_train", None)
+            if x_train is not None:
+                n_train = len(x_train)
                 break
-            if hasattr(m, "_knots"):
-                n_train = len(m._knots)
+            knots = getattr(m, "_knots", None)
+            if knots is not None:
+                n_train = len(knots)
                 break
 
         if n_train is None:
@@ -260,10 +263,12 @@ class TensorProductBasis(SmoothBasis):
 
         xs = []
         for m in self._marginals:
-            if hasattr(m, "_x_train"):
-                xs.append(m._x_train.ravel())
-            elif hasattr(m, "_knots"):
-                xs.append(m._knots.ravel())
+            x_train = getattr(m, "_x_train", None)
+            knots = getattr(m, "_knots", None)
+            if x_train is not None:
+                xs.append(x_train.ravel())
+            elif knots is not None:
+                xs.append(knots.ravel())
             else:
                 return None
 
@@ -553,7 +558,8 @@ class TensorInteractionBasis(SmoothBasis):
             The `(k, k)` sum of all matrices returned by `penalty_matrices()`.
         """
         pens = self.penalty_matrices()
-        return sum(pens)
+        result: NDArray = sum(pens[1:], pens[0])
+        return result
 
     def penalty_matrices(self) -> list[NDArray]:
         """Return one penalty matrix per marginal direction, in range-space coordinates.
@@ -614,10 +620,12 @@ class TensorInteractionBasis(SmoothBasis):
         self._check_fitted()
         xs = []
         for m in self._marginals:
-            if hasattr(m, "_x_train"):
-                xs.append(m._x_train.ravel())
-            elif hasattr(m, "_knots"):
-                xs.append(m._knots.ravel())
+            x_train = getattr(m, "_x_train", None)
+            knots = getattr(m, "_knots", None)
+            if x_train is not None:
+                xs.append(x_train.ravel())
+            elif knots is not None:
+                xs.append(knots.ravel())
             else:
                 return None
         x_grid = np.column_stack(xs)

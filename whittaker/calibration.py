@@ -109,6 +109,7 @@ def calibrate_sigma(
             total_loss += float(np.sum(_elf_loss(y[test] - pred, tau, sigma)))
         return total_loss
 
+    assert sigma_values is not None
     losses = np.array([_cv_loss(s) for s in sigma_values])
     best_idx = int(np.argmin(losses))
 

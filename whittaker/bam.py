@@ -230,7 +230,7 @@ def build_discretized_model_matrix(
         unique_basis_mat = basis.basis_matrix(unique_x)
 
         if hasattr(basis, "penalty_matrices"):
-            pen_mats = basis.penalty_matrices()
+            pen_mats = basis.penalty_matrices()  # type: ignore[attr-defined]
         else:
             pen_mats = [basis.penalty_matrix()]
 
@@ -247,6 +247,7 @@ def build_discretized_model_matrix(
             nsd = 0
 
         if has_by:
+            assert term.by is not None
             by_col = _extract_by_column(data, term.by)
 
             if _is_factor(by_col):
@@ -584,6 +585,7 @@ class BigGAM(GAM):
         from whittaker.fitting.inference import SmoothTestResult, _smooth_test
 
         self._check_fitted()
+        assert self._disc_model is not None
         dm = self._disc_model
         fit = self._fit_result
 

@@ -27,7 +27,7 @@ def partial_effects(
     *,
     n_points: int = 200,
     level: float = 0.95,
-) -> alt.VConcatChart | alt.Chart:
+) -> alt.VConcatChart | alt.Chart | alt.LayerChart | alt.FacetChart | alt.HConcatChart:
     """Plot partial effects with confidence bands for each smooth term.
 
     For univariate `s()` terms, produces a line plot with a shaded confidence band. For bivariate
@@ -55,7 +55,7 @@ def partial_effects(
 
     from scipy.stats import norm
 
-    z_val = norm.ppf(1.0 - (1.0 - level) / 2.0)
+    z_val = float(norm.ppf(1.0 - (1.0 - level) / 2.0))
 
     mm = model._model_matrix
     beta = model._fit_result.coefficients
@@ -77,7 +77,7 @@ def partial_effects(
     eigvals_inv = np.zeros_like(eigvals)
     eigvals_inv[keep] = 1.0 / eigvals[keep]
 
-    charts: list[alt.Chart] = []
+    charts: list[alt.Chart | alt.LayerChart | alt.FacetChart | alt.HConcatChart] = []
 
     for idx, info in enumerate(mm.smooths):
         is_2d = len(info.term.variables) >= 2
@@ -108,7 +108,7 @@ def _partial_effect_1d(
     scale: float,
     z_val: float,
     n_points: int,
-) -> object:
+) -> alt.Chart | alt.LayerChart | alt.FacetChart:
     """Build a 1-D partial-effect line chart with confidence band."""
     import altair as alt
 
@@ -192,7 +192,7 @@ def _partial_effect_2d(
     scale: float,
     z_val: float,
     n_points: int,
-) -> object:
+) -> alt.Chart | alt.LayerChart | alt.HConcatChart:
     """Build a 2-D partial-effect heatmap with an SE companion panel."""
     import altair as alt
 
@@ -324,11 +324,11 @@ def _smooth_title(info: object, edf: float) -> str:
 def _marginal_range(basis: object) -> tuple[float, float]:
     """Return (min, max) of a univariate basis's training domain."""
     if hasattr(basis, "_x_min") and hasattr(basis, "_x_max"):
-        return float(basis._x_min), float(basis._x_max)
-    if hasattr(basis, "_knots") and basis._knots is not None:
-        return float(np.min(basis._knots)), float(np.max(basis._knots))
-    if hasattr(basis, "_x_train") and basis._x_train is not None:
-        return float(np.min(basis._x_train)), float(np.max(basis._x_train))
+        return float(basis._x_min), float(basis._x_max)  # type: ignore[attr-defined]
+    if hasattr(basis, "_knots") and basis._knots is not None:  # type: ignore[attr-defined]
+        return float(np.min(basis._knots)), float(np.max(basis._knots))  # type: ignore[attr-defined]
+    if hasattr(basis, "_x_train") and basis._x_train is not None:  # type: ignore[attr-defined]
+        return float(np.min(basis._x_train)), float(np.max(basis._x_train))  # type: ignore[attr-defined]
     return 0.0, 1.0
 
 
@@ -380,7 +380,7 @@ _CHECK_PLOT_NAMES = ("qq", "residuals", "histogram", "response")
 def check(
     model: GAM,
     plots: tuple[str, ...] | list[str] | None = None,
-) -> list[alt.Chart]:
+) -> list[alt.Chart | alt.LayerChart | alt.FacetChart]:
     r"""Produce GAM diagnostic plots.
 
     Provides the standard suite of residual diagnostics used to assess GAM fit quality, analogous to
@@ -445,7 +445,7 @@ def check(
     fitted = model.fitted_values
     response = model._model_matrix.response
 
-    result: list[alt.Chart] = []
+    result: list[alt.Chart | alt.LayerChart | alt.FacetChart] = []
 
     if "qq" in selected:
         sorted_resid = np.sort(deviance_resid)

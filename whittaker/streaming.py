@@ -269,6 +269,7 @@ class StreamingGAM:
             Length-`p` array of basis coefficients.
         """
         self._check_solved()
+        assert self._coefficients is not None
         return self._coefficients.copy()
 
     @property
@@ -343,6 +344,10 @@ class StreamingGAM:
         if not self._initialised:
             self._initialise(arrays)
 
+        assert self._model_matrix is not None
+        assert self._XtWX is not None
+        assert self._XtWz is not None
+
         X = predict_matrix(self._model_matrix, arrays)
 
         mu = self._family.link_inverse(X @ self._coefficients) if self._solved else y.copy()
@@ -375,8 +380,8 @@ class StreamingGAM:
 
         batch_dev = self._family.deviance(y, mu)
         self._sum_deviance += batch_dev
-        self._sum_y += np.sum(y)
-        self._sum_y2 += np.sum(y**2)
+        self._sum_y += float(np.sum(y))
+        self._sum_y2 += float(np.sum(y**2))
 
         return self
 
@@ -429,6 +434,10 @@ class StreamingGAM:
         if not self._initialised:
             raise RuntimeError("No data has been ingested yet. Call partial_fit() first.")
 
+        assert self._model_matrix is not None
+        assert self._XtWX is not None
+        assert self._XtWz is not None
+
         if reestimate_smoothing and self._fixed_sp is None:
             self._smoothing_params = self._estimate_smoothing_gcv()
 
@@ -459,6 +468,7 @@ class StreamingGAM:
         else:
             self._scale = 1.0
 
+        assert self._coefficients is not None
         self._history.append(
             StreamingSnapshot(
                 n_obs=self._n_obs,
@@ -477,6 +487,10 @@ class StreamingGAM:
     def _estimate_smoothing_gcv(self) -> list[float]:
         from scipy.optimize import minimize_scalar
 
+        assert self._model_matrix is not None
+        assert self._XtWX is not None
+        assert self._XtWz is not None
+
         n_sp = len(self._model_matrix.penalties)
         if n_sp == 0:
             return []
@@ -486,6 +500,10 @@ class StreamingGAM:
         for j in range(n_sp):
 
             def gcv_for_j(log_lam: float, j: int = j) -> float:
+                assert self._model_matrix is not None
+                assert self._XtWX is not None
+                assert self._XtWz is not None
+
                 sp_trial = list(best_sp)
                 sp_trial[j] = np.exp(log_lam)
 
@@ -544,6 +562,10 @@ class StreamingGAM:
         PredictionResult
         """
         self._check_solved()
+        assert self._model_matrix is not None
+        assert self._coefficients is not None
+        assert self._XtWX is not None
+
         new_data = prepare_data(new_data)
         X_new = predict_matrix(self._model_matrix, new_data)
         eta = X_new @ self._coefficients
@@ -607,6 +629,8 @@ class StreamingGAM:
             Multi-line summary text.
         """
         self._check_solved()
+        assert self._model_matrix is not None
+
         lines = [
             "StreamingGAM summary",
             "=" * 60,

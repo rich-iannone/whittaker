@@ -35,6 +35,7 @@ def _point_in_polygon(px: float, py: float, poly: NDArray) -> bool:
     for i in range(1, n + 1):
         x2, y2 = poly[i % n]
         if min(y1, y2) < py <= max(y1, y2) and px <= max(x1, x2):
+            xinters = px
             if y1 != y2:
                 xinters = (py - y1) * (x2 - x1) / (y2 - y1) + x1
             if y1 == y2 or px <= xinters:
@@ -74,7 +75,7 @@ def _boundary_distance(pt: NDArray, boundary: list[NDArray]) -> float:
             d = np.linalg.norm(pt - closest)
             if d < min_dist:
                 min_dist = d
-    return min_dist
+    return float(min_dist)
 
 
 def _fem_matrices(
@@ -357,6 +358,8 @@ class SoapFilm(SmoothBasis):
         nk = self._n_interior
 
         B = np.zeros((n, nk))
+        assert self._tri is not None, "SoapFilm must be fitted before calling basis_matrix."
+        assert self._all_pts is not None, "SoapFilm must be fitted before calling basis_matrix."
         tri = self._tri
         all_pts = self._all_pts
 
@@ -419,6 +422,7 @@ class SoapFilm(SmoothBasis):
         NDArray
             Shape `(k, k)`, positive semi-definite.
         """
+        assert self._K is not None, "SoapFilm must be fitted before calling penalty_matrix."
         return self._K.copy()
 
     def null_space_dimension(self) -> int:

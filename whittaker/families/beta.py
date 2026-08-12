@@ -236,7 +236,7 @@ class Beta(Family):
         """
         return self._phi is not None
 
-    def simulate(self, mu: NDArray, scale: float, rng: object) -> NDArray:
+    def simulate(self, mu: NDArray, scale: float, rng: np.random.Generator) -> NDArray:
         """Simulate Beta-distributed response values with mean `mu` and precision `phi`.
 
         Parameters

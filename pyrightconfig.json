@@ -1,0 +1,9 @@
+{
+  "include": ["whittaker"],
+  "pythonVersion": "3.10",
+  "typeCheckingMode": "standard",
+  "reportMissingTypeArgument": false,
+  "reportUnknownParameterType": false,
+  "reportConstantRedefinition": false,
+  "reportUnknownLambdaType": false
+}

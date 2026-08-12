@@ -235,7 +235,7 @@ class Gamma(Family):
         """
         return False
 
-    def simulate(self, mu: NDArray, scale: float, rng: object) -> NDArray:
+    def simulate(self, mu: NDArray, scale: float, rng: np.random.Generator) -> NDArray:
         r"""Simulate Gamma-distributed response values with mean `mu` and dispersion `scale`.
 
         Parameters

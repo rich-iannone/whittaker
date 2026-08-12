@@ -143,7 +143,9 @@ class FactorSmoothBasis(SmoothBasis):
         self._k_marginal: int
         self._marginal_nsd: int
 
-    def fit(self, x_numeric: NDArray, factor: NDArray) -> FactorSmoothBasis:
+    def fit(  # type: ignore[override]
+        self, x_numeric: NDArray, factor: NDArray | None = None, **kwargs: Any,
+    ) -> FactorSmoothBasis:
         """Fit the factor-smooth basis.
 
         Parameters
@@ -153,6 +155,10 @@ class FactorSmoothBasis(SmoothBasis):
         factor:
             Factor (grouping) variable, shape `(n,)`. Can be strings or integers.
         """
+        if factor is None:
+            raise ValueError(
+                "FactorSmoothBasis.fit() requires both x_numeric and factor arguments."
+            )
         x_num = self._as_1d_numeric(x_numeric)
         fac = self._as_1d_factor(factor)
 
@@ -171,11 +177,11 @@ class FactorSmoothBasis(SmoothBasis):
             )
 
         marginal_cls = _MARGINAL_REGISTRY[self._xt]
-        kwargs: dict[str, Any] = {}
+        marginal_kw: dict[str, Any] = {}
         if self._k_request != -1:
-            kwargs["k"] = self._k_request
-        kwargs.update(self._marginal_kwargs)
-        self._marginal = marginal_cls(**kwargs)
+            marginal_kw["k"] = self._k_request
+        marginal_kw.update(self._marginal_kwargs)
+        self._marginal = marginal_cls(**marginal_kw)
         self._marginal.fit(x_num)
 
         self._k_marginal = self._marginal.n_basis
@@ -184,7 +190,9 @@ class FactorSmoothBasis(SmoothBasis):
         self._fitted = True
         return self
 
-    def basis_matrix(self, x_numeric: NDArray, factor: NDArray) -> NDArray:
+    def basis_matrix(  # type: ignore[override]
+        self, x_numeric: NDArray, factor: NDArray | None = None, **kwargs: Any,
+    ) -> NDArray:
         """Build the block-diagonal basis matrix.
 
         Parameters
@@ -200,6 +208,10 @@ class FactorSmoothBasis(SmoothBasis):
             Design matrix of shape `(n, n_levels * k_marginal)`.
         """
         self._check_fitted()
+        if factor is None:
+            raise ValueError(
+                "FactorSmoothBasis.basis_matrix() requires both x_numeric and factor arguments."
+            )
         x_num = self._as_1d_numeric(x_numeric)
         fac = self._as_1d_factor(factor)
 

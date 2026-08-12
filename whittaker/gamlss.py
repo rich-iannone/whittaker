@@ -164,6 +164,12 @@ class GAMLSS:
         if not self.is_fitted:
             raise RuntimeError("Model has not been fitted. Call .fit() first.")
 
+    def _require_fit_result(self) -> GAMLSSFitResult:
+        """Return the fit result, raising if the model has not been fitted."""
+        self._check_fitted()
+        assert self._fit_result is not None
+        return self._fit_result
+
     @property
     def log_likelihood(self) -> float:
         """Log-likelihood of the fitted model at convergence.
@@ -175,8 +181,7 @@ class GAMLSS:
             and smoothing parameters, related to `global_deviance` by
             `global_deviance = -2 * log_likelihood`.
         """
-        self._check_fitted()
-        return self._fit_result.log_likelihood
+        return self._require_fit_result().log_likelihood
 
     @property
     def aic(self) -> float:
@@ -192,8 +197,7 @@ class GAMLSS:
             `AIC = global_deviance + 2 * edf_total`, lower values indicating a better
             deviance/complexity trade-off.
         """
-        self._check_fitted()
-        return self._fit_result.aic
+        return self._require_fit_result().aic
 
     @property
     def bic(self) -> float:
@@ -208,8 +212,7 @@ class GAMLSS:
         float
             `BIC = global_deviance + log(n) * edf_total`.
         """
-        self._check_fitted()
-        return self._fit_result.bic
+        return self._require_fit_result().bic
 
     @property
     def global_deviance(self) -> float:
@@ -223,8 +226,7 @@ class GAMLSS:
         float
             The deviance at the final RS iteration.
         """
-        self._check_fitted()
-        return self._fit_result.global_deviance
+        return self._require_fit_result().global_deviance
 
     @property
     def converged(self) -> bool:
@@ -236,8 +238,7 @@ class GAMLSS:
             `True` if the change in global deviance between successive outer iterations fell
             below `tol` before `max_outer` was reached, `False` otherwise.
         """
-        self._check_fitted()
-        return self._fit_result.converged
+        return self._require_fit_result().converged
 
     @property
     def n_iter(self) -> int:
@@ -249,8 +250,7 @@ class GAMLSS:
             Count of full passes over all distributional parameters carried out during fitting,
             at most `max_outer`.
         """
-        self._check_fitted()
-        return self._fit_result.n_iter
+        return self._require_fit_result().n_iter
 
     def coefficients(self, parameter: str) -> NDArray:
         """Fitted basis coefficients for one distributional parameter.
@@ -267,8 +267,7 @@ class GAMLSS:
             Coefficient vector `beta_k` for that parameter's linear predictor
             `eta_k = X_k @ beta_k`, in the order of its model matrix's columns.
         """
-        self._check_fitted()
-        return self._fit_result.params[parameter].coefficients
+        return self._require_fit_result().params[parameter].coefficients
 
     def smoothing_params(self, parameter: str) -> list[float]:
         """Fitted smoothing parameters for one distributional parameter's smooth terms.
@@ -284,8 +283,7 @@ class GAMLSS:
             One smoothing parameter (`lambda`) per smooth term in that parameter's formula, in
             the order the terms were declared. Empty if the formula has no smooth terms.
         """
-        self._check_fitted()
-        return self._fit_result.params[parameter].smoothing_params
+        return self._require_fit_result().params[parameter].smoothing_params
 
     def edf(self, parameter: str) -> list[float]:
         """Effective degrees of freedom per smooth term for one distributional parameter.
@@ -301,8 +299,7 @@ class GAMLSS:
             EDF of each smooth term in that parameter's formula, reflecting how much smoothing
             was applied (lower values indicate heavier penalization toward linearity).
         """
-        self._check_fitted()
-        return self._fit_result.params[parameter].edf
+        return self._require_fit_result().params[parameter].edf
 
     def fitted_values(self, parameter: str | None = None) -> dict[str, NDArray] | NDArray:
         """Fitted values on the response scale for one or all distributional parameters.
@@ -319,10 +316,10 @@ class GAMLSS:
             `theta_k = g_k^{-1}(eta_k)` for the requested parameter(s), evaluated at the training
             covariate values used in `fit()`.
         """
-        self._check_fitted()
+        fr = self._require_fit_result()
         if parameter is not None:
-            return self._fit_result.params[parameter].fitted_values
-        return {name: pr.fitted_values for name, pr in self._fit_result.params.items()}
+            return fr.params[parameter].fitted_values
+        return {name: pr.fitted_values for name, pr in fr.params.items()}
 
     def fit(
         self,
@@ -393,6 +390,7 @@ class GAMLSS:
                 y = model.response
 
         self._models = models
+        assert y is not None, "No response variable found in model formulas."
         self._fit_result = gamlss_fit(
             models,
             self._family,
@@ -437,7 +435,7 @@ class GAMLSS:
             A `GAMLSSPrediction` with all parameters' values, linear predictors, and (optionally)
             standard errors, or a single `NDArray` of predicted values if `parameter` is given.
         """
-        self._check_fitted()
+        fr = self._require_fit_result()
         new_data = prepare_data(new_data)
 
         values: dict[str, NDArray] = {}
@@ -447,7 +445,7 @@ class GAMLSS:
         for name in self._family.parameter_names:
             model = self._models[name]
             X_new = predict_matrix(model, new_data)
-            beta = self._fit_result.params[name].coefficients
+            beta = fr.params[name].coefficients
             eta = X_new @ beta
             offset = model.offset
             if offset is not None:
@@ -471,7 +469,7 @@ class GAMLSS:
     def _prediction_se(self, param: str, X_new: NDArray) -> NDArray:
         from whittaker.fitting.inference import _bayesian_covariance
 
-        fr = self._fit_result
+        fr = self._require_fit_result()
         pr = fr.params[param]
         model = self._models[param]
         y = fr.response
@@ -509,9 +507,9 @@ class GAMLSS:
         NDArray
             Simulated values, shape `(n, n_sim)`.
         """
-        self._check_fitted()
+        fr = self._require_fit_result()
         rng = np.random.default_rng(seed)
-        params = {name: pr.fitted_values for name, pr in self._fit_result.params.items()}
+        params = {name: pr.fitted_values for name, pr in fr.params.items()}
         sims = np.column_stack([self._family.simulate(params, rng) for _ in range(n_sim)])
         return sims
 
@@ -527,8 +525,7 @@ class GAMLSS:
         str
             Multi-line, human-readable summary suitable for printing.
         """
-        self._check_fitted()
-        fr = self._fit_result
+        fr = self._require_fit_result()
         lines = ["GAMLSS fit summary", "=" * 40]
         lines.append(f"Family: {self._family!r}")
         lines.append(f"N obs: {fr.n_obs}")

@@ -149,6 +149,8 @@ class Multinomial(Family):
 
     def _category_probs(self, eta: NDArray) -> NDArray:
         """Compute (n, K) matrix of category probabilities given linear predictor eta."""
+        assert self._alphas is not None
+        assert self._betas is not None
         K = self._K
         n = len(eta)
         logits = np.zeros((n, K))
@@ -167,6 +169,8 @@ class Multinomial(Family):
         self._betas = np.ones(K - 1)
 
     def _update_params(self, y: NDArray, eta: NDArray) -> None:
+        assert self._alphas is not None
+        assert self._betas is not None
         K = self._K
         y_int = np.round(y).astype(int)
 
@@ -309,6 +313,8 @@ class Multinomial(Family):
             self._init_params(y)
 
         self._update_params(y, eta)
+
+        assert self._betas is not None
 
         K = self._K
         y_int = np.round(y).astype(int)
@@ -454,7 +460,7 @@ class Multinomial(Family):
         """
         return True
 
-    def simulate(self, mu: NDArray, scale: float, rng: object) -> NDArray:
+    def simulate(self, mu: NDArray, scale: float, rng: np.random.Generator) -> NDArray:
         """Draw random responses from the fitted category probabilities, implementing the
         family-specific `simulate` for `Multinomial`.
 

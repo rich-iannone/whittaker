@@ -375,7 +375,7 @@ class FunctionalGAM:
 
         columns: list[NDArray] = [np.ones((n, 1))]
         col_names: list[str] = ["intercept"]
-        penalties: list[NDArray] = []
+        penalties: list[tuple[int, int, NDArray]] = []
         col_offset = 1
 
         for ft in self._functional_terms:
@@ -492,7 +492,7 @@ class FunctionalGAM:
         new_data: InputData,
         *,
         se: bool = False,
-    ) -> NDArray:
+    ) -> NDArray | tuple[NDArray, NDArray]:
         r"""Predict on new data.
 
         Rebuilds the functional design columns for `new_data` using the basis matrices fit on the
@@ -512,18 +512,18 @@ class FunctionalGAM:
         -------
         NDArray or tuple[NDArray, NDArray]
         """
-        self._check_fitted()
+        fr = self._require_fit_result()
         arrays = self._prepare_functional_data(new_data)
         n = len(next(v for v in arrays.values() if v.ndim == 1))
 
         X_new = self._build_predict_matrix(arrays, n)
 
-        beta = self._fit_result.coefficients
+        beta = fr.coefficients
         eta = X_new @ beta
         mu = self._family.link_inverse(eta)
 
         if se:
-            scale = self._fit_result.scale
+            scale = fr.scale
             X_new.shape[1]
             XtX = self._fit_result_XtX(X_new)
             cov_beta = scale * np.linalg.inv(XtX)
@@ -534,6 +534,7 @@ class FunctionalGAM:
 
     def _fit_result_XtX(self, X_new: NDArray) -> NDArray:
         """Reconstruct (X'WX + S) from the training data for variance computation."""
+        assert self._fit_result is not None
         beta = self._fit_result.coefficients
         sp = self._fit_result.smoothing_params
 
@@ -628,7 +629,7 @@ class FunctionalGAM:
         -------
         CoefficientFunction
         """
-        self._check_fitted()
+        fr = self._require_fit_result()
 
         ft = None
         for f in self._functional_terms:
@@ -647,7 +648,7 @@ class FunctionalGAM:
             B_eval = _fourier_basis(t_eval, ft.n_basis, ft.domain)
 
         start, end = self._func_col_ranges[ft.name]
-        beta_func = self._fit_result.coefficients[start:end]
+        beta_func = fr.coefficients[start:end]
 
         values = B_eval @ beta_func
 
@@ -655,7 +656,7 @@ class FunctionalGAM:
 
         z = norm.ppf(1 - (1 - level) / 2)
 
-        scale = self._fit_result.scale
+        scale = fr.scale
         X_train = self._build_full_training_matrix()
         A = self._fit_result_XtX(X_train)
         try:
@@ -685,9 +686,9 @@ class FunctionalGAM:
         -------
         dict[str, float]
         """
-        self._check_fitted()
+        fr = self._require_fit_result()
         result = {}
-        edf_list = self._fit_result.edf
+        edf_list = fr.edf
         for i, ft in enumerate(self._functional_terms):
             if i < len(edf_list):
                 result[ft.name] = edf_list[i]
@@ -704,8 +705,7 @@ class FunctionalGAM:
         float
             Scale estimate from the penalized IRLS fit, used to compute standard errors.
         """
-        self._check_fitted()
-        return self._fit_result.scale
+        return self._require_fit_result().scale
 
     @property
     def deviance(self) -> float:
@@ -716,8 +716,7 @@ class FunctionalGAM:
         float
             Model deviance from the penalized IRLS fit, a measure of goodness of fit.
         """
-        self._check_fitted()
-        return self._fit_result.deviance
+        return self._require_fit_result().deviance
 
     @property
     def edf_total(self) -> float:
@@ -728,8 +727,7 @@ class FunctionalGAM:
         float
             Sum of per-term EDF values, reflecting the overall complexity of the fitted model.
         """
-        self._check_fitted()
-        return self._fit_result.edf_total
+        return self._require_fit_result().edf_total
 
     @property
     def coefficients(self) -> NDArray:
@@ -742,8 +740,7 @@ class FunctionalGAM:
             coefficients, and any scalar term coefficients, in the order used internally by
             the model.
         """
-        self._check_fitted()
-        return self._fit_result.coefficients.copy()
+        return self._require_fit_result().coefficients.copy()
 
     def summary(self) -> str:
         """Build a text summary of the fitted functional GAM.
@@ -757,21 +754,21 @@ class FunctionalGAM:
         str
             Multi-line summary text.
         """
-        self._check_fitted()
+        fr = self._require_fit_result()
         lines = [
             "FunctionalGAM summary",
             "=" * 60,
             f"Response:    {self._response}",
             f"Family:      {self._family.__class__.__name__}",
             f"N obs:       {len(self._data[self._response])}",
-            f"EDF total:   {self._fit_result.edf_total:.1f}",
-            f"Deviance:    {self._fit_result.deviance:.2f}",
-            f"Scale:       {self._fit_result.scale:.4f}",
+            f"EDF total:   {fr.edf_total:.1f}",
+            f"Deviance:    {fr.deviance:.2f}",
+            f"Scale:       {fr.scale:.4f}",
             "",
             "Functional terms:",
         ]
         for i, ft in enumerate(self._functional_terms):
-            edf_val = self._fit_result.edf[i] if i < len(self._fit_result.edf) else float("nan")
+            edf_val = fr.edf[i] if i < len(fr.edf) else float("nan")
             lines.append(
                 f"  {ft.name}: basis={ft.basis}, k={ft.n_basis}, "
                 f"domain={ft.domain}, edf={edf_val:.1f}"
@@ -805,6 +802,12 @@ class FunctionalGAM:
     def _check_fitted(self) -> None:
         if not self._fitted:
             raise RuntimeError("This FunctionalGAM has not been fitted yet. Call .fit(data) first.")
+
+    def _require_fit_result(self) -> FitResult:
+        """Return the fit result, raising if the model has not been fitted."""
+        self._check_fitted()
+        assert self._fit_result is not None
+        return self._fit_result
 
     def __repr__(self) -> str:
         status = "fitted" if self._fitted else "unfitted"

@@ -277,7 +277,7 @@ class NegativeBinomial(Family):
         """
         return True
 
-    def simulate(self, mu: NDArray, scale: float, rng: object) -> NDArray:
+    def simulate(self, mu: NDArray, scale: float, rng: np.random.Generator) -> NDArray:
         """Simulate NB2-distributed response values with mean `mu` and the current `theta`.
 
         Parameters

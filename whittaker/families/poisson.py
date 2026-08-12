@@ -223,7 +223,7 @@ class Poisson(Family):
         """
         return True
 
-    def simulate(self, mu: NDArray, scale: float, rng: object) -> NDArray:
+    def simulate(self, mu: NDArray, scale: float, rng: np.random.Generator) -> NDArray:
         """Simulate Poisson-distributed response values with mean `mu`.
 
         Parameters

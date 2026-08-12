@@ -282,7 +282,7 @@ class GammaLS(GAMLSSFamily):
         sigma_init = np.full_like(y_safe, max(cv, 0.1))
         return {"mu": mu_init, "sigma": sigma_init}
 
-    def simulate(self, params: dict[str, NDArray], rng: object) -> NDArray:
+    def simulate(self, params: dict[str, NDArray], rng: np.random.Generator) -> NDArray:
         """Simulate response values from a Gamma distribution with the given `mu`, `sigma`.
 
         Converts to the shape/scale parameterization (`shape = 1/sigma^2`,

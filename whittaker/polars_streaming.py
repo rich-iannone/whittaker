@@ -202,9 +202,9 @@ class PolarsGAM(BigGAM):
         """
         return self._n_rows
 
-    def fit(
+    def fit(  # type: ignore[override]
         self,
-        source,
+        data,
         *,
         smoothing_params: list[float] | None = None,
         method: str = "fREML",
@@ -213,19 +213,21 @@ class PolarsGAM(BigGAM):
     ) -> PolarsGAM:
         """Fit the GAM from a Polars source.
 
-        Converts `source` to a Polars `LazyFrame`, collects it via Polars' streaming engine in
+        Converts `data` to a Polars `LazyFrame`, collects it via Polars' streaming engine in
         `chunk_size`-row slices, and combines the result into `dict[str, numpy.ndarray]` before
         delegating to `~whittaker.bam.BigGAM`'s discretized fitting (see the class docstring for
         details on the discretization and cross-product accumulation).
 
         Parameters
         ----------
-        source : polars.LazyFrame or polars.DataFrame or str or pathlib.Path
+        data : polars.LazyFrame or polars.DataFrame or str or pathlib.Path
             The data source. A Polars `LazyFrame` is used as-is; a `DataFrame` is converted with
             `.lazy()`; a file path (string or `Path`) is scanned lazily based on its extension —
             `.parquet` (`scan_parquet`), `.csv` (`scan_csv`), `.ipc`/`.arrow` (`scan_ipc`), or
             `.ndjson`/`.jsonl` (`scan_ndjson`). Any other type or unrecognized extension raises
             `TypeError` or `ValueError` respectively.
+        weights : numpy.ndarray, optional
+            Observation (prior) weights, shape `(n,)`. Must be strictly positive.
         smoothing_params : list of float, optional
             Fixed smoothing parameters `lambda_j`, one per smooth term, in formula order. If
             `None` (the default), smoothing parameters are selected automatically according to
@@ -243,19 +245,20 @@ class PolarsGAM(BigGAM):
         Returns
         -------
         PolarsGAM
-            Returns `self` for method chaining, e.g. `model = PolarsGAM("y ~ s(x)").fit(source)`.
+            Returns `self` for method chaining, e.g. `model = PolarsGAM("y ~ s(x)").fit(data)`.
         """
-        lf = _to_lazy(source)
+        lf = _to_lazy(data)
         self._n_rows = _count_lazy(lf)
 
-        data = _lazyframe_to_dict(lf, self._chunk_size)
-        self._data = data
+        col_data = _lazyframe_to_dict(lf, self._chunk_size)
+        self._data = col_data
 
-        if hasattr(self._family, "set_data"):
-            self._family.set_data(data)
+        _set_data = getattr(self._family, "set_data", None)
+        if _set_data is not None:
+            _set_data(col_data)
 
         self._disc_model = build_discretized_model_matrix(
-            self._formula, data, n_discrete=self._n_discrete, select=select
+            self._formula, col_data, n_discrete=self._n_discrete, select=select
         )
 
         self._fit_result = bam_fit(

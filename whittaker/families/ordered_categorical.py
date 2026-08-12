@@ -131,6 +131,7 @@ class OrderedCategorical(Family):
 
     def _category_probs(self, eta: NDArray) -> NDArray:
         K = self._K
+        assert self._cutpoints is not None
         alpha = self._cutpoints
         n = len(eta)
         probs = np.empty((n, K))
@@ -173,6 +174,7 @@ class OrderedCategorical(Family):
                     ll += float(np.sum(np.log(probs[mask, k])))
             return -ll
 
+        assert self._cutpoints is not None
         alpha0 = self._cutpoints
         raw0 = np.concatenate([[alpha0[0]], np.log(np.maximum(np.diff(alpha0), 1e-6))])
         result = minimize(neg_ll, raw0, method="L-BFGS-B")
@@ -456,7 +458,7 @@ class OrderedCategorical(Family):
         """
         return True
 
-    def simulate(self, mu: NDArray, scale: float, rng: object) -> NDArray:
+    def simulate(self, mu: NDArray, scale: float, rng: np.random.Generator) -> NDArray:
         """Simulate ordinal category labels from the fitted cumulative-logit model.
 
         Implements the family-specific version of the abstract `Family.simulate`. For each

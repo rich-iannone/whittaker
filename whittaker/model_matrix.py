@@ -17,6 +17,7 @@ dimension.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -50,7 +51,7 @@ from whittaker.smooths.tensor import (
 )
 from whittaker.smooths.tprs import TPRS
 
-_BS_REGISTRY: dict[str, type[SmoothBasis]] = {
+_BS_REGISTRY: dict[str, type[SmoothBasis] | Callable[..., SmoothBasis]] = {
     "tp": TPRS,
     "cr": CRS,
     "cc": CyclicCRS,
@@ -695,8 +696,9 @@ def build_model_matrix(
             basis_mat = basis.basis_matrix(x)
             nsd = basis.null_space_dimension()
 
-        if hasattr(basis, "penalty_matrices"):
-            pen_mats = basis.penalty_matrices()
+        penalty_matrices_fn = getattr(basis, "penalty_matrices", None)
+        if penalty_matrices_fn is not None:
+            pen_mats = penalty_matrices_fn()
         else:
             pen_mats = [basis.penalty_matrix()]
 
@@ -715,6 +717,7 @@ def build_model_matrix(
             nsd = 0
 
         if has_by:
+            assert term.by is not None
             by_col = _extract_by_column(data, term.by)
 
             if _is_factor(by_col):
@@ -946,6 +949,7 @@ def predict_matrix(
                 basis_mat = _apply_constraint(basis_mat, constraint)
 
         if info.by_level is not None:
+            assert info.by_var is not None
             by_col = _extract_by_column(new_data, info.by_var)
             indicator = (by_col == info.by_level).astype(float)
             basis_mat = basis_mat * indicator[:, np.newaxis]

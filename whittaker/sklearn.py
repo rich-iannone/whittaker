@@ -33,12 +33,24 @@ from whittaker.families.gaussian import Gaussian
 from whittaker.gam import GAM
 
 try:
-    from sklearn.base import BaseEstimator, ClassifierMixin, RegressorMixin
-    from sklearn.utils.validation import check_array, check_is_fitted, check_X_y
+    from sklearn.base import (  # type: ignore[import-not-found]
+        BaseEstimator,
+        ClassifierMixin,
+        RegressorMixin,
+    )
+    from sklearn.utils.validation import (  # type: ignore[import-not-found]
+        check_array,
+        check_is_fitted,
+        check_X_y,
+    )
 
     _HAS_SKLEARN = True
 except ImportError:  # pragma: no cover
     _HAS_SKLEARN = False
+
+    check_X_y = None  # type: ignore[assignment]
+    check_is_fitted = None  # type: ignore[assignment]
+    check_array = None  # type: ignore[assignment]
 
     class BaseEstimator:  # type: ignore[no-redef]
         pass
@@ -205,6 +217,7 @@ class GAMRegressor(BaseEstimator, RegressorMixin):  # type: ignore[misc]
             (the underlying fitted `whittaker.gam.GAM` instance), so that scikit-learn's
             `fit(...).predict(...)` chaining works as usual.
         """
+        assert check_X_y is not None, "scikit-learn is required for GAMRegressor"
         X, y = check_X_y(X, y, dtype="float64")
         self.n_features_in_ = X.shape[1]
         self.feature_names_ = _make_feature_names(self.n_features_in_)
@@ -237,6 +250,8 @@ class GAMRegressor(BaseEstimator, RegressorMixin):  # type: ignore[misc]
             Predicted mean response values, shape `(n_samples,)`, in the original (non-linear
             predictor) scale.
         """
+        assert check_is_fitted is not None, "scikit-learn is required for GAMRegressor"
+        assert check_array is not None, "scikit-learn is required for GAMRegressor"
         check_is_fitted(self, "gam_")
         X = check_array(X, dtype="float64")
         data = _array_to_data(X, response="y", feature_names=self.feature_names_)
@@ -351,6 +366,7 @@ class GAMClassifier(BaseEstimator, ClassifierMixin):  # type: ignore[misc]
             If `y` contains fewer or more than two distinct values, since `GAMClassifier`
             supports binary classification only.
         """
+        assert check_X_y is not None, "scikit-learn is required for GAMClassifier"
         X, y = check_X_y(X, y, dtype="float64")
         self.classes_ = np.unique(y)
         if len(self.classes_) != 2:
@@ -390,6 +406,8 @@ class GAMClassifier(BaseEstimator, ClassifierMixin):  # type: ignore[misc]
             `P(y == self.classes_[0])` and column `1` is `P(y == self.classes_[1])`, matching the
             scikit-learn convention that `predict_proba` columns are ordered by `self.classes_`.
         """
+        assert check_is_fitted is not None, "scikit-learn is required for GAMClassifier"
+        assert check_array is not None, "scikit-learn is required for GAMClassifier"
         check_is_fitted(self, "gam_")
         X = check_array(X, dtype="float64")
         data = _array_to_data(X, response="y", feature_names=self.feature_names_)

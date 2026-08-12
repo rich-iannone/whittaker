@@ -258,6 +258,8 @@ class CoxPH(Family):
         return self._efron_pll(eta_s, event_s, exp_eta_s)
 
     def _efron_pll(self, eta_s: NDArray, event_s: NDArray, exp_eta_s: NDArray) -> float:
+        assert self._time is not None
+        assert self._sort_idx is not None
         time_s = self._time[self._sort_idx]
         n = len(eta_s)
         S0_full = np.cumsum(exp_eta_s[::-1])[::-1]
@@ -287,7 +289,7 @@ class CoxPH(Family):
                 denom = S0_full[tied_start] - (r / d_k) * s_k
                 pll -= np.log(max(denom, _EPS))
 
-        return pll
+        return float(pll)
 
     def irls_update(self, y: NDArray, mu: NDArray, eta: NDArray) -> tuple[NDArray, NDArray]:
         r"""Newton step for the Cox partial likelihood, supplying custom working values.
@@ -332,6 +334,7 @@ class CoxPH(Family):
         if self._event is None:
             raise RuntimeError("CoxPH requires set_data() before fitting.")
 
+        assert self._sort_idx is not None
         order = self._sort_idx
         eta_s = eta[order]
         event_s = self._event[order]
@@ -366,6 +369,8 @@ class CoxPH(Family):
         return gradient_s, hess_diag_s
 
     def _efron_grad_hess(self, event_s: NDArray, exp_eta_s: NDArray) -> tuple[NDArray, NDArray]:
+        assert self._time is not None
+        assert self._sort_idx is not None
         time_s = self._time[self._sort_idx]
         n = len(event_s)
         S0_full = np.cumsum(exp_eta_s[::-1])[::-1]
@@ -414,7 +419,7 @@ class CoxPH(Family):
         gradient_s = event_s.astype(float) - exp_eta_s * cum_a
         hess_diag_s = exp_eta_s * cum_a - exp_eta_s**2 * cum_b
 
-        for d_k, _a_k, _b_k, c_k, e_k, event_indices in event_time_data:
+        for d_k, _a_k, b_k, c_k, e_k, event_indices in event_time_data:
             if d_k <= 1:
                 continue
             for j in event_indices:
@@ -515,7 +520,7 @@ class CoxPH(Family):
         """
         return True
 
-    def simulate(self, mu: NDArray, scale: float, rng: object) -> NDArray:
+    def simulate(self, mu: NDArray, scale: float, rng: np.random.Generator) -> NDArray:
         r"""Simulate survival times by inverting the fitted cumulative baseline hazard.
 
         Implements the family-specific version of `Family.simulate`. Draws
@@ -548,6 +553,7 @@ class CoxPH(Family):
         """
         if self._baseline_cumhaz is None:
             raise RuntimeError("Model must be fitted before simulation.")
+        assert self._baseline_times is not None
         eta = mu
         exp_eta = np.exp(np.clip(eta, -_ETA_CLIP, _ETA_CLIP))
         u = rng.uniform(0, 1, len(eta))
@@ -561,7 +567,7 @@ class CoxPH(Family):
         return times
 
     def _compute_baseline_hazard(self, eta: NDArray) -> None:
-        if self._event is None or self._sort_idx is None:
+        if self._event is None or self._sort_idx is None or self._time is None:
             return
 
         order = self._sort_idx

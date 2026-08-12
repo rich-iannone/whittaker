@@ -3,6 +3,7 @@ r"""Top-level GAM class: the primary user-facing API."""
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Any, cast
 
 import numpy as np
 from numpy.typing import NDArray
@@ -78,6 +79,12 @@ class TermsPredictionResult:
     terms: dict[str, NDArray]
     se: dict[str, NDArray] | None
     labels: list[str] = field(default_factory=list)
+
+    @property
+    def values(self) -> NDArray:
+        """Sum of all term contributions (overall linear predictor)."""
+        arrays = list(self.terms.values())
+        return np.sum(arrays, axis=0)  # type: ignore[return-value]
 
 
 @dataclass
@@ -341,7 +348,7 @@ class GAM:
         self._data = data
 
         if hasattr(self._family, "set_data"):
-            self._family.set_data(data)
+            cast(Any, self._family).set_data(data)
 
         self._model_matrix = build_model_matrix(self._formula, data, select=select)
 
@@ -604,7 +611,7 @@ class GAM:
             V_beta = self._covariance_matrix(unconditional=unconditional)
 
         terms_dict: dict[str, NDArray] = {}
-        se_dict: dict[str, NDArray] = {} if se else None
+        se_dict: dict[str, NDArray] | None = {} if se else None
         labels: list[str] = []
 
         for info in self._model_matrix.smooths:
@@ -618,7 +625,7 @@ class GAM:
             terms_dict[label] = X_j @ beta_j
             labels.append(label)
 
-            if se:
+            if se and V_beta is not None and se_dict is not None:
                 V_j = V_beta[cs:ce, cs:ce]
                 var_j = np.sum(X_j * (X_j @ V_j), axis=1)
                 se_dict[label] = np.sqrt(np.maximum(var_j, 0.0))
@@ -1048,6 +1055,7 @@ class GAM:
             Deviance of the intercept-only model.
         """
         self._check_fitted()
+        assert self._fit_result.null_deviance is not None
         return self._fit_result.null_deviance
 
     @property
@@ -1066,7 +1074,7 @@ class GAM:
         """
         self._check_fitted()
         null_dev = self._fit_result.null_deviance
-        if null_dev <= 0:
+        if null_dev is None or null_dev <= 0:
             return 0.0
         return 1.0 - self._fit_result.deviance / null_dev
 
@@ -1084,6 +1092,7 @@ class GAM:
             AIC of the fitted model.
         """
         self._check_fitted()
+        assert self._fit_result.aic is not None
         return self._fit_result.aic
 
     @property
@@ -1100,6 +1109,7 @@ class GAM:
             BIC of the fitted model.
         """
         self._check_fitted()
+        assert self._fit_result.bic is not None
         return self._fit_result.bic
 
     def parametric_tests(self) -> list:
@@ -1460,7 +1470,7 @@ class GAM:
     def check(
         self,
         plots: tuple[str, ...] | list[str] | None = None,
-    ) -> list[object]:
+    ) -> list:
         """Produce a standard set of residual diagnostic plots for the fitted model.
 
         This is the visual counterpart to `gam_check()`: rather than a textual report, it

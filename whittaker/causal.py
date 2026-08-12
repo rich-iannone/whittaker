@@ -23,7 +23,7 @@ from scipy import stats
 from whittaker.data import InputData, prepare_data
 from whittaker.families.base import Family
 from whittaker.families.gaussian import Gaussian
-from whittaker.gam import GAM
+from whittaker.gam import GAM, PredictionResult
 
 
 @dataclass
@@ -403,8 +403,12 @@ class CausalGAM:
             d_model.fit(train_data, method=fit_method, select=select)
             self._treatment_models.append(d_model)
 
-            residuals_y[test] = y[test] - y_model.predict(test_data).values
-            residuals_d[test] = d[test] - d_model.predict(test_data).values
+            y_pred = y_model.predict(test_data)
+            assert isinstance(y_pred, PredictionResult)
+            residuals_y[test] = y[test] - y_pred.values
+            d_pred = d_model.predict(test_data)
+            assert isinstance(d_pred, PredictionResult)
+            residuals_d[test] = d[test] - d_pred.values
 
         self._residuals_y = residuals_y
         self._residuals_d = residuals_d
@@ -427,6 +431,8 @@ class CausalGAM:
         fit_method: str,
         select: bool,
     ) -> None:
+        assert self._residuals_y is not None
+        assert self._residuals_d is not None
         pseudo_outcome = self._residuals_y / self._residuals_d
         finite_mask = np.isfinite(pseudo_outcome) & (np.abs(self._residuals_d) > 1e-6)
 
@@ -460,24 +466,24 @@ class CausalGAM:
         -------
         TreatmentEffect
         """
-        self._check_fitted()
+        ate, ate_se, residuals_y, _, _ = self._assert_fitted_attrs()
 
-        z = stats.norm.ppf(1.0 - (1.0 - level) / 2)
-        ci_lower = self._ate - z * self._ate_se
-        ci_upper = self._ate + z * self._ate_se
+        z = float(stats.norm.ppf(1.0 - (1.0 - level) / 2))
+        ci_lower = ate - z * ate_se
+        ci_upper = ate + z * ate_se
 
-        t_stat = self._ate / self._ate_se if self._ate_se > 0 else np.inf
+        t_stat = ate / ate_se if ate_se > 0 else np.inf
         p_value = float(2.0 * (1.0 - stats.norm.cdf(abs(t_stat))))
 
         return TreatmentEffect(
-            ate=self._ate,
-            se=self._ate_se,
+            ate=ate,
+            se=ate_se,
             ci_lower=ci_lower,
             ci_upper=ci_upper,
             level=level,
             p_value=p_value,
             method=self._method,
-            n_obs=len(self._residuals_y),
+            n_obs=len(residuals_y),
         )
 
     def cate(
@@ -513,7 +519,7 @@ class CausalGAM:
         -------
         CATEResult
         """
-        self._check_fitted()
+        _, _, _, _, data = self._assert_fitted_attrs()
 
         if self._method != "interactive":
             raise ValueError(
@@ -533,22 +539,24 @@ class CausalGAM:
             )
 
         if new_data is None:
-            x_var = self._data[variable]
+            x_var = data[variable]
             x_grid = np.linspace(x_var.min(), x_var.max(), n_points)
             new_data = {}
             for c in self._confounders:
                 if c == variable:
                     new_data[c] = x_grid
                 else:
-                    new_data[c] = np.full(n_points, np.mean(self._data[c]))
+                    new_data[c] = np.full(n_points, np.mean(data[c]))
         else:
             new_data = prepare_data(new_data)
             x_grid = new_data[variable]
             n_points = len(x_grid)
 
         pred = self._cate_model.predict(new_data, se=True)
+        assert isinstance(pred, PredictionResult)
         cate_vals = pred.values
         se_vals = pred.se
+        assert se_vals is not None
 
         z = stats.norm.ppf(1.0 - (1.0 - level) / 2)
         lower = cate_vals - z * se_vals
@@ -573,8 +581,8 @@ class CausalGAM:
             `(residuals_y, residuals_d)`, a residualized outcome and treatment after partialling out
             confounders.
         """
-        self._check_fitted()
-        return self._residuals_y.copy(), self._residuals_d.copy()
+        _, _, residuals_y, residuals_d, _ = self._assert_fitted_attrs()
+        return residuals_y.copy(), residuals_d.copy()
 
     def summary(self) -> str:
         """Build a human-readable text summary of the fitted causal GAM.
@@ -617,6 +625,18 @@ class CausalGAM:
     def _check_fitted(self) -> None:
         if not self._fitted:
             raise RuntimeError("This CausalGAM has not been fitted yet. Call .fit(data) first.")
+
+    def _assert_fitted_attrs(
+        self,
+    ) -> tuple[float, float, NDArray, NDArray, dict[str, NDArray]]:
+        """Narrow Optional attributes that are guaranteed non-None after fitting."""
+        self._check_fitted()
+        assert self._ate is not None
+        assert self._ate_se is not None
+        assert self._residuals_y is not None
+        assert self._residuals_d is not None
+        assert self._data is not None
+        return self._ate, self._ate_se, self._residuals_y, self._residuals_d, self._data
 
     def __repr__(self) -> str:
         status = "fitted" if self._fitted else "unfitted"
@@ -747,8 +767,12 @@ def mediation_analysis(
     d1_data[treatment] = np.ones(n)
     d0_data[treatment] = np.zeros(n)
 
-    m1 = mediator_model.predict(d1_data).values
-    m0 = mediator_model.predict(d0_data).values
+    m1_pred = mediator_model.predict(d1_data)
+    assert isinstance(m1_pred, PredictionResult)
+    m1 = m1_pred.values
+    m0_pred = mediator_model.predict(d0_data)
+    assert isinstance(m0_pred, PredictionResult)
+    m0 = m0_pred.values
 
     def _compute_effects(d1_d, d0_d, m1_v, m0_v):
         d1_m1_data = {k: v.copy() for k, v in arrays.items()}
@@ -763,9 +787,15 @@ def mediation_analysis(
         d0_m0_data[treatment] = np.zeros(n)
         d0_m0_data[mediator] = m0_v
 
-        y_d1_m1 = outcome_model.predict(d1_m1_data).values
-        y_d1_m0 = outcome_model.predict(d1_m0_data).values
-        y_d0_m0 = outcome_model.predict(d0_m0_data).values
+        p_d1_m1 = outcome_model.predict(d1_m1_data)
+        assert isinstance(p_d1_m1, PredictionResult)
+        y_d1_m1 = p_d1_m1.values
+        p_d1_m0 = outcome_model.predict(d1_m0_data)
+        assert isinstance(p_d1_m0, PredictionResult)
+        y_d1_m0 = p_d1_m0.values
+        p_d0_m0 = outcome_model.predict(d0_m0_data)
+        assert isinstance(p_d0_m0, PredictionResult)
+        y_d0_m0 = p_d0_m0.values
 
         indirect = float(np.mean(y_d1_m1 - y_d1_m0))
         direct = float(np.mean(y_d1_m0 - y_d0_m0))
@@ -793,8 +823,12 @@ def mediation_analysis(
         d1_b[treatment] = np.ones(n)
         d0_b[treatment] = np.zeros(n)
 
-        m1_b = m_model_b.predict(d1_b).values
-        m0_b = m_model_b.predict(d0_b).values
+        m1_b_pred = m_model_b.predict(d1_b)
+        assert isinstance(m1_b_pred, PredictionResult)
+        m1_b = m1_b_pred.values
+        m0_b_pred = m_model_b.predict(d0_b)
+        assert isinstance(m0_b_pred, PredictionResult)
+        m0_b = m0_b_pred.values
 
         d1_m1_b = {k: v.copy() for k, v in boot_arrays.items()}
         d1_m1_b[treatment] = np.ones(n)
@@ -808,9 +842,15 @@ def mediation_analysis(
         d0_m0_b[treatment] = np.zeros(n)
         d0_m0_b[mediator] = m0_b
 
-        y_d1_m1_b = o_model_b.predict(d1_m1_b).values
-        y_d1_m0_b = o_model_b.predict(d1_m0_b).values
-        y_d0_m0_b = o_model_b.predict(d0_m0_b).values
+        p_d1_m1_b = o_model_b.predict(d1_m1_b)
+        assert isinstance(p_d1_m1_b, PredictionResult)
+        y_d1_m1_b = p_d1_m1_b.values
+        p_d1_m0_b = o_model_b.predict(d1_m0_b)
+        assert isinstance(p_d1_m0_b, PredictionResult)
+        y_d1_m0_b = p_d1_m0_b.values
+        p_d0_m0_b = o_model_b.predict(d0_m0_b)
+        assert isinstance(p_d0_m0_b, PredictionResult)
+        y_d0_m0_b = p_d0_m0_b.values
 
         indirects[sim] = float(np.mean(y_d1_m1_b - y_d1_m0_b))
         directs[sim] = float(np.mean(y_d1_m0_b - y_d0_m0_b))

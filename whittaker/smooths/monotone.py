@@ -287,7 +287,7 @@ def project_convex(beta: NDArray, *, concave: bool = False) -> NDArray:
     """
     D1 = _diff_matrix(len(beta), 1)
     diffs = D1 @ beta
-    diffs_proj = -_pava(-diffs) if concave else _pava(diffs)
+    diffs_proj = np.negative(_pava(np.negative(diffs))) if concave else _pava(diffs)
     out = np.empty_like(beta)
     out[0] = beta[0]
     out[1:] = out[0] + np.cumsum(diffs_proj)

@@ -346,6 +346,8 @@ class MultiResponseGAM:
             raise ValueError(
                 "Residual correlation not estimated. Refit with correlation='unstructured'."
             )
+        assert self._residual_cov is not None
+        assert self._residual_corr is not None
         return ResidualCorrelation(
             covariance=self._residual_cov.copy(),
             correlation=self._residual_corr.copy(),
