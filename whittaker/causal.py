@@ -212,8 +212,8 @@ class CausalGAM:
     $$\hat\varepsilon_{Y,i} = Y_i - \hat m_Y(X_i), \qquad
     \hat\varepsilon_{D,i} = D_i - \hat m_D(X_i)$$
 
-    where `\hat m_Y` and `\hat m_D` are GAM estimates of `E[Y \mid X]` and `E[D \mid X]`, each fit on
-    folds excluding observation `i`. Second, the ATE is estimated by the residual-on-residual
+    where `\hat m_Y` and `\hat m_D` are GAM estimates of `E[Y \mid X]` and `E[D \mid X]`, each
+    fit on folds excluding observation `i`. Second, the ATE is estimated by the residual-on-residual
     regression (the partialling-out estimator):
 
     $$\hat\theta = \frac{\sum_i \hat\varepsilon_{D,i} \, \hat\varepsilon_{Y,i}}
@@ -226,8 +226,8 @@ class CausalGAM:
     {\left(\sum_i \hat\varepsilon_{D,i}^2\right)^{2} / n}}$$
 
     When `method="interactive"`, a further GAM is fit on the pseudo-outcome
-    `\hat\varepsilon_{Y,i} / \hat\varepsilon_{D,i}`, weighted by `\hat\varepsilon_{D,i}^2`, to recover
-    the CATE as a smooth function of the confounders.
+    `\hat\varepsilon_{Y,i} / \hat\varepsilon_{D,i}`, weighted by `\hat\varepsilon_{D,i}^2`,
+    to recover the CATE as a smooth function of the confounders.
 
     Examples
     --------
@@ -490,9 +490,10 @@ class CausalGAM:
     ) -> CATEResult:
         r"""Estimate conditional average treatment effects.
 
-        Requires `method="interactive"`. Evaluates the fitted CATE model (a GAM regressed on the
-        pseudo-outcome `\hat\varepsilon_Y / \hat\varepsilon_D`) either on user-supplied `new_data` or
-        on a grid over one confounder, holding the other confounders at their training-data means.
+        Requires `method="interactive"`. Evaluates the fitted CATE model (a GAM regressed on
+        the pseudo-outcome `\hat\varepsilon_Y / \hat\varepsilon_D`) either on user-supplied
+        `new_data` or on a grid over one confounder, holding the other confounders at their
+        training-data means.
         Returns CATE as a function of a chosen confounder variable, together with pointwise
         confidence bands derived from the CATE model's own standard errors.
 
@@ -680,18 +681,20 @@ def mediation_analysis(
 
     Notes
     -----
-    Natural direct and indirect effects are computed by contrasting predicted outcomes under three
-    counterfactual scenarios, holding treatment fixed at `d \in \{0, 1\}` and setting the mediator to
-    its predicted value under either treatment level:
+    Natural direct and indirect effects are computed by contrasting predicted outcomes under
+    three counterfactual scenarios, holding treatment fixed at `d \in \{0, 1\}` and setting the
+    mediator to its predicted value under either treatment level:
 
     $$\text{indirect} = \frac{1}{n}\sum_i \left[\hat Y_i(1, \hat M_i(1)) - \hat Y_i(1, \hat
     M_i(0))\right], \qquad
-    \text{direct} = \frac{1}{n}\sum_i \left[\hat Y_i(1, \hat M_i(0)) - \hat Y_i(0, \hat M_i(0))\right]$$
+    \text{direct} = \frac{1}{n}\sum_i \left[\hat Y_i(1, \hat M_i(0)) - \hat Y_i(0, \hat
+    M_i(0))\right]$$
 
-    where `\hat Y_i(d, m)` is the outcome GAM's prediction with treatment set to `d` and mediator set
-    to `m`, and `\hat M_i(d)` is the mediator GAM's prediction with treatment set to `d`. The total
-    effect is `indirect + direct`, and `proportion_mediated = indirect / total`. Standard errors for
-    all three quantities come from re-running the full procedure (refitting both GAMs) on
+    where `\hat Y_i(d, m)` is the outcome GAM's prediction with treatment set to `d` and mediator
+    set to `m`, and `\hat M_i(d)` is the mediator GAM's prediction with treatment set to `d`.
+    The total effect is `indirect + direct`, and `proportion_mediated = indirect / total`.
+    Standard errors for all three quantities come from re-running the full procedure
+    (refitting both GAMs) on
     `n_simulations` bootstrap resamples of the data.
 
     Returns
@@ -726,8 +729,8 @@ def mediation_analysis(
     arrays = prepare_data(data)
     rng = np.random.default_rng(seed)
     n = len(arrays[outcome])
-    y = arrays[outcome]
-    d = arrays[treatment]
+    arrays[outcome]
+    arrays[treatment]
 
     smooth_terms_conf = " + ".join(f"s({c})" for c in confounders)
 

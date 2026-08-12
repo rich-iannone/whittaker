@@ -155,7 +155,7 @@ class TestGammaLSDerivatives:
 
     def test_dl_dmu_positive(self):
         f = GammaLS()
-        alpha = 1.0 / 0.3**2
+        1.0 / 0.3**2
         params = {"mu": np.array([1.0]), "sigma": np.array([0.3])}
         y = np.array([2.0])
         dl = f.dl_dtheta("mu", y, params)

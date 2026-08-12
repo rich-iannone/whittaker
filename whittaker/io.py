@@ -7,12 +7,12 @@ process:
    later without re-fitting. This is the round-trip path within Python — everything the model needs
    for `predict()`, `summary()`, and further inference is captured, including the fitted smooth
    basis state, so loading is exact and cheap (no basis refitting or optimization is repeated).
-2. `to_mgcv_dict` / `from_mgcv_dict`: Convert to and from a plain dictionary whose keys and structure
-   mirror an `mgcv::gam` object in R. This is the cross-language path — export a Python-fitted model
-   for inspection or comparison in R, or import a model fitted with `mgcv::gam()` in R for use in
-   Python. Because `mgcv` and `whittaker` do not expose identical internals, this conversion is
-   necessarily lossy in places; see the `Notes` sections of `to_mgcv_dict` and `from_mgcv_dict` for
-   specifics.
+2. `to_mgcv_dict` / `from_mgcv_dict`: Convert to and from a plain dictionary whose keys and
+   structure mirror an `mgcv::gam` object in R. This is the cross-language path — export a
+   Python-fitted model for inspection or comparison in R, or import a model fitted with
+   `mgcv::gam()` in R for use in Python. Because `mgcv` and `whittaker` do not expose identical
+   internals, this conversion is necessarily lossy in places; see the `Notes` sections of
+   `to_mgcv_dict` and `from_mgcv_dict` for specifics.
 """
 
 from __future__ import annotations
@@ -230,7 +230,7 @@ def _basis_state(basis: SmoothBasis) -> dict[str, Any]:
     state: dict[str, Any] = {"class": type(basis).__name__}
     for attr in sorted(vars(basis)):
         val = getattr(basis, attr)
-        if isinstance(val, np.ndarray) or isinstance(val, (int, float, str, bool, type(None))):
+        if isinstance(val, (np.ndarray, int, float, str, bool, type(None))):
             state[attr] = val
         elif isinstance(val, dict):
             state[attr] = {str(k): v for k, v in val.items()}
@@ -312,19 +312,21 @@ def save_gam(model: Any, path: str | Path) -> None:
 
     Serializes everything needed to reconstruct a fitted `~whittaker.gam.GAM` for prediction and
     inference without recomputing basis fits or re-running P-IRLS. Use this to persist a model
-    between sessions, ship a fitted model to another machine, or cache an expensive fit. The archive
-    is a standard `numpy` `.npz` file (produced with `numpy.savez_compressed`) and can, in principle,
-    be inspected with `numpy.load` alone, though `load_gam` is the supported way to read it back.
+    between sessions, ship a fitted model to another machine, or cache an expensive fit. The
+    archive is a standard `numpy` `.npz` file (produced with `numpy.savez_compressed`) and can, in
+    principle, be inspected with `numpy.load` alone, though `load_gam` is the supported way to
+    read it back.
 
     Internally the archive stores two kinds of data under one file:
 
     - A single JSON-encoded metadata blob under the key `"__metadata__"`, containing the formula
       (response, intercept flag, and each term), the family (class name and any extra parameters
-      such as a Tweedie power or negative-binomial dispersion), fit statistics (smoothing parameters,
-      scale, GCV score, EDF, deviance, iteration count, convergence flag, AIC/BIC, etc.), model-matrix
-      metadata (column names, intercept/parametric counts, offset expressions), and, per smooth term,
-      its formula term, coefficient column range, null-space dimension, penalty indices, and basis
-      state (attribute values of the fitted `~whittaker.smooths.base.SmoothBasis`).
+      such as a Tweedie power or negative-binomial dispersion), fit statistics (smoothing
+      parameters, scale, GCV score, EDF, deviance, iteration count, convergence flag, AIC/BIC,
+      etc.), model-matrix metadata (column names, intercept/parametric counts, offset expressions),
+      and, per smooth term, its formula term, coefficient column range, null-space dimension,
+      penalty indices, and basis state (attribute values of the fitted
+      `~whittaker.smooths.base.SmoothBasis`).
     - Raw `numpy` arrays stored alongside the metadata: `coefficients`, `linear_predictor`,
       `fitted_values`, `residuals`, the training design matrix `X`, the `response` vector, and,
       when present, `weights`, `prior_weights`, `pseudo_data`, and `offset`. Each smooth's penalty
@@ -543,13 +545,13 @@ def load_gam(path: str | Path) -> Any:
         converged=fit_meta["converged"],
         hat_matrix_trace=fit_meta["hat_matrix_trace"],
         residuals=data["residuals"],
-        weights=data["weights"] if "weights" in data else None,
-        prior_weights=data["prior_weights"] if "prior_weights" in data else None,
+        weights=data.get("weights", None),
+        prior_weights=data.get("prior_weights", None),
         null_deviance=fit_meta.get("null_deviance"),
         aic=fit_meta.get("aic"),
         bic=fit_meta.get("bic"),
         method=fit_meta.get("method", "GCV"),
-        pseudo_data=data["pseudo_data"] if "pseudo_data" in data else None,
+        pseudo_data=data.get("pseudo_data", None),
     )
 
     mm_meta = metadata["model_matrix"]
@@ -599,7 +601,7 @@ def load_gam(path: str | Path) -> Any:
         column_names=mm_meta["column_names"],
         has_intercept=mm_meta["has_intercept"],
         n_parametric=mm_meta["n_parametric"],
-        offset=data["offset"] if "offset" in data else None,
+        offset=data.get("offset", None),
         offset_expressions=mm_meta.get("offset_expressions", []),
         response=data["response"],
     )
@@ -615,28 +617,28 @@ def load_gam(path: str | Path) -> Any:
 def to_mgcv_dict(model: Any) -> dict[str, Any]:
     """Export a fitted GAM as an mgcv-compatible dictionary.
 
-    Builds a plain `dict` whose keys and nested structure mirror the fields of a fitted `gam` object
-    from R's `mgcv` package, rather than `whittaker`'s own internal representation. Use this when you
-    need to hand a Python-fitted model to R code — typically by serializing the result with
-    `json.dumps` and reading it in R with `jsonlite::fromJSON`, or comparing a `whittaker` fit against
-    an equivalent `mgcv::gam()` fit term by term.
+    Builds a plain `dict` whose keys and nested structure mirror the fields of a fitted `gam`
+    object from R's `mgcv` package, rather than `whittaker`'s own internal representation. Use
+    this when you need to hand a Python-fitted model to R code — typically by serializing the
+    result with `json.dumps` and reading it in R with `jsonlite::fromJSON`, or comparing a
+    `whittaker` fit against an equivalent `mgcv::gam()` fit term by term.
 
     Top-level keys include `coefficients` (the fitted coefficient vector), `sp` (smoothing
     parameters), `scale` and `scale.estimated`, `gcv.ubre`, `edf` and `edf.total`, `deviance` and
-    `null.deviance`, `aic`, `n` (observation count) and `p` (coefficient count), `converged`, `iter`,
-    `method`, `formula` (as a string), `family` (a nested dict with the family name and any extra
-    parameter such as a Tweedie power or negative-binomial `theta`), `smooth` (a list, one entry per
-    smooth term), `nsdf`, and `intercept`.
+    `null.deviance`, `aic`, `n` (observation count) and `p` (coefficient count), `converged`,
+    `iter`, `method`, `formula` (as a string), `family` (a nested dict with the family name and
+    any extra parameter such as a Tweedie power or negative-binomial `theta`), `smooth` (a list,
+    one entry per smooth term), `nsdf`, and `intercept`.
 
-    Each entry in `smooth` describes one smooth term with mgcv-style field names: `term` (covariate
-    names), `bs` (the two-letter mgcv basis-type code), `label`, `first.para`/`last.para` (1-based
-    coefficient column range), `null.space.dim`, `df`, optionally `by`/`by.level` for `by`-variable
-    smooths, and `S` (a list of penalty matrix blocks, sliced from the model's full penalty matrices
-    down to just this term's coefficient columns). The `bs` code is produced by mapping the
-    `whittaker` basis class name to mgcv's naming convention, e.g. `TPRS` maps to `"tp"`,
-    `ShrinkageTPRS` to `"ts"`, `CRS` to `"cr"`, `PSpline` to `"ps"`, `CyclicPSpline` to `"cp"`,
-    `RandomEffectBasis` to `"re"`, and so on; a basis with no known mgcv counterpart falls back to its
-    `whittaker` class name unchanged.
+    Each entry in `smooth` describes one smooth term with mgcv-style field names: `term`
+    (covariate names), `bs` (the two-letter mgcv basis-type code), `label`, `first.para`/
+    `last.para` (1-based coefficient column range), `null.space.dim`, `df`, optionally
+    `by`/`by.level` for `by`-variable smooths, and `S` (a list of penalty matrix blocks, sliced
+    from the model's full penalty matrices down to just this term's coefficient columns). The
+    `bs` code is produced by mapping the `whittaker` basis class name to mgcv's naming convention,
+    e.g. `TPRS` maps to `"tp"`, `ShrinkageTPRS` to `"ts"`, `CRS` to `"cr"`, `PSpline` to `"ps"`,
+    `CyclicPSpline` to `"cp"`, `RandomEffectBasis` to `"re"`, and so on; a basis with no known
+    mgcv counterpart falls back to its `whittaker` class name unchanged.
 
     Parameters
     ----------
@@ -658,11 +660,11 @@ def to_mgcv_dict(model: Any) -> dict[str, Any]:
 
     Notes
     -----
-    This function is intended to interoperate with the R `mgcv` package's `gam` object structure so
-    that a `whittaker` fit can be inspected or compared from R. Full fidelity is not guaranteed: not
-    every `mgcv` field is populated (for example, no `Vp`/`Vc` covariance matrices are exported), and
-    not every `whittaker` family or basis has a direct `mgcv` equivalent, in which case the original
-    class name is used as-is rather than an invented mgcv code.
+    This function is intended to interoperate with the R `mgcv` package's `gam` object structure
+    so that a `whittaker` fit can be inspected or compared from R. Full fidelity is not
+    guaranteed: not every `mgcv` field is populated (for example, no `Vp`/`Vc` covariance matrices
+    are exported), and not every `whittaker` family or basis has a direct `mgcv` equivalent, in
+    which case the original class name is used as-is rather than an invented mgcv code.
 
     Examples
     --------
@@ -795,23 +797,24 @@ def from_mgcv_dict(
     There are two modes, selected by whether `data` is supplied:
 
     - Without `data` (the default): only the formula, family, fitted coefficients, and smoothing
-      parameters are restored onto the returned `GAM`. No model matrix or smooth basis is built, so
-      the result is a lightweight container for inspecting the imported coefficients — it is *not*
-      usable for `predict()`, since the smooth bases (knots, constraints, etc.) that the coefficients
-      were fit against are not reconstructed.
+      parameters are restored onto the returned `GAM`. No model matrix or smooth basis is built,
+      so the result is a lightweight container for inspecting the imported coefficients — it is
+      *not* usable for `predict()`, since the smooth bases (knots, constraints, etc.) that the
+      coefficients were fit against are not reconstructed.
     - With `data` (the original training data, as `{name: 1-D array}`): `~whittaker.model_matrix
       .build_model_matrix` is called on `data` to refit each smooth's basis and assemble the design
       matrix, the linear predictor and fitted values are recomputed from the imported coefficients,
-      and a full `FitResult` (deviance, residuals, etc.) is attached. In this mode the returned model
-      is fully usable for `predict()` on new data, since its smooth bases were rebuilt from the same
-      training data mgcv used.
+      and a full `FitResult` (deviance, residuals, etc.) is attached. In this mode the returned
+      model is fully usable for `predict()` on new data, since its smooth bases were rebuilt from
+      the same training data mgcv used.
 
     The R family name in `d["family"]["family"]` is translated to the corresponding `whittaker`
     family class via an internal mapping (`_mgcv_family_map`), e.g. `"gaussian"` -> `Gaussian`,
     `"poisson"` -> `Poisson`, `"binomial"` -> `Binomial`, `"Gamma"` -> `Gamma`,
-    `"inverse.gaussian"` -> `InverseGaussian`, `"Tweedie"` -> `Tweedie`, `"nb"` -> `NegativeBinomial`,
-    `"cox.ph"` -> `CoxPH`, and `"betar"` -> `Beta`. A family name not in this table is passed through
-    unchanged and will raise `ValueError` if it does not match a known `whittaker` family class.
+    `"inverse.gaussian"` -> `InverseGaussian`, `"Tweedie"` -> `Tweedie`, `"nb"` ->
+    `NegativeBinomial`, `"cox.ph"` -> `CoxPH`, and `"betar"` -> `Beta`. A family name not in this
+    table is passed through unchanged and will raise `ValueError` if it does not match a known
+    `whittaker` family class.
 
     Parameters
     ----------
@@ -911,7 +914,6 @@ def from_mgcv_dict(
     if data is not None:
         mm = build_model_matrix(formula, data)
 
-        n = mm.n_obs
         eta = mm.X @ coefficients
         if mm.offset is not None:
             eta = eta + mm.offset

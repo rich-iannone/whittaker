@@ -62,9 +62,9 @@ class FunctionalTerm:
     n_basis:
         Number of basis functions used to represent `beta(t)`. Defaults to 15. Must be `>= 3`.
     penalty_order:
-        Order of the difference penalty (for B-spline) or derivative penalty (for Fourier), controlling
-        how strongly higher-order wiggliness in `beta(t)` is penalized. Defaults to 2 (penalizes
-        curvature).
+        Order of the difference penalty (for B-spline) or derivative penalty (for Fourier),
+        controlling how strongly higher-order wiggliness in `beta(t)` is penalized. Defaults to 2
+        (penalizes curvature).
     """
 
     name: str
@@ -232,8 +232,8 @@ class FunctionalGAM:
     functional effect for observation `i` becomes a finite inner product with a numerically
     integrated design column:
 
-    $$\int X_i(t)\,\beta(t)\,dt \;\approx\; \sum_{k=1}^{K} c_k \underbrace{\sum_t X_i(t)\,\phi_k(t)\,
-    w_t}_{J_{i,k}}$$
+    $$\int X_i(t)\,\beta(t)\,dt \;\approx\;
+    \sum_{k=1}^{K} c_k \underbrace{\sum_t X_i(t)\,\phi_k(t)\,w_t}_{J_{i,k}}$$
 
     where `w_t` are trapezoidal quadrature weights. The coefficients `c_k` are penalized by a
     difference penalty (B-spline) or a frequency-based penalty (Fourier) of order `penalty_order`,
@@ -435,10 +435,7 @@ class FunctionalGAM:
             col_names.extend(scalar_names)
 
             for pen in scalar_mm.penalties:
-                if scalar_mm.has_intercept:
-                    pen_block = pen[1:, 1:]
-                else:
-                    pen_block = pen
+                pen_block = pen[1:, 1:] if scalar_mm.has_intercept else pen
                 penalties.append((scalar_offset, pen_block.shape[0], pen_block))
 
             col_offset += n_scalar_cols
@@ -527,7 +524,7 @@ class FunctionalGAM:
 
         if se:
             scale = self._fit_result.scale
-            p = X_new.shape[1]
+            X_new.shape[1]
             XtX = self._fit_result_XtX(X_new)
             cov_beta = scale * np.linalg.inv(XtX)
             se_eta = np.sqrt(np.sum(X_new @ cov_beta * X_new, axis=1))
@@ -541,7 +538,7 @@ class FunctionalGAM:
         sp = self._fit_result.smoothing_params
 
         X_train = self._build_full_training_matrix()
-        n = X_train.shape[0]
+        X_train.shape[0]
         p = X_train.shape[1]
 
         mu_train = self._family.link_inverse(X_train @ beta)
@@ -556,7 +553,7 @@ class FunctionalGAM:
 
         mm_penalties = self._get_full_penalties(p)
         S_total = np.zeros((p, p))
-        for lam, pen in zip(sp, mm_penalties):
+        for lam, pen in zip(sp, mm_penalties, strict=False):
             S_total += lam * pen
 
         return XtWX + S_total
@@ -599,10 +596,7 @@ class FunctionalGAM:
         if self._scalar_model_matrix is not None:
             scalar_offset = max(end for _, end in self._func_col_ranges.values())
             for pen in self._scalar_model_matrix.penalties:
-                if self._scalar_model_matrix.has_intercept:
-                    pen_block = pen[1:, 1:]
-                else:
-                    pen_block = pen
+                pen_block = pen[1:, 1:] if self._scalar_model_matrix.has_intercept else pen
                 S_full = np.zeros((p, p))
                 k = pen_block.shape[0]
                 S_full[scalar_offset : scalar_offset + k, scalar_offset : scalar_offset + k] = (
@@ -662,7 +656,6 @@ class FunctionalGAM:
         z = norm.ppf(1 - (1 - level) / 2)
 
         scale = self._fit_result.scale
-        p = self._total_cols
         X_train = self._build_full_training_matrix()
         A = self._fit_result_XtX(X_train)
         try:

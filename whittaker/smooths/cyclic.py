@@ -22,12 +22,12 @@ def _build_cyclic_Q(h: NDArray) -> NDArray:
     """
     m = len(h)
     Q = np.zeros((m, m))
-    for l in range(m):
-        hp = h[(l - 1) % m]
-        hc = h[l]
-        Q[(l - 1) % m, l] += 1.0 / hp
-        Q[l, l] += -(1.0 / hp + 1.0 / hc)
-        Q[(l + 1) % m, l] += 1.0 / hc
+    for idx in range(m):
+        hp = h[(idx - 1) % m]
+        hc = h[idx]
+        Q[(idx - 1) % m, idx] += 1.0 / hp
+        Q[idx, idx] += -(1.0 / hp + 1.0 / hc)
+        Q[(idx + 1) % m, idx] += 1.0 / hc
     return Q
 
 
@@ -35,12 +35,12 @@ def _build_cyclic_R(h: NDArray) -> NDArray:
     """Build the (m x m) cyclic tridiagonal matrix R_c."""
     m = len(h)
     R = np.zeros((m, m))
-    for l in range(m):
-        hp = h[(l - 1) % m]
-        hc = h[l]
-        R[l, l] = (hp + hc) / 3.0
-        R[l, (l + 1) % m] += hc / 6.0
-        R[(l + 1) % m, l] += hc / 6.0
+    for idx in range(m):
+        hp = h[(idx - 1) % m]
+        hc = h[idx]
+        R[idx, idx] = (hp + hc) / 3.0
+        R[idx, (idx + 1) % m] += hc / 6.0
+        R[(idx + 1) % m, idx] += hc / 6.0
     return R
 
 
@@ -157,11 +157,12 @@ class CyclicCRS(SmoothBasis):
     evenly-spaced grid when quantile ties would produce duplicates), exactly as in `CRS`, but the
     second-derivative relationship between the coefficient vector and the knot second derivatives
     is built on a *circular* tridiagonal system: `_build_cyclic_Q()` and `_build_cyclic_R()`
-    construct the periodic analogues of `CRS`'s `Q` and `R` matrices, wrapping the sub/super-diagonal
-    entries around modulo `m = k - 1` (the number of free coefficients once `f(x_min) = f(x_max)` is
-    imposed). Concretely, the periodic constraint identifies knot `t_{k-1}` with `t_0`, so
-    `\boldsymbol{\beta}` has only `m = k - 1` free entries, and second derivatives satisfy
-    `\mathbf{R}_c \mathbf{d} = \mathbf{Q}_c^\top \boldsymbol{\beta}` with `Q_c`, `R_c` both
+    construct the periodic analogues of `CRS`'s `Q` and `R` matrices, wrapping the
+    sub/super-diagonal entries around modulo `m = k - 1` (the number of free coefficients once
+    `f(x_min) = f(x_max)` is imposed). Concretely, the periodic constraint identifies knot
+    `t_{k-1}` with `t_0`, so `\boldsymbol{\beta}` has only `m = k - 1` free entries, and second
+    derivatives satisfy `\mathbf{R}_c \mathbf{d} = \mathbf{Q}_c^\top \boldsymbol{\beta}` with
+    `Q_c`, `R_c` both
     `m \times m` and *circulant-tridiagonal* (each row's neighbors wrap around index `m`). Unlike
     `CRS`, there are no natural boundary conditions — periodicity itself replaces them — so the
     penalty null space drops from dimension 2 (constant and linear) to dimension 1 (constant only):
@@ -174,9 +175,10 @@ class CyclicCRS(SmoothBasis):
     \mathbf{S} = \mathbf{Q}_c \mathbf{R}_c^{-1} \mathbf{Q}_c^\top,
     $$
 
-    an `m \times m` (`m = k - 1`) positive semi-definite matrix of rank `m - 1`, whose one-dimensional
-    null space is the constant sequence. At evaluation time, `basis_matrix()` maps any `x` into the
-    periodic domain `[x_min, x_max)` via `knots[0] + (x - knots[0]) % period` before evaluating the
+    an `m \times m` (`m = k - 1`) positive semi-definite matrix of rank `m - 1`, whose
+    one-dimensional null space is the constant sequence. At evaluation time, `basis_matrix()`
+    maps any `x` into the periodic domain `[x_min, x_max)` via
+    `knots[0] + (x - knots[0]) % period` before evaluating the
     same piecewise-cubic construction as `CRS`, so extrapolation is not linear (as in `CRS`) but
     exactly periodic.
 

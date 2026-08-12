@@ -206,9 +206,8 @@ class InverseGaussian(Family):
         """
         mu_c = np.maximum(mu, _EPS)
         y_c = np.maximum(y, _EPS)
-        ll_i = (
-            -0.5 * np.log(2.0 * np.pi * scale * y_c**3)
-            - (y_c - mu_c) ** 2 / (2.0 * scale * mu_c**2 * y_c)
+        ll_i = -0.5 * np.log(2.0 * np.pi * scale * y_c**3) - (y_c - mu_c) ** 2 / (
+            2.0 * scale * mu_c**2 * y_c
         )
         if weights is not None:
             ll_i = weights * ll_i
@@ -249,8 +248,10 @@ class InverseGaussian(Family):
         lam = mu_c / scale
         n = len(mu_c)
         v = rng.standard_normal(n) ** 2
-        x = mu_c + (mu_c**2 * v) / (2.0 * lam) - mu_c / (2.0 * lam) * np.sqrt(
-            4.0 * mu_c * lam * v + mu_c**2 * v**2
+        x = (
+            mu_c
+            + (mu_c**2 * v) / (2.0 * lam)
+            - mu_c / (2.0 * lam) * np.sqrt(4.0 * mu_c * lam * v + mu_c**2 * v**2)
         )
         u = rng.uniform(size=n)
         result = np.where(u <= mu_c / (mu_c + x), x, mu_c**2 / x)

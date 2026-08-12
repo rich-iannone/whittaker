@@ -71,12 +71,12 @@ class StreamingGAM:
     r"""Streaming / online GAM.
 
     Fits a GAM incrementally by accumulating weighted sufficient statistics (`X'WX` and `X'Wz`)
-    across data batches, rather than storing and re-fitting on the full dataset each time. This makes
-    it suitable for data arriving continuously or in a stream too large to hold in memory at once:
-    the memory footprint depends only on the number of basis coefficients `p` (via a `p x p` matrix),
-    not on the number of observations seen. The model structure (formula, basis dimensions,
-    penalties) is fixed at initialisation from a small pilot batch, and subsequent `partial_fit()`
-    calls add data without storing the raw observations.
+    across data batches, rather than storing and re-fitting on the full dataset each time. This
+    makes it suitable for data arriving continuously or in a stream too large to hold in memory at
+    once: the memory footprint depends only on the number of basis coefficients `p` (via a
+    `p x p` matrix), not on the number of observations seen. The model structure (formula, basis
+    dimensions, penalties) is fixed at initialisation from a small pilot batch, and subsequent
+    `partial_fit()` calls add data without storing the raw observations.
 
     Two update modes are supported: **accumulate mode** (`decay=1.0`, the default), where every
     batch contributes equally regardless of when it arrived, and **sliding-window mode**
@@ -100,7 +100,8 @@ class StreamingGAM:
         factor of `decay` every time a new batch arrives.
     smoothing_params:
         Fixed smoothing parameters. If `None`, estimated from the pilot batch (via a one-off
-        ordinary `GAM` fit with REML) and optionally re-estimated later via `solve(reestimate_smoothing=True)`.
+        ordinary `GAM` fit with REML) and optionally re-estimated later via
+        `solve(reestimate_smoothing=True)`.
 
     Notes
     -----
@@ -116,8 +117,8 @@ class StreamingGAM:
     $$\left(\sum_{\text{batches}} X'WX + S_\lambda\right) \beta = \sum_{\text{batches}} X'Wz$$
 
     via a Cholesky factorization, where `S_\lambda = \sum_j \lambda_j S_j` is the weighted sum of
-    penalty matrices. Because only the accumulated `p x p` matrix `X'WX` and length-`p` vector `X'Wz`
-    are retained, this scales to arbitrarily many observations at fixed memory cost in `p`.
+    penalty matrices. Because only the accumulated `p x p` matrix `X'WX` and length-`p` vector
+    `X'Wz` are retained, this scales to arbitrarily many observations at fixed memory cost in `p`.
 
     Examples
     --------
@@ -407,9 +408,10 @@ class StreamingGAM:
         r"""Solve for coefficients from accumulated sufficient statistics.
 
         Forms the penalized normal equations `(X'WX + S_lambda) beta = X'Wz` from the currently
-        accumulated statistics and the current smoothing parameters, and solves them via a Cholesky
-        factorization (with a small ridge added for numerical stability). Also updates effective
-        degrees of freedom, the scale estimate, and appends a `StreamingSnapshot` to the fit history.
+        accumulated statistics and the current smoothing parameters, and solves them via a
+        Cholesky factorization (with a small ridge added for numerical stability). Also updates
+        effective degrees of freedom, the scale estimate, and appends a `StreamingSnapshot` to the
+        fit history.
 
         Parameters
         ----------
@@ -431,7 +433,7 @@ class StreamingGAM:
             self._smoothing_params = self._estimate_smoothing_gcv()
 
         S_total = np.zeros((self._p, self._p))
-        for lam, pen in zip(self._smoothing_params, self._model_matrix.penalties):
+        for lam, pen in zip(self._smoothing_params, self._model_matrix.penalties, strict=False):
             S_total += lam * pen
 
         A = self._XtWX + S_total
@@ -483,12 +485,12 @@ class StreamingGAM:
 
         for j in range(n_sp):
 
-            def gcv_for_j(log_lam: float) -> float:
+            def gcv_for_j(log_lam: float, j: int = j) -> float:
                 sp_trial = list(best_sp)
                 sp_trial[j] = np.exp(log_lam)
 
                 S_total = np.zeros((self._p, self._p))
-                for lam, pen in zip(sp_trial, self._model_matrix.penalties):
+                for lam, pen in zip(sp_trial, self._model_matrix.penalties, strict=False):
                     S_total += lam * pen
 
                 A = self._XtWX + S_total
@@ -550,7 +552,7 @@ class StreamingGAM:
         se_values = None
         if se:
             S_total = np.zeros((self._p, self._p))
-            for lam, pen in zip(self._smoothing_params, self._model_matrix.penalties):
+            for lam, pen in zip(self._smoothing_params, self._model_matrix.penalties, strict=False):
                 S_total += lam * pen
             A = self._XtWX + S_total
             A = (A + A.T) * 0.5
@@ -619,7 +621,7 @@ class StreamingGAM:
             "",
             "Smooth terms:",
         ]
-        for info, edf_val in zip(self._model_matrix.smooths, self._edf):
+        for info, edf_val in zip(self._model_matrix.smooths, self._edf, strict=False):
             lines.append(f"  {info.term!r}: edf={edf_val:.1f}")
 
         lines.append("")

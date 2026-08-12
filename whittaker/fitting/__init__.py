@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from whittaker.fitting.bam import DiscretizedModelMatrix, bam_fit
+from whittaker.fitting.gamlss_fit import GAMLSSFitResult, GAMLSSParamResult, gamlss_fit
 from whittaker.fitting.inference import (
     AnovaModelRow,
     AnovaResult,
@@ -13,8 +15,6 @@ from whittaker.fitting.inference import (
     parametric_tests,
     smooth_tests,
 )
-from whittaker.fitting.bam import DiscretizedModelMatrix, bam_fit
-from whittaker.fitting.gamlss_fit import GAMLSSFitResult, GAMLSSParamResult, gamlss_fit
 from whittaker.fitting.pirls import FitResult, pirls_fit
 
 __all__ = [

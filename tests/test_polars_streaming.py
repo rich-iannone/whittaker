@@ -7,9 +7,9 @@ import pytest
 
 pl = pytest.importorskip("polars")
 
-from whittaker.families.cox_ph import CoxPH
-from whittaker.families.poisson import Poisson
-from whittaker.polars_streaming import PolarsGAM, _count_lazy, _to_lazy
+from whittaker.families.cox_ph import CoxPH  # noqa: E402
+from whittaker.families.poisson import Poisson  # noqa: E402
+from whittaker.polars_streaming import PolarsGAM, _count_lazy, _to_lazy  # noqa: E402
 
 
 @pytest.fixture

@@ -64,7 +64,7 @@ class TestSimultaneousCI:
         truth = np.sin(data["x"])
         estimate = result["estimate"]
         deviation = truth - estimate
-        within = np.all(
+        np.all(
             (deviation >= result["lower"] - estimate) & (deviation <= result["upper"] - estimate)
         )
         # With 95% bands, the true function should usually be within

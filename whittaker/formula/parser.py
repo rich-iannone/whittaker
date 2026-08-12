@@ -43,38 +43,40 @@ def parse(formula: str) -> Formula:
     """Parse *formula* into a `~whittaker.formula.terms.Formula`.
 
     Turns an `mgcv`-style R formula string such as `"y ~ s(x1) + s(x2, bs='cr') + x3"` into a
-    structured `Formula` object: a response column name, an ordered list of `Term` objects (one per
-    right-hand-side entry), and a flag indicating whether an intercept is included. `whittaker.gam.GAM`
-    calls `parse()` internally when constructed from a formula string, and the resulting `Formula` is
-    later consumed by `~whittaker.model_matrix.build_model_matrix` to build the numeric design matrix
-    and penalty structure. This lets users specify a GAM the same way they would in R's `mgcv`, but
-    written in Python. Rather than a hand-written grammar or regular expression, `parse()` uses
-    Python's standard-library `ast` module to parse the right-hand side as a Python expression and
-    walks the resulting syntax tree; consequently, only formula constructs that are expressible as
-    plain Python expressions are supported — bare names, function calls, `+`/`-`/`*` binary operators,
-    and the integer literals `0`, `1`, and `-1` for intercept control. Anything else raises a
-    `ValueError` naming the unsupported construct.
+    structured `Formula` object: a response column name, an ordered list of `Term` objects (one
+    per right-hand-side entry), and a flag indicating whether an intercept is included.
+    `whittaker.gam.GAM` calls `parse()` internally when constructed from a formula string, and
+    the resulting `Formula` is later consumed by `~whittaker.model_matrix.build_model_matrix` to
+    build the numeric design matrix and penalty structure. This lets users specify a GAM the same
+    way they would in R's `mgcv`, but written in Python. Rather than a hand-written grammar or
+    regular expression, `parse()` uses Python's standard-library `ast` module to parse the
+    right-hand side as a Python expression and walks the resulting syntax tree; consequently,
+    only formula constructs that are expressible as plain Python expressions are supported —
+    bare names, function calls, `+`/`-`/`*` binary operators, and the integer literals `0`, `1`,
+    and `-1` for intercept control. Anything else raises a `ValueError` naming the unsupported
+    construct.
 
     The following right-hand-side syntax is recognised:
 
     - A bare column name, e.g. `x3`, becomes a `~whittaker.formula.terms.LinearTerm`.
     - A call to `s()`, `te()`, `ti()`, or `t2()` becomes a
-      `~whittaker.formula.terms.SmoothTerm`. Positional arguments name the smooth's variable(s) (more
-      than one for `te()`/`ti()`/`t2()` tensor products). Recognised keyword arguments are `bs=` (the
-      basis type, a string such as `"cr"`, `"mpi"`, or `"cx"`), `k=` (the basis dimension, an `int`, or
-      a `list[int]` giving one dimension per marginal for tensor terms), and `by=` (a bare column name
-      for a by-variable interaction). Any other keyword, e.g. `xt=`, `m=`, or `degree=`, is collected
-      into the term's `extra` dict and passed through unevaluated (as a literal or bare-name string).
+      `~whittaker.formula.terms.SmoothTerm`. Positional arguments name the smooth's variable(s)
+      (more than one for `te()`/`ti()`/`t2()` tensor products). Recognised keyword arguments are
+      `bs=` (the basis type, a string such as `"cr"`, `"mpi"`, or `"cx"`), `k=` (the basis
+      dimension, an `int`, or a `list[int]` giving one dimension per marginal for tensor terms),
+      and `by=` (a bare column name for a by-variable interaction). Any other keyword, e.g.
+      `xt=`, `m=`, or `degree=`, is collected into the term's `extra` dict and passed through
+      unevaluated (as a literal or bare-name string).
     - A call to `offset()`, e.g. `offset(log(n))`, becomes an
       `~whittaker.formula.terms.OffsetTerm` whose `expression` is the unparsed argument text.
     - `x1 * x2` becomes a full interaction (`~whittaker.formula.terms.InteractionTerm` with
-      `full=True`): both main effects plus the interaction column. Both operands of `*` must be bare
-      column names. Note that `x1:x2`-style colon syntax for a *reduced* (interaction-only) term is
-      **not** recognised by this parser — `:` is not a valid Python binary operator between
-      identifiers, so `ast.parse` rejects it, and a formula string using `x1:x2` raises a `ValueError`
-      rather than producing a reduced interaction term.
-    - `0`, `-1`, or `+0` on their own suppresses the intercept (`Formula.intercept` becomes `False`).
-      `+1` is accepted as a no-op, since the intercept is already included by default.
+      `full=True`): both main effects plus the interaction column. Both operands of `*` must be
+      bare column names. Note that `x1:x2`-style colon syntax for a *reduced* (interaction-only)
+      term is **not** recognised by this parser — `:` is not a valid Python binary operator
+      between identifiers, so `ast.parse` rejects it, and a formula string using `x1:x2` raises a
+      `ValueError` rather than producing a reduced interaction term.
+    - `0`, `-1`, or `+0` on their own suppresses the intercept (`Formula.intercept` becomes
+      `False`). `+1` is accepted as a no-op, since the intercept is already included by default.
 
     Parameters
     ----------
@@ -97,8 +99,8 @@ def parse(formula: str) -> Formula:
     other columns", no `poly()` or other in-formula transformations, and no arbitrary nesting beyond
     what is listed above. The supported grammar is exactly what can be expressed as a restricted
     `ast.parse(rhs, mode="eval")` walk over names, calls, and `+`/`-`/`*` binary operators; any
-    construct outside that grammar raises a `ValueError` with a message describing what was found and
-    what is supported.
+    construct outside that grammar raises a `ValueError` with a message describing what was found
+    and what is supported.
 
     Examples
     --------

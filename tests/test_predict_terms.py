@@ -53,7 +53,7 @@ class TestPredictTerms:
         gam = GAM("y ~ s(x1) + s(x2)", family=Gaussian()).fit(two_smooth_data)
         result = gam.predict(two_smooth_data, type="terms")
         n = len(two_smooth_data["y"])
-        for label, vals in result.terms.items():
+        for _label, vals in result.terms.items():
             assert vals.shape == (n,)
 
     def test_terms_sum_to_linear_predictor(self, two_smooth_data):
@@ -74,7 +74,7 @@ class TestPredictTerms:
         result = gam.predict(two_smooth_data, type="terms", se=True)
         assert result.se is not None
         assert len(result.se) == 2
-        for label, se_vals in result.se.items():
+        for _label, se_vals in result.se.items():
             assert se_vals.shape == (len(two_smooth_data["y"]),)
             assert np.all(se_vals >= 0)
 

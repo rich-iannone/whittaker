@@ -264,7 +264,8 @@ class TestComplexFormulas:
 
     def test_full_complex_formula(self) -> None:
         f = parse(
-            "cnt ~ s(temp, bs='cr', k=12) + s(hum) + te(hr, weekday) + workingday + offset(log_days)"
+            "cnt ~ s(temp, bs='cr', k=12) + s(hum) + te(hr, weekday) + workingday "
+            "+ offset(log_days)"
         )
         assert f.response == "cnt"
         types = [type(t) for t in f.terms]

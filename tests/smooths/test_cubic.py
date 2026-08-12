@@ -81,14 +81,14 @@ class TestBuildR:
         h = np.array([1.0, 2.0, 3.0, 4.0])
         R = _build_R(h)
         # R[l,l] = (h[l] + h[l+1]) / 3
-        expected_diag = [(h[l] + h[l + 1]) / 3.0 for l in range(len(h) - 1)]
+        expected_diag = [(h[i] + h[i + 1]) / 3.0 for i in range(len(h) - 1)]
         assert_allclose(np.diag(R), expected_diag)
 
     def test_offdiagonal_entries(self) -> None:
         h = np.array([1.0, 2.0, 3.0, 4.0])
         R = _build_R(h)
         # R[l, l+1] = h[l+1] / 6
-        expected_off = [h[l + 1] / 6.0 for l in range(len(h) - 2)]
+        expected_off = [h[i + 1] / 6.0 for i in range(len(h) - 2)]
         assert_allclose(np.diag(R, 1), expected_off)
 
 

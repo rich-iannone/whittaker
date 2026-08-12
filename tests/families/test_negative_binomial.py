@@ -58,9 +58,7 @@ class TestNegativeBinomialFamily:
         y = np.array([0.0, 1.0, 3.0, 5.0, 10.0])
         mu = np.array([0.5, 1.5, 2.0, 4.0, 8.0])
         w = np.array([2.0, 2.0, 2.0, 2.0, 2.0])
-        assert_allclose(
-            self.fam.deviance(y, mu, weights=w), 2.0 * self.fam.deviance(y, mu)
-        )
+        assert_allclose(self.fam.deviance(y, mu, weights=w), 2.0 * self.fam.deviance(y, mu))
 
     def test_scale_known_true(self) -> None:
         assert self.fam.scale_known is True

@@ -144,7 +144,7 @@ class OrderedCategorical(Family):
 
     def _init_cutpoints(self, y: NDArray) -> NDArray:
         K = self._K
-        n = len(y)
+        len(y)
         alphas = np.zeros(K - 1)
         for k in range(K - 1):
             p_k = np.clip(np.mean(y <= k + 1), 0.01, 0.99)

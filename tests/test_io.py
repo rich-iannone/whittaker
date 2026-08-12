@@ -505,9 +505,7 @@ class TestSaveLoadGAM:
         loaded = load_gam(path)
 
         assert model._fit_result.pseudo_data is not None
-        np.testing.assert_allclose(
-            loaded._fit_result.pseudo_data, model._fit_result.pseudo_data
-        )
+        np.testing.assert_allclose(loaded._fit_result.pseudo_data, model._fit_result.pseudo_data)
 
     def test_by_variable_roundtrip(self, tmp_path):
         rng = np.random.default_rng(23)

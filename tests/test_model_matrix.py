@@ -135,7 +135,7 @@ class TestConstraints:
         rng = np.random.default_rng(0)
         B = rng.standard_normal((50, 10))
         C = B.mean(axis=0, keepdims=True)
-        B_c = _apply_constraint(B, C)
+        _apply_constraint(B, C)
         Q, _ = np.linalg.qr(C.T, mode="complete")
         Z = Q[:, 1:]
         assert_allclose(C @ Z, 0.0, atol=1e-12)
@@ -271,7 +271,7 @@ class TestBuildModelMatrixMultipleSmooths:
         data = _multi_data()
         result = build_model_matrix(formula, data)
 
-        for i, (pen, info) in enumerate(zip(result.penalties, result.smooths)):
+        for _i, (pen, info) in enumerate(zip(result.penalties, result.smooths, strict=False)):
             assert pen.shape == (result.n_coefs, result.n_coefs)
             block = pen[info.col_start : info.col_end, info.col_start : info.col_end]
             assert np.any(block != 0.0)
@@ -562,9 +562,7 @@ class TestResolveTensorBasis:
             _resolve_tensor_basis(term)
 
     def test_k_list_length_mismatch_raises(self) -> None:
-        term = SmoothTerm(
-            variables=("x1", "x2", "x3"), smooth_type="te", extra={"k": [5, 6]}
-        )
+        term = SmoothTerm(variables=("x1", "x2", "x3"), smooth_type="te", extra={"k": [5, 6]})
         with pytest.raises(ValueError, match="Length of k must match"):
             _resolve_tensor_basis(term)
 
@@ -575,9 +573,7 @@ class TestResolveTensorBasis:
         assert len(basis.marginals) == 2
 
     def test_bs_list_valid(self) -> None:
-        term = SmoothTerm(
-            variables=("x1", "x2"), smooth_type="te", extra={"bs": ["cr", "ps"]}
-        )
+        term = SmoothTerm(variables=("x1", "x2"), smooth_type="te", extra={"bs": ["cr", "ps"]})
         basis = _resolve_tensor_basis(term)
         assert isinstance(basis, TensorProductBasis)
         assert isinstance(basis.marginals[0], CRS)
@@ -610,9 +606,7 @@ class TestResolveTensorInteractionBasis:
             _resolve_tensor_interaction_basis(term)
 
     def test_k_list_length_mismatch_raises(self) -> None:
-        term = SmoothTerm(
-            variables=("x1", "x2", "x3"), smooth_type="ti", extra={"k": [5, 6]}
-        )
+        term = SmoothTerm(variables=("x1", "x2", "x3"), smooth_type="ti", extra={"k": [5, 6]})
         with pytest.raises(ValueError, match="Length of k must match"):
             _resolve_tensor_interaction_basis(term)
 
@@ -622,9 +616,7 @@ class TestResolveTensorInteractionBasis:
         assert isinstance(basis, TensorInteractionBasis)
 
     def test_bs_list_valid(self) -> None:
-        term = SmoothTerm(
-            variables=("x1", "x2"), smooth_type="ti", extra={"bs": ["cr", "ps"]}
-        )
+        term = SmoothTerm(variables=("x1", "x2"), smooth_type="ti", extra={"bs": ["cr", "ps"]})
         basis = _resolve_tensor_interaction_basis(term)
         assert isinstance(basis, TensorInteractionBasis)
         assert isinstance(basis.marginals[0], CRS)
@@ -657,9 +649,7 @@ class TestResolveT2Basis:
             _resolve_t2_basis(term)
 
     def test_k_list_length_mismatch_raises(self) -> None:
-        term = SmoothTerm(
-            variables=("x1", "x2", "x3"), smooth_type="t2", extra={"k": [5, 6]}
-        )
+        term = SmoothTerm(variables=("x1", "x2", "x3"), smooth_type="t2", extra={"k": [5, 6]})
         with pytest.raises(ValueError, match="Length of k must match"):
             _resolve_t2_basis(term)
 
@@ -669,9 +659,7 @@ class TestResolveT2Basis:
         assert isinstance(basis, TensorProductBasisT2)
 
     def test_bs_list_valid(self) -> None:
-        term = SmoothTerm(
-            variables=("x1", "x2"), smooth_type="t2", extra={"bs": ["cr", "ps"]}
-        )
+        term = SmoothTerm(variables=("x1", "x2"), smooth_type="t2", extra={"bs": ["cr", "ps"]})
         basis = _resolve_t2_basis(term)
         assert isinstance(basis, TensorProductBasisT2)
         assert isinstance(basis.marginals[0], CRS)

@@ -208,8 +208,8 @@ class CRS(SmoothBasis):
     (classical smoothing-spline theory). Equivalent to mgcv's `bs="cr"` basis. Unlike `TPRS`, which
     avoids explicit knot placement, CRS parameterizes the spline directly by its values at `k` knots
     placed at evenly-spaced quantiles of the training data, so it is cheaper to fit for a single
-    covariate and gives a basis whose coefficients have a direct interpretation as function values at
-    the knots. Choose CRS over `TPRS` when you have exactly one covariate, want knot-based
+    covariate and gives a basis whose coefficients have a direct interpretation as function values
+    at the knots. Choose CRS over `TPRS` when you have exactly one covariate, want knot-based
     interpretability, or need a classical natural-cubic-spline basis for compatibility with other
     software; choose `TPRS` for multivariate smooths or when knot placement is undesirable. Only
     univariate covariates are supported.

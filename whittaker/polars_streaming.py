@@ -69,7 +69,7 @@ def _to_lazy(source) -> Any:
 
 def _lazyframe_to_dict(lf, chunk_size: int) -> InternalData:
     """Collect a LazyFrame into dict[str, NDArray] in chunks."""
-    pl = _import_polars()
+    _import_polars()
 
     df = lf.collect(streaming=True)
     columns: dict[str, list[NDArray]] = {}

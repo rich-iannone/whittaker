@@ -150,7 +150,10 @@ class TPRS(SmoothBasis):
     The full thin plate spline basis uses the radial kernel
 
     $$
-    \eta_m(r) = \begin{cases} r^{2m - d} & 2m - d \text{ odd} \\ r^{2m-d} \log(r) & 2m - d \text{ even} \end{cases},
+    \eta_m(r) = \begin{cases}
+    r^{2m - d} & 2m - d \text{ odd} \\
+    r^{2m-d} \log(r) & 2m - d \text{ even}
+    \end{cases},
     $$
 
     evaluated at pairwise distances `r = ||x_i - x_j||` between data points, plus a polynomial

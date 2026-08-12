@@ -927,7 +927,6 @@ class GAM:
             return np.sign(y - mu) * np.sqrt(np.maximum(d, 0.0))
 
         if type_lower == "working":
-            eta = self._fit_result.linear_predictor
             dmu_deta = 1.0 / self._family.link_derivative(mu)
             return (y - mu) / dmu_deta
 
@@ -1364,7 +1363,8 @@ class GAM:
                 [
                     "",
                     "Parametric coefficients:",
-                    f"  {'Term':<24} {'Estimate':>10} {'Std.Err':>10} {stat_label:>10} {'p-value':>10}",
+                    f"  {'Term':<24} {'Estimate':>10} {'Std.Err':>10} "
+                    f"{stat_label:>10} {'p-value':>10}",
                     f"  {'-' * 24} {'-' * 10} {'-' * 10} {'-' * 10} {'-' * 10}",
                 ]
             )

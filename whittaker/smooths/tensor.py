@@ -346,9 +346,9 @@ class TensorProductBasisT2(TensorProductBasis):
     what lets the pure two-way-interaction component of the surface have its own smoothing
     parameter, separate from either marginal direction's smoothness. As the number of marginals `d`
     grows, the number of penalties grows exponentially (`2^d - 1`), so this construction is
-    practical mainly for `d = 2` or `d = 3`; `null_space_dimension()` and `identifiability_constraints()`
-    are inherited unchanged from `TensorProductBasis`, since the basis matrix itself does not
-    change — only the penalty is decomposed further.
+    practical mainly for `d = 2` or `d = 3`; `null_space_dimension()` and
+    `identifiability_constraints()` are inherited unchanged from `TensorProductBasis`, since the
+    basis matrix itself does not change — only the penalty is decomposed further.
 
     Examples
     --------
@@ -386,10 +386,7 @@ class TensorProductBasisT2(TensorProductBasis):
         for mask in range(1, 1 << d):
             P = None
             for j in range(d):
-                if mask & (1 << j):
-                    M_j = marginal_penalties[j]
-                else:
-                    M_j = np.eye(dims[j])
+                M_j = marginal_penalties[j] if mask & 1 << j else np.eye(dims[j])
                 P = M_j if P is None else np.kron(P, M_j)
             penalties.append(P)
         return penalties

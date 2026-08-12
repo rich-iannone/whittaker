@@ -11,7 +11,6 @@ from whittaker.gam import GAM
 from whittaker.model_matrix import build_model_matrix
 from whittaker.smooths.factor_smooth import FactorSmoothBasis
 
-
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
@@ -42,11 +41,11 @@ def small_panel():
     rng = np.random.default_rng(23)
     n_groups = 3
     n_per = 20
-    n = n_groups * n_per
+    n_groups * n_per
     group = np.repeat(["A", "B", "C"], n_per)
     x = np.tile(np.linspace(0, 1, n_per), n_groups)
     effects = {"A": 0.0, "B": 2.0, "C": -1.0}
-    y = np.array([effects[g] + xi + rng.normal(0, 0.2) for g, xi in zip(group, x)])
+    y = np.array([effects[g] + xi + rng.normal(0, 0.2) for g, xi in zip(group, x, strict=False)])
     return {"x": x, "y": y, "group": group}
 
 
@@ -113,9 +112,7 @@ class TestFactorSmoothBasis:
             np.testing.assert_allclose(S_wiggle[cs:ce, cs:ce], S_marginal, atol=1e-12)
             for j in range(3):
                 if j != i:
-                    np.testing.assert_array_equal(
-                        S_wiggle[cs:ce, j * k : (j + 1) * k], 0.0
-                    )
+                    np.testing.assert_array_equal(S_wiggle[cs:ce, j * k : (j + 1) * k], 0.0)
 
     def test_null_space_dimension_is_zero(self):
         x = np.linspace(0, 1, 30)
@@ -233,9 +230,7 @@ class TestFactorSmoothBasis:
 
     def test_factor_rejects_multi_column_array(self):
         x = np.linspace(0, 1, 30)
-        fac = np.column_stack(
-            [np.repeat(["A", "B", "C"], 10), np.repeat(["X", "Y", "Z"], 10)]
-        )
+        fac = np.column_stack([np.repeat(["A", "B", "C"], 10), np.repeat(["X", "Y", "Z"], 10)])
         with pytest.raises(ValueError, match="Expected 1-D factor array"):
             FactorSmoothBasis(k=5).fit(x, fac)
 
@@ -376,7 +371,7 @@ class TestFactorSmoothGAM:
         rng = np.random.default_rng(23)
         n_groups = 3
         n_per = 40
-        n = n_groups * n_per
+        n_groups * n_per
         group = np.repeat(np.arange(n_groups).astype(str), n_per)
         x = np.tile(np.linspace(0, 2 * np.pi, n_per), n_groups)
         group_effects = rng.normal(0, 0.2, n_groups)
@@ -414,10 +409,12 @@ class TestFactorSmoothGAM:
         x_grid = np.linspace(0, 2 * np.pi, 50)
         preds_by_subject = []
         for subj in subjects[:3]:
-            pred = gam.predict({
-                "x": x_grid,
-                "subject": np.array([subj] * len(x_grid)),
-            })
+            pred = gam.predict(
+                {
+                    "x": x_grid,
+                    "subject": np.array([subj] * len(x_grid)),
+                }
+            )
             preds_by_subject.append(pred.values)
         assert not np.allclose(preds_by_subject[0], preds_by_subject[1], atol=0.01)
 

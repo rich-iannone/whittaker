@@ -39,7 +39,8 @@ class BetaLS(GAMLSSFamily):
     density
 
     $$
-    f(y \mid \mu, \phi) = \frac{y^{a-1}(1-y)^{b-1}}{B(a, b)}, \qquad a = \mu\phi,\ \ b = (1-\mu)\phi.
+    f(y \mid \mu, \phi) = \frac{y^{a-1}(1-y)^{b-1}}{B(a, b)}, \qquad
+    a = \mu\phi,\ \ b = (1-\mu)\phi.
     $$
 
     As in `Beta`, larger `phi` concentrates the distribution more tightly around `mu`
@@ -197,7 +198,8 @@ class BetaLS(GAMLSSFamily):
         With `a = mu * phi`, `b = (1 - mu) * phi`, and trigamma function $\psi_1$:
 
         $$
-        -E\!\left[\frac{\partial^2 \ell}{\partial \mu^2}\right] = \phi^2\big(\psi_1(a) + \psi_1(b)\big),
+        -E\!\left[\frac{\partial^2 \ell}{\partial \mu^2}\right]
+        = \phi^2\big(\psi_1(a) + \psi_1(b)\big),
         \qquad
         -E\!\left[\frac{\partial^2 \ell}{\partial \phi^2}\right]
         = \mu^2 \psi_1(a) + (1-\mu)^2 \psi_1(b) - \psi_1(\phi).

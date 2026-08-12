@@ -60,7 +60,8 @@ class CoxPH(Family):
     the Cox partial log-likelihood,
 
     $$
-    \ell(\beta) = \sum_{i:\, \delta_i = 1} \left[ \eta_i - \log\!\left( \sum_{j \in R(t_i)} e^{\eta_j} \right) \right],
+    \ell(\beta) = \sum_{i:\, \delta_i = 1}
+    \left[ \eta_i - \log\!\left( \sum_{j \in R(t_i)} e^{\eta_j} \right) \right],
     $$
 
     where $\delta_i$ is the event indicator and $R(t_i)$ is the risk set at time $t_i$ (those
@@ -413,7 +414,7 @@ class CoxPH(Family):
         gradient_s = event_s.astype(float) - exp_eta_s * cum_a
         hess_diag_s = exp_eta_s * cum_a - exp_eta_s**2 * cum_b
 
-        for d_k, a_k, b_k, c_k, e_k, event_indices in event_time_data:
+        for d_k, _a_k, _b_k, c_k, e_k, event_indices in event_time_data:
             if d_k <= 1:
                 continue
             for j in event_indices:
@@ -618,7 +619,9 @@ class CoxPH(Family):
         return self._baseline_times.copy(), self._baseline_cumhaz.copy()
 
     def survival_function(self, eta: NDArray) -> NDArray:
-        r"""Fitted survival probability $S(t \mid x) = \exp(-H_0(t)\, e^{\eta})$ at the last event time.
+        r"""Fitted survival probability at the last event time.
+
+        $S(t \mid x) = \exp(-H_0(t)\, e^{\eta})$.
 
         Combines the given linear predictor with the final value of the Breslow
         cumulative baseline hazard (i.e. $H_0$ evaluated at the largest observed event

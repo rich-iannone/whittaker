@@ -81,7 +81,7 @@ def _bayesian_covariance(
     XtWX = Xw.T @ Xw
 
     S_total = np.zeros_like(XtWX)
-    for lam, pen in zip(sp, penalties):
+    for lam, pen in zip(sp, penalties, strict=False):
         S_total += lam * pen
 
     A = XtWX + S_total
@@ -176,7 +176,7 @@ def _unconditional_covariance(
         Xw = X
     XtWX = Xw.T @ Xw
     S_total = np.zeros_like(XtWX)
-    for lam, pen in zip(sp, penalties):
+    for lam, pen in zip(sp, penalties, strict=False):
         S_total += lam * pen
     A = XtWX + S_total
     A = (A + A.T) * 0.5
@@ -190,7 +190,7 @@ def _unconditional_covariance(
     A_inv = (eigvecs * eigvals_inv[np.newaxis, :]) @ eigvecs.T
 
     M = np.zeros((p, n_sp))
-    for j, (lam_j, pen_j) in enumerate(zip(sp, penalties)):
+    for j, (lam_j, pen_j) in enumerate(zip(sp, penalties, strict=False)):
         M[:, j] = -A_inv @ (lam_j * pen_j @ beta)
 
     ml = method.upper() == "ML"
@@ -284,7 +284,7 @@ def _smooth_test(
     p_value:
         Approximate p-value.
     """
-    k = len(beta_j)
+    len(beta_j)
 
     Q, R = np.linalg.qr(X_j, mode="reduced")
     V_trans = R @ V_j @ R.T
@@ -960,7 +960,7 @@ def influence(fit: FitResult, mm: ModelMatrix) -> InfluenceResult:
         Xw = X
 
     S_total = np.zeros((X.shape[1], X.shape[1]))
-    for lam, pen in zip(sp, mm.penalties):
+    for lam, pen in zip(sp, mm.penalties, strict=False):
         S_total += lam * pen
 
     A = Xw.T @ Xw + S_total
@@ -1206,7 +1206,7 @@ def smooth_derivatives(
     from whittaker.model_matrix import predict_matrix
 
     beta = fit.coefficients
-    n_data = len(next(iter(data.values())))
+    len(next(iter(data.values())))
 
     x_var = data.get(variable)
     if x_var is None:

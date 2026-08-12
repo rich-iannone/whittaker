@@ -200,7 +200,6 @@ class TestQuantileGAMFitCorrection:
             hi = model.quantiles[i + 1]
             assert np.all(preds[lo].values <= preds[hi].values + 1e-8)
 
-
     def test_fit_triggers_crossing_correction_with_offset(self):
         # Same as above but with an offset() term present, so that the
         # correction/refit branch's offset-subtraction line is exercised too.

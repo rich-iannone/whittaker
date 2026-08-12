@@ -129,7 +129,7 @@ def _penalized_solve(
     Xtz = Xw.T @ zw
 
     S_total = np.zeros((p, p))
-    for lam, pen in zip(sp, penalties):
+    for lam, pen in zip(sp, penalties, strict=False):
         S_total += lam * pen
 
     A = XtX + S_total
@@ -190,7 +190,7 @@ def _edf_per_smooth(
     XtWX = Xw.T @ Xw
 
     S_total = np.zeros((p, p))
-    for lam, pen in zip(sp, penalties):
+    for lam, pen in zip(sp, penalties, strict=False):
         S_total += lam * pen
 
     A = XtWX + S_total
@@ -228,10 +228,7 @@ def _eval_gcv(
     if offset is not None:
         eta = eta + offset
     resid = z - eta
-    if W is not None:
-        dev = float(np.sum(W * resid**2))
-    else:
-        dev = float(np.sum(resid**2))
+    dev = float(np.sum(W * resid**2)) if W is not None else float(np.sum(resid**2))
     return _gcv_score(dev, n, hat_trace)
 
 
@@ -280,9 +277,9 @@ def _select_smoothing_params_gcv(
 
         for j in range(len(penalties)):
 
-            def coord_obj(log_sp_j: float) -> float:
+            def coord_obj(log_sp_j: float, _j: int = j) -> float:
                 sp_trial = list(sp)
-                sp_trial[j] = np.exp(log_sp_j)
+                sp_trial[_j] = np.exp(log_sp_j)
                 return _eval_gcv(X, z, penalties, sp_trial, W=W, offset=offset)
 
             result = minimize_scalar(
@@ -359,7 +356,7 @@ def _reml_objective(
     Xty = Xw.T @ yw
 
     S_total = np.zeros((p, p))
-    for lam, pen in zip(sp, penalties):
+    for lam, pen in zip(sp, penalties, strict=False):
         S_total += lam * pen
 
     A = XtX + S_total
@@ -381,7 +378,7 @@ def _reml_objective(
     log_det_A = 2.0 * float(np.sum(np.log(np.diag(cho))))
 
     # log|S_λ|⁺ = Σ m_j · log(λ_j)  (block-diagonal penalties)
-    log_det_S = sum(m * rho for m, rho in zip(penalty_ranks, log_sp))
+    log_det_S = sum(m * rho for m, rho in zip(penalty_ranks, log_sp, strict=False))
 
     M = n_unpenalized
     if scale_known:
@@ -403,7 +400,7 @@ def _reml_objective(
 
     # Gradient w.r.t. ρ_j
     grad = np.zeros_like(log_sp)
-    for j, (lam_j, pen_j, m_j) in enumerate(zip(sp, penalties, penalty_ranks)):
+    for j, (lam_j, pen_j, m_j) in enumerate(zip(sp, penalties, penalty_ranks, strict=False)):
         beta_Sj_beta = float(beta @ pen_j @ beta)
         tr_Ainv_Sj = float(np.trace(cho_solve((cho, lower), pen_j)))
 
@@ -711,7 +708,7 @@ def pirls_fit(
             dev_old = np.inf
             inner_converged = False
 
-            for iteration in range(max_iter):
+            for _iteration in range(max_iter):
                 n_iter += 1
 
                 custom = family.irls_update(y, mu, eta)
@@ -786,10 +783,7 @@ def pirls_fit(
 
     gcv = _gcv_score(dev, n, hat_trace)
 
-    if pw is not None:
-        y_mean = float(np.average(y, weights=pw))
-    else:
-        y_mean = float(np.mean(y))
+    y_mean = float(np.average(y, weights=pw)) if pw is not None else float(np.mean(y))
     mu_null = family.link_inverse(np.full_like(y, family.link(np.atleast_1d(y_mean))[0]))
     null_dev = family.deviance(y, mu_null, weights=pw)
 

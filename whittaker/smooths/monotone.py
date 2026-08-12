@@ -1,13 +1,13 @@
 """Shape-constrained P-spline bases: monotone and convex/concave smoothing.
 
 This module provides two variants of the P-spline basis (see `whittaker.smooths.pspline`) that
-constrain the *shape* of the fitted curve rather than only its smoothness: `MonotonePSpline` enforces
-a non-decreasing or non-increasing fit, and `ConvexPSpline` enforces a convex or concave fit. Both
-constraints are linear inequality conditions on the B-spline coefficients, and both are enforced
-during fitting by projecting the coefficients onto the corresponding constraint cone after each
-penalized least-squares update, using the Pool Adjacent Violators Algorithm (PAVA, `_pava`) as the
-underlying projection mechanism. `project_monotone` and `project_convex` expose that projection
-directly for the monotone and convex/concave cases, respectively.
+constrain the *shape* of the fitted curve rather than only its smoothness: `MonotonePSpline`
+enforces a non-decreasing or non-increasing fit, and `ConvexPSpline` enforces a convex or concave
+fit. Both constraints are linear inequality conditions on the B-spline coefficients, and both are
+enforced during fitting by projecting the coefficients onto the corresponding constraint cone
+after each penalized least-squares update, using the Pool Adjacent Violators Algorithm (PAVA,
+`_pava`) as the underlying projection mechanism. `project_monotone` and `project_convex` expose
+that projection directly for the monotone and convex/concave cases, respectively.
 """
 
 from __future__ import annotations
@@ -21,18 +21,19 @@ from whittaker.smooths.pspline import PSpline, _diff_matrix
 class MonotonePSpline(PSpline):
     r"""Shape-constrained P-spline: monotone increasing or decreasing.
 
-    Uses the same B-spline basis and difference penalty as `~whittaker.smooths.pspline.PSpline`, but
-    additionally requires the fitted curve `f(x) = \sum_j \beta_j B_j(x)` to be non-decreasing (or,
-    with `decreasing=True`, non-increasing) over the whole domain. This is enforced as a linear
-    inequality constraint on the coefficients rather than on `f` directly: because each B-spline basis
-    function `B_j` is non-negative and has local support (a "bump" that overlaps only its
-    neighbours), a non-decreasing sequence of coefficients `\beta_1 \le \beta_2 \le \dots \le \beta_k`
-    guarantees a non-decreasing curve. Intuitively, moving `x` to the right shifts the basis functions'
-    weight away from earlier, smaller-or-equal coefficients and onto later, larger-or-equal ones, so
-    the weighted sum can only stay flat or increase. Use `MonotonePSpline` (via `s(x, bs="mpi")` for
-    increasing or `s(x, bs="mpd")` for decreasing in a formula) whenever domain knowledge says the
-    relationship must be monotone — e.g. a dose-response curve, a cumulative distribution, or a growth
-    curve — and an unconstrained smooth would otherwise wiggle non-monotonically due to noise.
+    Uses the same B-spline basis and difference penalty as `~whittaker.smooths.pspline.PSpline`,
+    but additionally requires the fitted curve `f(x) = \sum_j \beta_j B_j(x)` to be non-decreasing
+    (or, with `decreasing=True`, non-increasing) over the whole domain. This is enforced as a
+    linear inequality constraint on the coefficients rather than on `f` directly: because each
+    B-spline basis function `B_j` is non-negative and has local support (a "bump" that overlaps
+    only its neighbours), a non-decreasing sequence of coefficients
+    `\beta_1 \le \beta_2 \le \dots \le \beta_k` guarantees a non-decreasing curve. Intuitively,
+    moving `x` to the right shifts the basis functions' weight away from earlier, smaller-or-equal
+    coefficients and onto later, larger-or-equal ones, so the weighted sum can only stay flat or
+    increase. Use `MonotonePSpline` (via `s(x, bs="mpi")` for increasing or `s(x, bs="mpd")` for
+    decreasing in a formula) whenever domain knowledge says the relationship must be monotone —
+    e.g. a dose-response curve, a cumulative distribution, or a growth curve — and an
+    unconstrained smooth would otherwise wiggle non-monotonically due to noise.
 
     Parameters
     ----------
@@ -47,18 +48,19 @@ class MonotonePSpline(PSpline):
 
     Notes
     -----
-    The monotonicity constraint is enforced during fitting, not by direct constrained optimization.
-    Instead, at each penalized iteratively reweighted least squares (P-IRLS) iteration the ordinary
-    (unconstrained) coefficient update is projected onto the monotone cone: `whittaker.fitting.pirls`
-    detects any smooth term whose basis is a `MonotonePSpline` and passes its coefficient block through
-    `project_monotone` before the next iteration's linear predictor is formed. This projection uses the
-    Pool Adjacent Violators Algorithm (PAVA), the standard algorithm for isotonic regression (Barlow,
-    Bartholomew, Bremner & Brunk, 1972; Best & Chakravarti, 1990). Given an arbitrary vector, PAVA finds
-    the closest non-decreasing vector to it in the least-squares sense by scanning for adjacent
-    "violations" (a value followed by a smaller one) and replacing each violating block with its mean,
-    merging blocks until no violations remain. Because this is an orthogonal projection onto the convex
-    cone of non-decreasing sequences, iterating it alongside the P-IRLS coefficient update drives the
-    fit toward the coefficient vector, within that cone, that best balances the penalized deviance and
+    The monotonicity constraint is enforced during fitting, not by direct constrained
+    optimization. Instead, at each penalized iteratively reweighted least squares (P-IRLS)
+    iteration the ordinary (unconstrained) coefficient update is projected onto the monotone cone:
+    `whittaker.fitting.pirls` detects any smooth term whose basis is a `MonotonePSpline` and passes
+    its coefficient block through `project_monotone` before the next iteration's linear predictor
+    is formed. This projection uses the Pool Adjacent Violators Algorithm (PAVA), the standard
+    algorithm for isotonic regression (Barlow, Bartholomew, Bremner & Brunk, 1972; Best &
+    Chakravarti, 1990). Given an arbitrary vector, PAVA finds the closest non-decreasing vector to
+    it in the least-squares sense by scanning for adjacent "violations" (a value followed by a
+    smaller one) and replacing each violating block with its mean, merging blocks until no
+    violations remain. Because this is an orthogonal projection onto the convex cone of
+    non-decreasing sequences, iterating it alongside the P-IRLS coefficient update drives the fit
+    toward the coefficient vector, within that cone, that best balances the penalized deviance and
     the constraint.
 
     Examples
@@ -126,13 +128,14 @@ class ConvexPSpline(PSpline):
 
     Uses the same B-spline basis and difference penalty as `~whittaker.smooths.pspline.PSpline`, but
     additionally requires the fitted curve `f(x) = \sum_j \beta_j B_j(x)` to be convex (or, with
-    `concave=True`, concave) over the whole domain. As with `MonotonePSpline`, this is enforced as a
-    linear inequality on the coefficients: for an equally-spaced B-spline basis, the curve is convex
-    whenever the second differences of the coefficients, `\Delta^2 \beta_j = \beta_j - 2\beta_{j-1} +
-    \beta_{j-2}`, are all non-negative. Use `ConvexPSpline` (via `s(x, bs="cx")` for convex or
-    `s(x, bs="cv")` for concave in a formula) when the relationship is known to have a single bend of
-    consistent curvature — e.g. a cost curve, a learning curve, or a concave production function —
-    and an unconstrained smooth would otherwise produce spurious inflection points from noise.
+    `concave=True`, concave) over the whole domain. As with `MonotonePSpline`, this is enforced as
+    a linear inequality on the coefficients: for an equally-spaced B-spline basis, the curve is
+    convex whenever the second differences of the coefficients,
+    `\Delta^2 \beta_j = \beta_j - 2\beta_{j-1} + \beta_{j-2}`, are all non-negative. Use
+    `ConvexPSpline` (via `s(x, bs="cx")` for convex or `s(x, bs="cv")` for concave in a formula)
+    when the relationship is known to have a single bend of consistent curvature — e.g. a cost
+    curve, a learning curve, or a concave production function — and an unconstrained smooth would
+    otherwise produce spurious inflection points from noise.
 
     Parameters
     ----------
@@ -151,13 +154,14 @@ class ConvexPSpline(PSpline):
     ordinary coefficient update onto the convex (or concave) cone after each iteration: smooth terms
     whose basis is a `ConvexPSpline` have their coefficient block passed through `project_convex`
     before the next iteration's linear predictor is formed (see `whittaker.fitting.pirls`). The
-    projection extends the monotone PAVA projection by one order of differencing: convexity requires
-    the *first* differences of the coefficients, `d_j = \beta_j - \beta_{j-1}`, to form a non-decreasing
-    sequence (equivalently, that the second differences of `\beta` are non-negative), so `project_convex`
-    computes the first differences, projects *them* onto the monotone cone with PAVA (see the `Notes`
-    on `MonotonePSpline` for the algorithm), and then reconstructs `\beta` by cumulatively summing the
-    projected differences back up from `\beta_0`. Concavity is handled by negating the differences
-    before and after the PAVA projection, mirroring `decreasing=True` for `MonotonePSpline`.
+    projection extends the monotone PAVA projection by one order of differencing: convexity
+    requires the *first* differences of the coefficients, `d_j = \beta_j - \beta_{j-1}`, to form a
+    non-decreasing sequence (equivalently, that the second differences of `\beta` are
+    non-negative), so `project_convex` computes the first differences, projects *them* onto the
+    monotone cone with PAVA (see the `Notes` on `MonotonePSpline` for the algorithm), and then
+    reconstructs `\beta` by cumulatively summing the projected differences back up from `\beta_0`.
+    Concavity is handled by negating the differences before and after the PAVA projection,
+    mirroring `decreasing=True` for `MonotonePSpline`.
 
     Examples
     --------
@@ -283,10 +287,7 @@ def project_convex(beta: NDArray, *, concave: bool = False) -> NDArray:
     """
     D1 = _diff_matrix(len(beta), 1)
     diffs = D1 @ beta
-    if concave:
-        diffs_proj = -_pava(-diffs)
-    else:
-        diffs_proj = _pava(diffs)
+    diffs_proj = -_pava(-diffs) if concave else _pava(diffs)
     out = np.empty_like(beta)
     out[0] = beta[0]
     out[1:] = out[0] + np.cumsum(diffs_proj)
@@ -297,7 +298,7 @@ def _pava(x: NDArray) -> NDArray:
     """Pool Adjacent Violators Algorithm: isotonic (non-decreasing) regression on `x`."""
     n = len(x)
     result = x.copy()
-    block_start = np.arange(n)
+    np.arange(n)
     block_size = np.ones(n, dtype=int)
 
     i = 0

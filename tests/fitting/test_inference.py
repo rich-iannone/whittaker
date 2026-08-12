@@ -348,9 +348,7 @@ class TestUnconditionalCovariance:
         """When there are no smoothing parameters, V_c should just be V_p (line 161)."""
         mm, result = reml_fit
         V_p = _bayesian_covariance(mm.X, [], [], result.scale)
-        V_c = _unconditional_covariance(
-            mm.X, [], [], result.scale, result.coefficients, "REML"
-        )
+        V_c = _unconditional_covariance(mm.X, [], [], result.scale, result.coefficients, "REML")
         assert_allclose(V_c, V_p)
 
     def test_default_y_uses_fitted_values(self, reml_fit) -> None:
@@ -384,9 +382,7 @@ class TestUnconditionalCovariance:
         """If the eigendecomposition of the Hessian raises, `V_p` should be returned
         instead of propagating the error (lines 246-247)."""
         mm, result = reml_fit
-        V_p = _bayesian_covariance(
-            mm.X, mm.penalties, result.smoothing_params, result.scale
-        )
+        V_p = _bayesian_covariance(mm.X, mm.penalties, result.smoothing_params, result.scale)
 
         orig_eigh = np.linalg.eigh
         n_sp = len(result.smoothing_params)
@@ -667,9 +663,7 @@ class TestDerivativeInferenceEdgeCases:
         with pytest.raises(ValueError, match="not found"):
             smooth_derivatives(result, mm, "nonexistent", data)
 
-    def test_smooth_derivatives_no_smooth_for_variable_raises(
-        self, linear_and_smooth_fit
-    ) -> None:
+    def test_smooth_derivatives_no_smooth_for_variable_raises(self, linear_and_smooth_fit) -> None:
         mm, result, data = linear_and_smooth_fit
         with pytest.raises(ValueError, match="No smooth terms"):
             smooth_derivatives(result, mm, "x2", data)
@@ -680,9 +674,7 @@ class TestDerivativeInferenceEdgeCases:
         labels = {r.term for r in results}
         assert labels == {"s(x, k=8, by='grp'):0", "s(x, k=8, by='grp'):1"}
 
-    def test_marginal_effects_computes_v_beta_from_prior_weights(
-        self, prior_weighted_fit
-    ) -> None:
+    def test_marginal_effects_computes_v_beta_from_prior_weights(self, prior_weighted_fit) -> None:
         mm, result, data = prior_weighted_fit
         results = marginal_effects(result, mm, "x", data)
         assert np.all(np.isfinite(results[0].effect))

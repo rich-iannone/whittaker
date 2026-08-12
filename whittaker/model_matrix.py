@@ -113,9 +113,8 @@ def _resolve_basis(term: SmoothTerm) -> SmoothBasis:
             kwargs["cov"] = xt
     elif term.bs == "mrf":
         xt = term.extra.get("xt", {})
-        if isinstance(xt, dict):
-            if "neighborhood" in xt:
-                kwargs["neighborhood"] = xt["neighborhood"]
+        if isinstance(xt, dict) and "neighborhood" in xt:
+            kwargs["neighborhood"] = xt["neighborhood"]
 
     return cls(**kwargs)
 
@@ -316,8 +315,8 @@ def _extract_column(data: dict[str, NDArray], name: str) -> NDArray:
 def _apply_constraint(B: NDArray, C: NDArray) -> NDArray:
     """Absorb identifiability constraints into the basis matrix.
 
-    Given an `(n, k)` basis matrix *B* and a `(1, k)` constraint row *C* (representing `C @ β = 0`),
-    this returns an `(n, k - 1)` matrix whose column space satisfies the constraint.
+    Given an `(n, k)` basis matrix *B* and a `(1, k)` constraint row *C* (representing
+    `C @ β = 0`), this returns an `(n, k - 1)` matrix whose column space satisfies the constraint.
 
     The method uses QR decomposition of `C.T` to find a `(k, k - 1)` null-space matrix *Z* such that
     `C @ Z = 0`, then returns `B @ Z`.
@@ -338,38 +337,40 @@ def _apply_constraint_to_penalty(S: NDArray, C: NDArray) -> NDArray:
 class SmoothInfo:
     """Metadata describing where one smooth term lives inside a `ModelMatrix`.
 
-    Each `~whittaker.formula.terms.SmoothTerm` in a formula (an `s()`, `te()`, `ti()`, or `t2()` call)
-    expands into several columns of the full design matrix `X` — one per basis function of the fitted
-    `SmoothBasis`. A `SmoothInfo` records the bookkeeping needed to make sense of that expansion after
-    the fact: which contiguous slice `X[:, col_start:col_end]` belongs to this term, the fitted
-    `SmoothBasis` instance itself (so the exact same knots and constraints can be reused later), and
-    which entries of `ModelMatrix.penalties` hold this term's own penalty block(s). `build_model_matrix`
-    creates one `SmoothInfo` per smooth term (or per `by=` level, for factor-by smooths) and stores the
-    list on `ModelMatrix.smooths`; `predict_matrix` later reads these back to evaluate each smooth's
-    basis on new data without needing the original `Formula` object.
+    Each `~whittaker.formula.terms.SmoothTerm` in a formula (an `s()`, `te()`, `ti()`, or `t2()`
+    call) expands into several columns of the full design matrix `X` — one per basis function of
+    the fitted `SmoothBasis`. A `SmoothInfo` records the bookkeeping needed to make sense of that
+    expansion after the fact: which contiguous slice `X[:, col_start:col_end]` belongs to this
+    term, the fitted `SmoothBasis` instance itself (so the exact same knots and constraints can be
+    reused later), and which entries of `ModelMatrix.penalties` hold this term's own penalty
+    block(s). `build_model_matrix` creates one `SmoothInfo` per smooth term (or per `by=` level,
+    for factor-by smooths) and stores the list on `ModelMatrix.smooths`; `predict_matrix` later
+    reads these back to evaluate each smooth's basis on new data without needing the original
+    `Formula` object.
 
     Attributes
     ----------
     term : SmoothTerm
         The parsed `SmoothTerm` this info belongs to.
     basis : SmoothBasis
-        The fitted `SmoothBasis` instance for this term. Retained so that `predict_matrix` can call
-        `basis.basis_matrix()` on new covariate values using the exact knots, degrees of freedom, and
-        identifiability constraints learned during fitting, rather than re-fitting a new basis.
+        The fitted `SmoothBasis` instance for this term. Retained so that `predict_matrix` can
+        call `basis.basis_matrix()` on new covariate values using the exact knots, degrees of
+        freedom, and identifiability constraints learned during fitting, rather than re-fitting a
+        new basis.
     col_start : int
         Start column index (inclusive) in the full model matrix `X`.
     col_end : int
         End column index (exclusive) in the full model matrix `X`.
     null_space_dim : int
         Dimension of the penalty null space for this smooth, i.e. the number of basis directions
-        (after identifiability constraints) that the penalty does not shrink at all. For an ordinary
-        cubic or thin-plate spline this is typically the "linear" part of the smooth; for shrinkage
-        bases (`bs="ts"`, `bs="cs"`) and random-effect/factor-smooth bases (`bs="re"`, `bs="fs"`) it is
-        `0` because every direction is already penalized.
+        (after identifiability constraints) that the penalty does not shrink at all. For an
+        ordinary cubic or thin-plate spline this is typically the "linear" part of the smooth;
+        for shrinkage bases (`bs="ts"`, `bs="cs"`) and random-effect/factor-smooth bases
+        (`bs="re"`, `bs="fs"`) it is `0` because every direction is already penalized.
     penalty_indices : list of int
         Indices into `ModelMatrix.penalties` that belong to this smooth. For `s()` terms this is
-        usually a single index (or two, if `select=True` added a null-space penalty); for `te()` terms
-        it is one index per marginal direction.
+        usually a single index (or two, if `select=True` added a null-space penalty); for `te()`
+        terms it is one index per marginal direction.
     by_var : str or None
         Name of the `by=` variable for this term, or `None` if the term has no `by=` modifier.
     by_level : str or None
@@ -392,12 +393,12 @@ class SmoothInfo:
 class ModelMatrix:
     """Numeric design matrix, penalties, and metadata produced by :func:`build_model_matrix`.
 
-    A `ModelMatrix` is the numeric form of a fitted `~whittaker.gam.GAM`'s formula: the design matrix
-    `X` such that the linear predictor is `eta = X @ beta` (plus an optional offset), together with one
-    quadratic penalty matrix per smooth term and enough metadata (`smooths`, `column_names`) to later
-    build a matching prediction matrix or attribute coefficients back to individual terms. `GAM.fit()`
-    calls `build_model_matrix` once and stores the result so that `predict()`, `summary()`, and
-    `plot()` can all refer back to the same column layout.
+    A `ModelMatrix` is the numeric form of a fitted `~whittaker.gam.GAM`'s formula: the design
+    matrix `X` such that the linear predictor is `eta = X @ beta` (plus an optional offset),
+    together with one quadratic penalty matrix per smooth term and enough metadata (`smooths`,
+    `column_names`) to later build a matching prediction matrix or attribute coefficients back to
+    individual terms. `GAM.fit()` calls `build_model_matrix` once and stores the result so that
+    `predict()`, `summary()`, and `plot()` can all refer back to the same column layout.
 
     Attributes
     ----------
@@ -405,14 +406,15 @@ class ModelMatrix:
         Full design matrix, shape `(n, p)` where *n* is the number of observations and *p* is the
         total number of columns (intercept + parametric + all constrained smooth bases).
     penalties : list of numpy.ndarray
-        List of `(p, p)` penalty matrices, one per smooth term (or per marginal/null-space penalty
-        within a term), each containing that term's penalty embedded in the appropriate block of the
-        full model dimension so `beta.T @ S_j @ beta` depends only on that term's coefficients.
+        List of `(p, p)` penalty matrices, one per smooth term (or per marginal/null-space
+        penalty within a term), each containing that term's penalty embedded in the appropriate
+        block of the full model dimension so `beta.T @ S_j @ beta` depends only on that term's
+        coefficients.
     smooths : list of SmoothInfo
         Per-smooth metadata (`SmoothInfo`) in formula order.
     column_names : list of str
-        Human-readable label for each column of `X`, in order, e.g. `"(Intercept)"`, a covariate name
-        for a linear term, or `"s(x)[0]"` for the first basis function of a smooth term.
+        Human-readable label for each column of `X`, in order, e.g. `"(Intercept)"`, a covariate
+        name for a linear term, or `"s(x)[0]"` for the first basis function of a smooth term.
     has_intercept : bool
         Whether column 0 is the intercept.
     n_parametric : int
@@ -468,8 +470,9 @@ class ModelMatrix:
 
         Sums every entry of `penalties` element-wise into a single `(n_coefs, n_coefs)` matrix,
         without applying any per-smooth smoothing parameter. This is a convenience for inspecting
-        the overall penalty structure; it is *not* what the fitting engine (`~whittaker.pirls.pirls_fit`)
-        actually optimizes against, since each term's contribution should be weighted by its own
+        the overall penalty structure; it is *not* what the fitting engine
+        (`~whittaker.pirls.pirls_fit`) actually optimizes against, since each term's contribution
+        should be weighted by its own
         `lambda_j` before being summed. Use `penalties` directly, combined with the fitted
         smoothing parameters, for anything that needs the weighted penalty.
 
@@ -513,11 +516,12 @@ def build_model_matrix(
 
     Every term in the formula contributes one or more columns to `X`. An intercept contributes a
     single column of ones; a linear term `x3` contributes the column `x3` itself; an interaction
-    `x1:x2` contributes the elementwise product `x1 * x2`. A smooth term such as `s(x)`, by contrast,
-    expands into *several* columns: the basis functions of the underlying spline (or other smooth)
-    basis, evaluated at each observation's value of `x`. Fitting a GAM is then no different from
-    fitting a (penalized) linear model in these expanded columns — the non-linearity of `f(x)` lives
-    entirely in how the basis functions are constructed, not in how the coefficients enter the model.
+    `x1:x2` contributes the elementwise product `x1 * x2`. A smooth term such as `s(x)`, by
+    contrast, expands into *several* columns: the basis functions of the underlying spline (or
+    other smooth) basis, evaluated at each observation's value of `x`. Fitting a GAM is then no
+    different from fitting a (penalized) linear model in these expanded columns — the
+    non-linearity of `f(x)` lives entirely in how the basis functions are constructed, not in how
+    the coefficients enter the model.
 
     `build_model_matrix` is the bridge between a parsed `~whittaker.formula.terms.Formula` and the
     numeric matrices the P-IRLS fitting engine (`~whittaker.pirls.pirls_fit`) actually needs: the
@@ -558,22 +562,23 @@ def build_model_matrix(
 
     Notes
     -----
-    An ordinary smoothing penalty `S` for a term like `s(x)` typically has a non-trivial null space —
-    directions in coefficient space that the penalty does not shrink at all (e.g. the linear
-    component of a cubic spline). This means increasing that term's smoothing parameter `lambda_j`
-    can flatten the smooth toward a straight line, but never all the way to zero, so ordinary GCV/REML
-    smoothing-parameter selection cannot remove an irrelevant term from the model entirely.
+    An ordinary smoothing penalty `S` for a term like `s(x)` typically has a non-trivial null
+    space — directions in coefficient space that the penalty does not shrink at all (e.g. the
+    linear component of a cubic spline). This means increasing that term's smoothing parameter
+    `lambda_j` can flatten the smooth toward a straight line, but never all the way to zero, so
+    ordinary GCV/REML smoothing-parameter selection cannot remove an irrelevant term from the
+    model entirely.
 
     When `select=True`, `build_model_matrix` adds a second penalty matrix per term (see
     `_null_space_penalty`) built from the eigendecomposition of the term's own penalty `S`: the
-    eigenvectors with (numerically) zero eigenvalue span exactly the null space of `S`, and projecting
-    onto that eigenspace gives a penalty `S_null` that penalizes only those previously-unpenalized
-    directions. With both `S` and `S_null` present (each with its own smoothing parameter), driving
-    both `lambda_j` and the null-space smoothing parameter to large values shrinks the *entire* term,
-    including its linear component, to zero — allowing REML- or GCV-based fitting to perform automatic
-    term selection much like a lasso penalty does for linear models. See Marra, G. and Wood, S.N.
-    (2011), "Practical variable selection for generalized additive models", *Computational Statistics
-    & Data Analysis*, 55(7), 2372-2387.
+    eigenvectors with (numerically) zero eigenvalue span exactly the null space of `S`, and
+    projecting onto that eigenspace gives a penalty `S_null` that penalizes only those
+    previously-unpenalized directions. With both `S` and `S_null` present (each with its own
+    smoothing parameter), driving both `lambda_j` and the null-space smoothing parameter to large
+    values shrinks the *entire* term, including its linear component, to zero — allowing REML- or
+    GCV-based fitting to perform automatic term selection much like a lasso penalty does for
+    linear models. See Marra, G. and Wood, S.N. (2011), "Practical variable selection for
+    generalized additive models", *Computational Statistics & Data Analysis*, 55(7), 2372-2387.
 
     Examples
     --------
@@ -646,10 +651,7 @@ def build_model_matrix(
         elif isinstance(term, OffsetTerm):
             offset_col = _extract_column(data, term.expression)
             offset_expressions.append(term.expression)
-            if offset is None:
-                offset = offset_col.copy()
-            else:
-                offset = offset + offset_col
+            offset = offset_col.copy() if offset is None else offset + offset_col
 
     # --- smooth terms -------------------------------------------------------
     smooth_infos: list[SmoothInfo] = []
@@ -833,21 +835,22 @@ def predict_matrix(
 ) -> NDArray:
     """Build the prediction design matrix for new data.
 
-    Predicting from a fitted GAM requires evaluating each term at new covariate values in *exactly*
-    the same numeric representation used during fitting. For a linear term this is trivial (just
-    read off the new column), but for a smooth term it is not: simply re-fitting a fresh basis on the
-    new data would choose different knots, degrees of freedom, and identifiability constraints,
-    producing a matrix whose columns don't line up with the fitted coefficients `beta` at all.
-    `predict_matrix` avoids this by reusing the exact `SmoothBasis` objects stored on
-    `model.smooths[i].basis` — the same knots and constraints the model was fitted with — and simply
-    evaluating `basis.basis_matrix()` at the new covariate values, so the resulting columns are
-    directly compatible with the training-time coefficients.
+    Predicting from a fitted GAM requires evaluating each term at new covariate values in
+    *exactly* the same numeric representation used during fitting. For a linear term this is
+    trivial (just read off the new column), but for a smooth term it is not: simply re-fitting a
+    fresh basis on the new data would choose different knots, degrees of freedom, and
+    identifiability constraints, producing a matrix whose columns don't line up with the fitted
+    coefficients `beta` at all. `predict_matrix` avoids this by reusing the exact `SmoothBasis`
+    objects stored on `model.smooths[i].basis` — the same knots and constraints the model was
+    fitted with — and simply evaluating `basis.basis_matrix()` at the new covariate values, so the
+    resulting columns are directly compatible with the training-time coefficients.
 
     Because a `ModelMatrix` does not retain the original `~whittaker.formula.terms.Formula` object
-    (only its numeric consequences), `predict_matrix` first calls `_reconstruct_formula` to rebuild an
-    equivalent `Formula` from `model.column_names` and `model.smooths`, then walks that formula's terms
-    in order — extracting linear/interaction columns directly from `new_data` and re-evaluating each
-    smooth's stored basis — to assemble a new design matrix with the same column layout as `model.X`.
+    (only its numeric consequences), `predict_matrix` first calls `_reconstruct_formula` to rebuild
+    an equivalent `Formula` from `model.column_names` and `model.smooths`, then walks that
+    formula's terms in order — extracting linear/interaction columns directly from `new_data` and
+    re-evaluating each smooth's stored basis — to assemble a new design matrix with the same
+    column layout as `model.X`.
 
     Parameters
     ----------
@@ -865,12 +868,12 @@ def predict_matrix(
     Notes
     -----
     `_reconstruct_formula` infers term boundaries purely from `column_names` and the stored
-    `SmoothInfo` objects, not from any record of the literal original formula string. In practice this
-    reconstruction always agrees with the training matrix's column layout, since it is derived from
-    the very structures that layout was built from — but the reconstructed `Formula`'s term order and
-    string labels are *inferred*, and should not be treated as a faithful reproduction of the original
-    formula object passed to `build_model_matrix` (for example, `full=True` interactions are not
-    reconstructed exactly as originally specified).
+    `SmoothInfo` objects, not from any record of the literal original formula string. In practice
+    this reconstruction always agrees with the training matrix's column layout, since it is
+    derived from the very structures that layout was built from — but the reconstructed
+    `Formula`'s term order and string labels are *inferred*, and should not be treated as a
+    faithful reproduction of the original formula object passed to `build_model_matrix` (for
+    example, `full=True` interactions are not reconstructed exactly as originally specified).
 
     Examples
     --------
@@ -979,10 +982,7 @@ def predict_offset(
     offset: NDArray | None = None
     for expr in model.offset_expressions:
         col = _extract_column(new_data, expr)
-        if offset is None:
-            offset = col.copy()
-        else:
-            offset = offset + col
+        offset = col.copy() if offset is None else offset + col
     return offset
 
 

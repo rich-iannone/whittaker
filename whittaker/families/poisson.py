@@ -39,7 +39,8 @@ class Poisson(Family):
     `Tweedie` instead. The deviance is
 
     $$
-    D(y, \hat\mu) = 2 \sum_i \left[ y_i \log\!\left(\frac{y_i}{\hat\mu_i}\right) - (y_i - \hat\mu_i) \right] .
+    D(y, \hat\mu) = 2 \sum_i \left[ y_i \log\!\left(\frac{y_i}{\hat\mu_i}\right)
+    - (y_i - \hat\mu_i) \right] .
     $$
 
     Examples

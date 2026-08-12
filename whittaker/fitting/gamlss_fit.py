@@ -263,7 +263,7 @@ def gamlss_fit(
     converged = False
     n_iter = 0
 
-    for outer in range(max_outer):
+    for _outer in range(max_outer):
         n_iter += 1
 
         for name in param_names:

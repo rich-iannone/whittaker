@@ -110,9 +110,7 @@ class TestQuantileFamilyDeviance:
         qf = QuantileFamily(tau=0.3, sigma=0.5)
         y = np.array([1.0, 2.0, 3.0, 4.0])
         mu = np.array([1.1, 1.9, 3.2, 3.9])
-        np.testing.assert_allclose(
-            np.sum(qf.unit_deviance(y, mu)), qf.deviance(y, mu), rtol=1e-10
-        )
+        np.testing.assert_allclose(np.sum(qf.unit_deviance(y, mu)), qf.deviance(y, mu), rtol=1e-10)
 
     def test_unit_deviance_matches_elf_loss(self):
         qf = QuantileFamily(tau=0.7, sigma=1.0)

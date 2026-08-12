@@ -60,7 +60,10 @@ def _isotonic_projection(values: NDArray) -> NDArray:
 
     i = 0
     while i < len(blocks) - 1:
-        block_mean = lambda b: np.mean(result[b])
+
+        def block_mean(b):
+            return np.mean(result[b])
+
         if block_mean(blocks[i]) > block_mean(blocks[i + 1]):
             merged = blocks[i] + blocks[i + 1]
             m = np.mean(result[merged])
@@ -86,7 +89,7 @@ def _enforce_non_crossing(
     is projected onto the monotone non-decreasing cone via PAVA.
     """
     n = len(next(iter(fitted_values.values())))
-    k = len(quantiles)
+    len(quantiles)
 
     corrected = {tau: fitted_values[tau].copy() for tau in quantiles}
 
@@ -107,9 +110,9 @@ class QuantileGAM:
     Fits a separate additive quantile regression model for each requested quantile level `tau`, and
     enforces the natural ordering constraint that quantile curves must not cross: for
     `tau_1 < tau_2`, the fitted curve `q_{tau_1}(x)` must lie at or below `q_{tau_2}(x)` at every
-    observed covariate combination. Ordinary quantile GAMs, fit independently for each `tau`, provide
-    no such guarantee and can produce curves that cross, especially in regions with sparse data or
-    heavy smoothing.
+    observed covariate combination. Ordinary quantile GAMs, fit independently for each `tau`,
+    provide no such guarantee and can produce curves that cross, especially in regions with sparse
+    data or heavy smoothing.
 
     Use `QuantileGAM` whenever you need multiple quantiles of a conditional distribution (e.g. to
     build a prediction interval or characterize skewness/heteroscedasticity) and want the estimated
@@ -134,18 +137,19 @@ class QuantileGAM:
 
     Notes
     -----
-    Each quantile is fit by minimizing a smoothed pinball loss (the ELF loss of Fasiolo et al. 2021),
-    which approximates the quantile check function
+    Each quantile is fit by minimizing a smoothed pinball loss (the ELF loss of Fasiolo et al.
+    2021), which approximates the quantile check function
 
     $$\rho_\tau(u) = u \, (\tau - \mathbb{1}[u < 0])$$
 
-    with a twice-differentiable surrogate suitable for IRLS. After each round of fitting, the vector
-    of fitted quantiles at every observation, `[q_{\tau_1}(x_i), \dots, q_{\tau_k}(x_i)]`, is checked
-    for monotonicity; if it is violated anywhere, the vector is projected onto the monotone
-    non-decreasing cone via the pool-adjacent-violators algorithm (PAVA), following the "stepwise
-    projection" strategy of Bondell, Reich, & Wang (2010). The projected fitted values are then used
-    to re-derive coefficients (via a least-squares refit against the corrected working response), and
-    the cycle repeats for up to `max_iter` rounds or until no crossings remain.
+    with a twice-differentiable surrogate suitable for IRLS. After each round of fitting, the
+    vector of fitted quantiles at every observation, `[q_{\tau_1}(x_i), \dots, q_{\tau_k}(x_i)]`,
+    is checked for monotonicity; if it is violated anywhere, the vector is projected onto the
+    monotone non-decreasing cone via the pool-adjacent-violators algorithm (PAVA), following the
+    "stepwise projection" strategy of Bondell, Reich, & Wang (2010). The projected fitted values
+    are then used to re-derive coefficients (via a least-squares refit against the corrected
+    working response), and the cycle repeats for up to `max_iter` rounds or until no crossings
+    remain.
 
     Examples
     --------
@@ -297,7 +301,7 @@ class QuantileGAM:
         if not self._non_crossing:
             max_iter = 1
 
-        for iteration in range(max_iter):
+        for _iteration in range(max_iter):
             for tau in self._quantiles:
                 family = QuantileFamily(tau=tau, sigma=self._sigma)
                 model = GAM(self._formula, family=family)

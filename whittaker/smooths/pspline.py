@@ -105,14 +105,14 @@ class PSpline(SmoothBasis):
     discrete difference penalty directly on the coefficients, rather than an integrated-derivative
     penalty on the fitted curve. This decouples basis richness from smoothness — you can use many
     more basis functions than you would dare with an unpenalized spline, because the difference
-    penalty (together with an appropriately chosen `lambda`) does the work of controlling wiggliness.
-    Equivalent to mgcv's `bs="ps"` basis. P-splines are a good default choice for a single
-    continuous covariate: they are cheap to construct (no eigendecomposition or dense linear solve
-    is needed to build the penalty), the penalty matrix is banded/sparse which keeps large-`k` fits
-    fast, and B-splines extrapolate smoothly beyond the training range via their boundary basis
-    functions. Unlike `CRS`, knots are equidistant rather than placed at data quantiles, so P-splines
-    are somewhat less efficient when the data are very unevenly distributed but are simpler and
-    faster to set up.
+    penalty (together with an appropriately chosen `lambda`) does the work of controlling
+    wiggliness. Equivalent to mgcv's `bs="ps"` basis. P-splines are a good default choice for a
+    single continuous covariate: they are cheap to construct (no eigendecomposition or dense
+    linear solve is needed to build the penalty), the penalty matrix is banded/sparse which keeps
+    large-`k` fits fast, and B-splines extrapolate smoothly beyond the training range via their
+    boundary basis functions. Unlike `CRS`, knots are equidistant rather than placed at data
+    quantiles, so P-splines are somewhat less efficient when the data are very unevenly
+    distributed but are simpler and faster to set up.
 
     Parameters
     ----------

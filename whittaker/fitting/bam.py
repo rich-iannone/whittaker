@@ -194,7 +194,7 @@ def _penalized_solve_disc(
     Xtz = _compute_Xtz(dm, w, z_eff)
 
     S_total = np.zeros((p, p))
-    for lam, pen in zip(sp, dm.penalties):
+    for lam, pen in zip(sp, dm.penalties, strict=False):
         S_total += lam * pen
 
     A = XtWX + S_total
@@ -223,7 +223,7 @@ def _edf_per_smooth_disc(
     XtWX = _compute_XtWX(dm, w)
 
     S_total = np.zeros((p, p))
-    for lam, pen in zip(sp, dm.penalties):
+    for lam, pen in zip(sp, dm.penalties, strict=False):
         S_total += lam * pen
 
     A = XtWX + S_total
@@ -319,7 +319,7 @@ def _reml_objective_disc(
     Xty = _compute_Xtz(dm, w, y)
 
     S_total = np.zeros((p, p))
-    for lam, pen in zip(sp, dm.penalties):
+    for lam, pen in zip(sp, dm.penalties, strict=False):
         S_total += lam * pen
 
     A = XtWX + S_total
@@ -337,7 +337,7 @@ def _reml_objective_disc(
     d_pen = yWy - float(np.dot(beta, Xty))
 
     log_det_A = 2.0 * float(np.sum(np.log(np.diag(cho))))
-    log_det_S = sum(m * rho for m, rho in zip(penalty_ranks, log_sp))
+    log_det_S = sum(m * rho for m, rho in zip(penalty_ranks, log_sp, strict=False))
 
     M = n_unpenalized
     if scale_known:
@@ -358,7 +358,7 @@ def _reml_objective_disc(
         val -= 0.5 * log_det_XtX
 
     grad = np.zeros_like(log_sp)
-    for j, (lam_j, pen_j, m_j) in enumerate(zip(sp, dm.penalties, penalty_ranks)):
+    for j, (lam_j, pen_j, m_j) in enumerate(zip(sp, dm.penalties, penalty_ranks, strict=False)):
         beta_Sj_beta = float(beta @ pen_j @ beta)
         tr_Ainv_Sj = float(np.trace(cho_solve((cho, lower), pen_j)))
         if scale_known:

@@ -72,11 +72,12 @@ class AdaptiveTPRS(TPRS):
 
     where each `S_b` is zero everywhere except in the diagonal entries corresponding to
     eigenvectors in its block, and `\epsilon = 10^{-10}` guards against the (numerically possible)
-    tiny negative eigenvalues that arise from the projection step in `TPRS.fit()`. The total penalty
-    used during model fitting is the weighted sum
-    `\sum_b \lambda_b \, \boldsymbol{\beta}^\top \mathbf{S}_b \boldsymbol{\beta}`, with one smoothing
-    parameter `\lambda_b` per block selected by the outer GCV/REML procedure — this is what allows
-    the fitted smoothness to vary spatially: blocks corresponding to slowly varying eigenvectors can
+    tiny negative eigenvalues that arise from the projection step in `TPRS.fit()`. The total
+    penalty used during model fitting is the weighted sum
+    `\sum_b \lambda_b \, \boldsymbol{\beta}^\top \mathbf{S}_b \boldsymbol{\beta}`, with one
+    smoothing parameter `\lambda_b` per block selected by the outer GCV/REML procedure — this is
+    what allows the fitted smoothness to vary spatially: blocks corresponding to slowly varying
+    eigenvectors can
     receive small `\lambda_b` (little shrinkage, high local flexibility) while blocks corresponding
     to rapidly varying eigenvectors receive large `\lambda_b` (heavy shrinkage), or vice versa,
     according to what the data support in different parts of the covariate space. Since the block

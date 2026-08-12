@@ -39,11 +39,13 @@ class GaussianLS(GAMLSSFamily):
     specific `mu` and `sigma`:
 
     $$
-    f(y \mid \mu, \sigma) = \frac{1}{\sigma\sqrt{2\pi}} \exp\!\left(-\frac{(y-\mu)^2}{2\sigma^2}\right),
+    f(y \mid \mu, \sigma) = \frac{1}{\sigma\sqrt{2\pi}}
+    \exp\!\left(-\frac{(y-\mu)^2}{2\sigma^2}\right),
     $$
 
     so the log-likelihood contribution for a single observation is
-    $\ell_i = -\log\sigma_i - \tfrac{1}{2}\log(2\pi) - \tfrac{1}{2}\left(\frac{y_i - \mu_i}{\sigma_i}\right)^2$.
+    $\ell_i = -\log\sigma_i - \tfrac{1}{2}\log(2\pi)
+    - \tfrac{1}{2}\left(\frac{y_i - \mu_i}{\sigma_i}\right)^2$.
     Unlike `Gaussian`, there is no separate scale parameter to estimate: `sigma` itself is the
     quantity being modeled by its own smooth predictor.
 

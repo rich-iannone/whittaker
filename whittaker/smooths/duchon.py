@@ -57,9 +57,9 @@ class DuchonSpline(SmoothBasis):
     exponent from the covariate dimension. Ordinary TPRS ties the exponent of its radial kernel to
     both the derivative order `m` being penalized and the covariate dimension `d` (exponent
     `2m - d`), which means that for high-dimensional covariates the derivative order actually
-    penalized can end up being uncomfortably high just to keep the kernel well-defined. `DuchonSpline`
-    introduces an independent exponent parameter `s`, so the radial kernel and the polynomial
-    null-space order can be chosen separately. Like TPRS, it is built as a low-rank
+    penalized can end up being uncomfortably high just to keep the kernel well-defined.
+    `DuchonSpline` introduces an independent exponent parameter `s`, so the radial kernel and
+    the polynomial null-space order can be chosen separately. Like TPRS, it is built as a low-rank
     eigen-approximation to the full spline (Wood 2003's construction, generalized to the Duchon
     kernel), so it requires no knot placement and works for any covariate dimension. Choose
     `DuchonSpline` over `TPRS` when you want explicit control over the smoothness/exponent trade-off
@@ -70,9 +70,9 @@ class DuchonSpline(SmoothBasis):
     ----------
     k:
         Total number of basis functions, including the `M` polynomial null-space columns. Must
-        satisfy `k > M` where `M = C(m_order - 1 + d, d)`. Larger `k` allows more wiggly fits at the
-        cost of more computation; the roughness penalty (not `k`) ultimately controls smoothness once
-        `lambda` is chosen. The default is `10`.
+        satisfy `k > M` where `M = C(m_order - 1 + d, d)`. Larger `k` allows more wiggly fits at
+        the cost of more computation; the roughness penalty (not `k`) ultimately controls
+        smoothness once `lambda` is chosen. The default is `10`.
     m:
         Order specification, either:
 
@@ -91,7 +91,10 @@ class DuchonSpline(SmoothBasis):
     The Duchon radial kernel is
 
     $$
-    \eta_s(r) = \begin{cases} r^{2s} & 2s \text{ is not an even integer} \\ r^{2s} \log(r) & 2s \text{ is an even integer} \end{cases},
+    \eta_s(r) = \begin{cases}
+    r^{2s} & 2s \text{ is not an even integer} \\
+    r^{2s} \log(r) & 2s \text{ is an even integer}
+    \end{cases},
     $$
 
     evaluated at pairwise distances `r = ||x_i - x_j||`, with the convention `η(0) = 0`. Together

@@ -22,10 +22,7 @@ from whittaker.model_matrix import build_model_matrix
 def _fit_two_smooth(rng, n=200, corr=0.0):
     """Fit a two-smooth GAM with optionally correlated covariates."""
     x1 = rng.uniform(size=n)
-    if corr > 0:
-        x2 = corr * x1 + (1 - corr) * rng.uniform(size=n)
-    else:
-        x2 = rng.uniform(size=n)
+    x2 = corr * x1 + (1 - corr) * rng.uniform(size=n) if corr > 0 else rng.uniform(size=n)
     y = np.sin(3 * x1) + np.cos(3 * x2) + 0.2 * rng.standard_normal(n)
     model = GAM("y ~ s(x1, k=6) + s(x2, k=6)").fit({"y": y, "x1": x1, "x2": x2})
     return model

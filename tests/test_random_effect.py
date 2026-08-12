@@ -124,7 +124,7 @@ class TestRandomEffectBasis:
     def test_n_basis_before_fit_raises(self):
         basis = RandomEffectBasis()
         with pytest.raises(RuntimeError, match="not available until fit"):
-            basis.n_basis
+            _ = basis.n_basis
 
     def test_k_property_before_and_after_fit(self):
         basis = RandomEffectBasis(k=2)

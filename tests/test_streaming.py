@@ -329,7 +329,7 @@ class TestShouldRefit:
     def test_after_enough_batches(self):
         rng = np.random.default_rng(23)
         model = StreamingGAM("y ~ s(x)")
-        for i in range(12):
+        for _i in range(12):
             n = 30
             x = rng.uniform(0, 2 * np.pi, n)
             y = np.sin(x) + rng.normal(0, 0.3, n)

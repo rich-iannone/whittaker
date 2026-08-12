@@ -602,7 +602,8 @@ class ZeroInflatedNegativeBinomial(GAMLSSFamily):
         Evaluates
 
         $$
-        \ell = \sum_{i: y_i = 0} \log\!\big(\pi_i + (1-\pi_i)\, \mathrm{NB}(0 \mid \mu_i, \theta)\big)
+        \ell = \sum_{i: y_i = 0}
+        \log\!\big(\pi_i + (1-\pi_i)\, \mathrm{NB}(0 \mid \mu_i, \theta)\big)
         + \sum_{i: y_i > 0} \Big[\log(1-\pi_i) + \log \mathrm{NB}(y_i \mid \mu_i, \theta)\Big],
         $$
 

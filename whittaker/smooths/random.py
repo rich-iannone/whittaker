@@ -46,9 +46,9 @@ class RandomEffectBasis(SmoothBasis):
 
     Notes
     -----
-    Let there be `k` unique levels of the grouping factor after `fit()`. The basis matrix `B` is the
-    `n x k` matrix of level indicators, `B[i, j] = 1` if observation `i` belongs to level `j` and `0`
-    otherwise. The penalty matrix is the `k x k` identity,
+    Let there be `k` unique levels of the grouping factor after `fit()`. The basis matrix `B` is
+    the `n x k` matrix of level indicators, `B[i, j] = 1` if observation `i` belongs to level `j`
+    and `0` otherwise. The penalty matrix is the `k x k` identity,
 
     $$
     \mathbf{S} = \mathbf{I}_k,

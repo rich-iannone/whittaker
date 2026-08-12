@@ -7,9 +7,15 @@ import pytest
 
 duckdb = pytest.importorskip("duckdb")
 
-from whittaker.duckdb import DuckDBGAM, _count_rows, _fetch_as_dict, _normalize_source, _stream_as_dict
-from whittaker.families.cox_ph import CoxPH
-from whittaker.families.poisson import Poisson
+from whittaker.duckdb import (  # noqa: E402
+    DuckDBGAM,
+    _count_rows,
+    _fetch_as_dict,
+    _normalize_source,
+    _stream_as_dict,
+)
+from whittaker.families.cox_ph import CoxPH  # noqa: E402
+from whittaker.families.poisson import Poisson  # noqa: E402
 
 
 @pytest.fixture
@@ -22,7 +28,7 @@ def conn_with_sin_data():
 
     conn = duckdb.connect()
     conn.execute("CREATE TABLE sin_data (x DOUBLE, y DOUBLE)")
-    for xi, yi in zip(x, y):
+    for xi, yi in zip(x, y, strict=False):
         conn.execute("INSERT INTO sin_data VALUES (?, ?)", [float(xi), float(yi)])
     return conn
 
@@ -38,7 +44,7 @@ def conn_with_multi_data():
 
     conn = duckdb.connect()
     conn.execute("CREATE TABLE multi_data (x1 DOUBLE, x2 DOUBLE, y DOUBLE)")
-    for x1i, x2i, yi in zip(x1, x2, y):
+    for x1i, x2i, yi in zip(x1, x2, y, strict=False):
         conn.execute(
             "INSERT INTO multi_data VALUES (?, ?, ?)",
             [float(x1i), float(x2i), float(yi)],
@@ -56,7 +62,7 @@ def conn_with_poisson_data():
 
     conn = duckdb.connect()
     conn.execute("CREATE TABLE count_data (x DOUBLE, y DOUBLE)")
-    for xi, yi in zip(x, y):
+    for xi, yi in zip(x, y, strict=False):
         conn.execute("INSERT INTO count_data VALUES (?, ?)", [float(xi), float(yi)])
     return conn
 
@@ -174,10 +180,8 @@ class TestDuckDBGAMPredictions:
 
         conn = duckdb.connect()
         conn.execute("CREATE TABLE cox_data (x DOUBLE, y DOUBLE, event DOUBLE)")
-        for xi, yi, ei in zip(x, time, event):
-            conn.execute(
-                "INSERT INTO cox_data VALUES (?, ?, ?)", [float(xi), float(yi), float(ei)]
-            )
+        for xi, yi, ei in zip(x, time, event, strict=False):
+            conn.execute("INSERT INTO cox_data VALUES (?, ?, ?)", [float(xi), float(yi), float(ei)])
 
         model = DuckDBGAM("y ~ s(x)", family=CoxPH(status="event"))
         model.fit("cox_data", conn)

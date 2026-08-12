@@ -34,12 +34,11 @@ def _point_in_polygon(px: float, py: float, poly: NDArray) -> bool:
     x1, y1 = poly[0]
     for i in range(1, n + 1):
         x2, y2 = poly[i % n]
-        if min(y1, y2) < py <= max(y1, y2):
-            if px <= max(x1, x2):
-                if y1 != y2:
-                    xinters = (py - y1) * (x2 - x1) / (y2 - y1) + x1
-                if y1 == y2 or px <= xinters:
-                    inside = not inside
+        if min(y1, y2) < py <= max(y1, y2) and px <= max(x1, x2):
+            if y1 != y2:
+                xinters = (py - y1) * (x2 - x1) / (y2 - y1) + x1
+            if y1 == y2 or px <= xinters:
+                inside = not inside
         x1, y1 = x2, y2
     return inside
 
@@ -101,7 +100,7 @@ def _fem_matrices(
         i, j, k = simplex
         p = all_pts[[i, j, k]]
 
-        d = np.array(
+        np.array(
             [
                 [p[1, 0] - p[2, 0], p[2, 0] - p[0, 0], p[0, 0] - p[1, 0]],
                 [p[1, 1] - p[2, 1], p[2, 1] - p[0, 1], p[0, 1] - p[1, 1]],
@@ -196,7 +195,8 @@ class SoapFilm(SmoothBasis):
 
     $$
     \mathbf{S} = \mathbf{K}_{\text{interior}}, \qquad
-    \boldsymbol{\beta}^\top \mathbf{S} \boldsymbol{\beta} = \int_\Omega \lVert \nabla f \rVert^2 \, dA,
+    \boldsymbol{\beta}^\top \mathbf{S} \boldsymbol{\beta} =
+    \int_\Omega \lVert \nabla f \rVert^2 \, dA,
     $$
 
     the discretized Dirichlet energy (membrane/thin-film bending energy) of the fitted surface over

@@ -260,8 +260,9 @@ class GAMClassifier(BaseEstimator, ClassifierMixin):  # type: ignore[misc]
     returns probability columns ordered to match `self.classes_` (column 0 is `P(y = classes_[0])`,
     column 1 is `P(y = classes_[1])`). This makes `GAMClassifier` compatible with `Pipeline`,
     `GridSearchCV`/`RandomizedSearchCV` (scored via `"accuracy"`, `"roc_auc"`, or a custom scorer),
-    and any tooling that consumes `predict_proba`, such as `sklearn.calibration.CalibratedClassifierCV`
-    or manual decision-threshold tuning on the predicted probabilities.
+    and any tooling that consumes `predict_proba`, such as
+    `sklearn.calibration.CalibratedClassifierCV` or manual decision-threshold tuning on the
+    predicted probabilities.
 
     Parameters
     ----------

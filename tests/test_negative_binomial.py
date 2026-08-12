@@ -35,7 +35,7 @@ class TestNBGAMFit:
         y = _simulate_nb(rng, n, x, mu, true_theta)
 
         fam = NegativeBinomial(theta=1.0)
-        model = GAM("y ~ s(x, k=10)", family=fam).fit({"y": y, "x": x})
+        GAM("y ~ s(x, k=10)", family=fam).fit({"y": y, "x": x})
         # θ should be estimated near the true value
         assert 1.0 < fam.theta < 10.0
 

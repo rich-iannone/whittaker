@@ -470,7 +470,7 @@ class TestTPRSNumericalProperties:
         M = basis.null_space_dimension()
 
         # Each of the M polynomial basis vectors should be in the null space of S.
-        B = basis.basis_matrix(x)
+        basis.basis_matrix(x)
         for j in range(M):
             Sv = S @ np.eye(10)[:, j]
             assert_allclose(Sv, 0.0, atol=1e-12)

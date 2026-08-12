@@ -3,7 +3,7 @@ r"""Term representations for model formulas."""
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Union
+from typing import Any
 
 
 @dataclass
@@ -182,7 +182,7 @@ class SmoothTerm:
 
 
 #: Union type covering all concrete term types.
-Term = Union[LinearTerm, SmoothTerm, InteractionTerm, OffsetTerm]
+Term = LinearTerm | SmoothTerm | InteractionTerm | OffsetTerm
 
 
 @dataclass

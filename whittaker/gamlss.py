@@ -22,9 +22,9 @@ class GAMLSSPrediction:
 
     Holds, for every distributional parameter in the fitted `GAMLSSFamily`, the predicted value on
     the response scale (`values`), the corresponding linear predictor (`linear_predictors`), and
-    optionally the standard error of that linear predictor (`se`). Because a GAMLSS estimates several
-    parameters at once (for example `mu` and `sigma` of a location-scale family), the results are
-    keyed by parameter name rather than returned as a single array.
+    optionally the standard error of that linear predictor (`se`). Because a GAMLSS estimates
+    several parameters at once (for example `mu` and `sigma` of a location-scale family), the
+    results are keyed by parameter name rather than returned as a single array.
 
     Attributes
     ----------
@@ -50,8 +50,8 @@ class GAMLSS:
     A GAMLSS extends the ordinary GAM by allowing every parameter of the response distribution, not
     just its mean, to depend on covariates through its own smooth additive predictor. For a
     distribution with parameters `theta_1, ..., theta_K` (e.g. location `mu`, scale `sigma`, and
-    possibly shape parameters `nu`, `tau`), each parameter has its own link function `g_k` and its own
-    formula:
+    possibly shape parameters `nu`, `tau`), each parameter has its own link function `g_k` and its
+    own formula:
 
     $$g_k(\theta_k) = \eta_k = X_k \beta_k, \quad k = 1, \dots, K$$
 
@@ -78,17 +78,18 @@ class GAMLSS:
     Notes
     -----
     Rigby & Stasinopoulos (2005) formulate GAMLSS fitting as penalized maximum likelihood. Within
-    each outer RS iteration, and for each parameter `theta_k` in turn, a working response and weight
-    are formed from the score and Fisher information of the log-likelihood with respect to `theta_k`:
+    each outer RS iteration, and for each parameter `theta_k` in turn, a working response and
+    weight are formed from the score and Fisher information of the log-likelihood with respect to
+    `theta_k`:
 
     $$z_k = \eta_k + \frac{\partial \ell / \partial \theta_k}{\partial^2 \ell / \partial \theta_k^2}
     \cdot g_k'(\theta_k), \qquad w_k = -\frac{\partial^2 \ell}{\partial \theta_k^2}
     \Big/ g_k'(\theta_k)^2$$
 
-    and a penalized weighted least squares problem is solved for `beta_k`, with all other parameters
-    held at their current fitted values. Smoothing parameters for each parameter's smooth terms can be
-    selected by GCV, REML, or ML at every inner iteration. The algorithm alternates over parameters
-    until the global deviance `-2 * log_likelihood` stops improving.
+    and a penalized weighted least squares problem is solved for `beta_k`, with all other
+    parameters held at their current fitted values. Smoothing parameters for each parameter's
+    smooth terms can be selected by GCV, REML, or ML at every inner iteration. The algorithm
+    alternates over parameters until the global deviance `-2 * log_likelihood` stops improving.
 
     Examples
     --------
@@ -427,8 +428,8 @@ class GAMLSS:
             scale. Otherwise return a `GAMLSSPrediction` with all parameters.
         se:
             If `True`, compute standard errors on the linear predictor scale for each parameter,
-            using the Bayesian covariance `V_beta_k = (X_k' W_k X_k + S_k)^{-1}` implied by the final
-            IRLS weights and smoothing parameters for that parameter.
+            using the Bayesian covariance `V_beta_k = (X_k' W_k X_k + S_k)^{-1}` implied by the
+            final IRLS weights and smoothing parameters for that parameter.
 
         Returns
         -------

@@ -1,10 +1,11 @@
 """BigGAM: large-scale GAM fitting via discretized covariates.
 
-Provides `BigGAM`, a drop-in replacement for `~whittaker.gam.GAM` that avoids materializing the full
-`n x p` design matrix. Instead, each covariate is rounded (independently, then combined) to a grid of
-at most `n_discrete` representative values, and the smooth basis is evaluated only once per unique
-combination of discretized values rather than once per observation. Each observation is mapped back
-to its bin through an index array, and the `X'WX` cross-product needed by P-IRLS is accumulated
+Provides `BigGAM`, a drop-in replacement for `~whittaker.gam.GAM` that avoids materializing the
+full `n x p` design matrix. Instead, each covariate is rounded (independently, then combined) to
+a grid of at most `n_discrete` representative values, and the smooth basis is evaluated only
+once per unique combination of discretized values rather than once per observation. Each
+observation is mapped back to its bin through an index array, and the `X'WX` cross-product
+needed by P-IRLS is accumulated
 directly from the per-bin basis rows and bin membership counts (see `_compute_XtWX` and
 `build_discretized_model_matrix`). This makes memory usage roughly `O(d p)` instead of `O(n p)`
 (where `d` is the number of unique discretized rows and `d << n` for large datasets), and speeds up
@@ -594,7 +595,7 @@ class BigGAM(GAM):
         XtWX = _compute_XtWX(dm, wt)
         p = dm.n_cols
         S_total = np.zeros((p, p))
-        for lam, pen in zip(fit.smoothing_params, dm.penalties):
+        for lam, pen in zip(fit.smoothing_params, dm.penalties, strict=False):
             S_total += lam * pen
         A = XtWX + S_total
         A = (A + A.T) * 0.5

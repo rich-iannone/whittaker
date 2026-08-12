@@ -159,7 +159,9 @@ class Family(ABC):
 
     @abstractmethod
     def deviance(self, y: NDArray, mu: NDArray, *, weights: NDArray | None = None) -> float:
-        r"""Total (unscaled) deviance $D(y, \hat\mu) = 2 \sum_i [\ell(y_i; y_i) - \ell(y_i; \hat\mu_i)]$.
+        r"""Total (unscaled) deviance.
+
+        $D(y, \hat\mu) = 2 \sum_i [\ell(y_i; y_i) - \ell(y_i; \hat\mu_i)]$.
 
         The deviance measures the discrepancy between the fitted model and a saturated model
         that fits the data exactly. It is used by `GAM.fit()` for smoothing parameter selection
@@ -270,7 +272,8 @@ class Family(ABC):
         response `z` and working weights `W` directly rather than deriving them from `link`,
         `link_derivative`, and `variance`. Returning `None` (the default) tells the P-IRLS loop
         to fall back to the standard GLM formula
-        `z = eta + (y - mu) * link_derivative(mu)`, `W = 1 / (link_derivative(mu)^2 * variance(mu))`.
+        `z = eta + (y - mu) * link_derivative(mu)`,
+        `W = 1 / (link_derivative(mu)^2 * variance(mu))`.
 
         Parameters
         ----------

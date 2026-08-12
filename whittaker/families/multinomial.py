@@ -54,7 +54,8 @@ class Multinomial(Family):
     shared linear predictor `eta`:
 
     $$
-    P(Y = k \mid \eta) = \frac{\exp(\alpha_k + \beta_k \eta)}{\sum_{j=1}^{K} \exp(\alpha_j + \beta_j \eta)},
+    P(Y = k \mid \eta) = \frac{\exp(\alpha_k + \beta_k \eta)}
+    {\sum_{j=1}^{K} \exp(\alpha_j + \beta_j \eta)},
     \qquad \alpha_K = \beta_K = 0.
     $$
 
@@ -208,7 +209,8 @@ class Multinomial(Family):
         return mu
 
     def link_inverse(self, eta: NDArray) -> NDArray:
-        r"""Identity inverse link, implementing the family-specific `link_inverse` for `Multinomial`.
+        r"""Identity inverse link, implementing the family-specific `link_inverse` for
+        `Multinomial`.
 
         Complements `link`: since `eta` is passed straight through to `_category_probs`
         for the softmax computation, the inverse link is also the identity,
@@ -227,7 +229,8 @@ class Multinomial(Family):
         return eta
 
     def link_derivative(self, mu: NDArray) -> NDArray:
-        r"""Derivative of the identity link, implementing the family-specific version for `Multinomial`.
+        r"""Derivative of the identity link, implementing the family-specific version for
+        `Multinomial`.
 
         Since `link` is the identity, $g'(\mu) = 1$ everywhere.
 
@@ -244,7 +247,8 @@ class Multinomial(Family):
         return np.ones_like(mu)
 
     def variance(self, mu: NDArray) -> NDArray:
-        """Constant variance function, implementing the family-specific `variance` for `Multinomial`.
+        """Constant variance function, implementing the family-specific `variance` for
+        `Multinomial`.
 
         The multinomial log-likelihood does not follow the mean-variance relationship
         used by standard GLM families; the working weights used by P-IRLS are instead
@@ -265,7 +269,8 @@ class Multinomial(Family):
         return np.ones_like(mu)
 
     def irls_update(self, y: NDArray, mu: NDArray, eta: NDArray) -> tuple[NDArray, NDArray]:
-        r"""Compute the P-IRLS working response and weights, implementing the family-specific update for `Multinomial`.
+        r"""Compute the P-IRLS working response and weights, implementing the family-specific
+        update for `Multinomial`.
 
         Overrides the default GLM IRLS step: because the multinomial deviance is not a
         standard exponential-family deviance in `eta`, this method first re-estimates the
@@ -323,8 +328,8 @@ class Multinomial(Family):
                 b_j = self._betas[j]
                 grad += b_j * (indicator - p[j])
                 hess -= b_j**2 * p[j] * (1.0 - p[j])
-                for l in range(j + 1, K - 1):
-                    hess += 2.0 * self._betas[j] * self._betas[l] * p[j] * p[l]
+                for m in range(j + 1, K - 1):
+                    hess += 2.0 * self._betas[j] * self._betas[m] * p[j] * p[m]
 
             dl_deta[i] = grad
             d2l_deta2[i] = -hess
@@ -334,7 +339,8 @@ class Multinomial(Family):
         return z, W
 
     def deviance(self, y: NDArray, mu: NDArray, *, weights: NDArray | None = None) -> float:
-        r"""Total multinomial deviance, implementing the family-specific `deviance` for `Multinomial`.
+        r"""Total multinomial deviance, implementing the family-specific `deviance` for
+        `Multinomial`.
 
         Computes $-2$ times the multinomial log-likelihood of the observed categories
         `y` under the fitted category probabilities implied by the linear predictor
@@ -378,7 +384,8 @@ class Multinomial(Family):
         return dev
 
     def unit_deviance(self, y: NDArray, mu: NDArray) -> NDArray:
-        r"""Per-observation deviance contributions, implementing the family-specific version for `Multinomial`.
+        r"""Per-observation deviance contributions, implementing the family-specific version for
+        `Multinomial`.
 
         For each observation `i`, returns $-2 \log \hat P(Y_i = y_i \mid \eta_i)$, the
         per-observation contribution to `deviance`. Returns an array of ones if the
@@ -448,7 +455,8 @@ class Multinomial(Family):
         return True
 
     def simulate(self, mu: NDArray, scale: float, rng: object) -> NDArray:
-        """Draw random responses from the fitted category probabilities, implementing the family-specific `simulate` for `Multinomial`.
+        """Draw random responses from the fitted category probabilities, implementing the
+        family-specific `simulate` for `Multinomial`.
 
         For each observation, computes the category probabilities from the linear
         predictor `eta = mu` via `_category_probs` and draws one category from

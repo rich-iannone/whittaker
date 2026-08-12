@@ -763,9 +763,7 @@ class TestReMLObjectiveEdgeCases:
         penalties = [-np.eye(3)]
         log_sp = np.array([0.0])
 
-        val, grad = _reml_objective(
-            log_sp, X, y, penalties, [3], 0, scale_known=True, scale=1.0
-        )
+        val, grad = _reml_objective(log_sp, X, y, penalties, [3], 0, scale_known=True, scale=1.0)
         assert val == 1e20
         assert_allclose(grad, np.zeros_like(log_sp))
 

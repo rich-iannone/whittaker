@@ -66,7 +66,7 @@ def partial_effects(
     p = X_train.shape[1]
     XtX = X_train.T @ X_train
     S_total = np.zeros_like(XtX)
-    for lam, pen in zip(sp, mm.penalties):
+    for lam, pen in zip(sp, mm.penalties, strict=False):
         S_total += lam * pen
     A = XtX + S_total
     A = (A + A.T) * 0.5
@@ -148,7 +148,11 @@ def _partial_effect_1d(
         "lower": (f_j - z_val * se_j).tolist(),
         "upper": (f_j + z_val * se_j).tolist(),
     }
-    source = alt.Data(values=[dict(zip(data_dict, t)) for t in zip(*data_dict.values())])
+    source = alt.Data(
+        values=[
+            dict(zip(data_dict, t, strict=False)) for t in zip(*data_dict.values(), strict=False)
+        ]
+    )
 
     band = (
         alt.Chart(source)
@@ -453,7 +457,7 @@ def check(
         qq_data = alt.Data(
             values=[
                 {"theoretical": float(t), "observed": float(o)}
-                for t, o in zip(theoretical_q, sorted_resid)
+                for t, o in zip(theoretical_q, sorted_resid, strict=False)
             ]
         )
 
@@ -484,7 +488,8 @@ def check(
     if "residuals" in selected:
         resid_fit_data = alt.Data(
             values=[
-                {"fitted": float(f), "residual": float(r)} for f, r in zip(fitted, pearson_resid)
+                {"fitted": float(f), "residual": float(r)}
+                for f, r in zip(fitted, pearson_resid, strict=False)
             ]
         )
 
@@ -518,7 +523,10 @@ def check(
 
     if "response" in selected:
         resp_fit_data = alt.Data(
-            values=[{"fitted": float(f), "response": float(y)} for f, y in zip(fitted, response)]
+            values=[
+                {"fitted": float(f), "response": float(y)}
+                for f, y in zip(fitted, response, strict=False)
+            ]
         )
 
         resp_range_min = float(min(np.min(fitted), np.min(response)))

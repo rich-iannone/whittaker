@@ -104,7 +104,8 @@ class GaussianProcess(SmoothBasis):
     The basis functions evaluated at new points `x*` are
 
     $$
-    \mathbf{B}(x^*) = \mathbf{C}(x^*, x_{\text{train}}) \, \mathbf{U} \, \operatorname{diag}(d_1, \ldots, d_k)^{-1},
+    \mathbf{B}(x^*) = \mathbf{C}(x^*, x_{\text{train}}) \, \mathbf{U} \,
+    \operatorname{diag}(d_1, \ldots, d_k)^{-1},
     $$
 
     i.e. the covariance between `x*` and the training points, projected onto the retained

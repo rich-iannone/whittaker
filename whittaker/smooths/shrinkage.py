@@ -34,39 +34,42 @@ def _null_space_penalty(S: NDArray) -> NDArray:
 class ShrinkageTPRS(TPRS):
     r"""Shrinkage Thin Plate Regression Spline.
 
-    Equivalent to mgcv's `bs="ts"` basis. Ordinary penalized smooths (such as `TPRS`) always leave a
-    low-dimensional null space — typically the constant and linear terms — completely unpenalized, so
-    even a very large smoothing parameter `lambda` cannot remove the term from the model entirely: the
-    fit can be flattened to a straight line, but not to exactly zero. `ShrinkageTPRS` fixes this by
-    adding a second penalty that acts specifically on the null space, using the double-penalty
-    construction of Marra & Wood (2011). With two independently-chosen smoothing parameters, the
-    fitting machinery can drive both the wiggly part and the null-space part of the smooth to zero
-    simultaneously, so the whole term can be shrunk out of the model. This makes `ShrinkageTPRS` a good
-    choice over plain `TPRS` whenever a term's inclusion is itself uncertain and you want automatic
-    variable selection via GCV or REML rather than a separate hypothesis test.
+    Equivalent to mgcv's `bs="ts"` basis. Ordinary penalized smooths (such as `TPRS`) always leave
+    a low-dimensional null space — typically the constant and linear terms — completely
+    unpenalized, so even a very large smoothing parameter `lambda` cannot remove the term from the
+    model entirely: the fit can be flattened to a straight line, but not to exactly zero.
+    `ShrinkageTPRS` fixes this by adding a second penalty that acts specifically on the null space,
+    using the double-penalty construction of Marra & Wood (2011). With two independently-chosen
+    smoothing parameters, the fitting machinery can drive both the wiggly part and the null-space
+    part of the smooth to zero simultaneously, so the whole term can be shrunk out of the model.
+    This makes `ShrinkageTPRS` a good choice over plain `TPRS` whenever a term's inclusion is
+    itself uncertain and you want automatic variable selection via GCV or REML rather than a
+    separate hypothesis test.
 
     The basis functions are identical to `TPRS` (`bs="tp"`); only the penalty structure differs.
 
     Parameters
     ----------
     k:
-        Total number of basis functions, including the `M` null-space columns. The default is `10`.
-        See `TPRS` for guidance on choosing `k`.
+        Total number of basis functions, including the `M` null-space columns. The default is
+        `10`. See `TPRS` for guidance on choosing `k`.
     m:
-        Spline order. Must satisfy `2m > d` where `d` is the covariate dimension. The default is `2`.
-        See `TPRS` for guidance on choosing `m`.
+        Spline order. Must satisfy `2m > d` where `d` is the covariate dimension. The default is
+        `2`. See `TPRS` for guidance on choosing `m`.
 
     Notes
     -----
     `ShrinkageTPRS` reuses the exact basis construction of `TPRS`: the first `M` columns span the
     polynomial null space (degree `<= m - 1` monomials) and the remaining `k - M` columns are the
-    truncated eigenbasis of the projected thin-plate kernel. What changes is the penalty. Instead of a
-    single penalty matrix, `penalty_matrices()` returns **two** matrices:
+    truncated eigenbasis of the projected thin-plate kernel. What changes is the penalty. Instead
+    of a single penalty matrix, `penalty_matrices()` returns **two** matrices:
 
     $$
-    \mathbf{S}_{\text{wiggle}} = \operatorname{diag}(0, \ldots, 0, \lambda_1, \ldots, \lambda_{k-M}),
+    \mathbf{S}_{\text{wiggle}} = \operatorname{diag}(0, \ldots, 0, \lambda_1, \ldots,
+    \lambda_{k-M}),
     \qquad
-    \mathbf{S}_{\text{null}} = \begin{pmatrix} \mathbf{I}_M & \mathbf{0} \\ \mathbf{0} & \mathbf{0} \end{pmatrix},
+    \mathbf{S}_{\text{null}} = \begin{pmatrix} \mathbf{I}_M & \mathbf{0} \\ \mathbf{0} &
+    \mathbf{0} \end{pmatrix},
     $$
 
     where `S_wiggle` is exactly the ordinary `TPRS` penalty (zero on the null-space block) and
@@ -79,12 +82,13 @@ class ShrinkageTPRS(TPRS):
     + \lambda_{\text{null}} \, \boldsymbol{\beta}^\top \mathbf{S}_{\text{null}} \boldsymbol{\beta}.
     $$
 
-    Because `S_wiggle + S_null` is strictly positive definite (it has no zero eigenvalues once both
-    penalties act together), the combined penalty null space is empty, which is why
-    `null_space_dimension()` returns `0` for this basis — none of the `k` basis functions is exempt
-    from penalization once both smoothing parameters are positive. If `lambda_null` is estimated to be
-    very large during fitting, the null-space coefficients are effectively zeroed and the term is
-    excluded from the model, which is the mechanism behind automatic term selection.
+    Because `S_wiggle + S_null` is strictly positive definite (it has no zero eigenvalues once
+    both penalties act together), the combined penalty null space is empty, which is why
+    `null_space_dimension()` returns `0` for this basis — none of the `k` basis functions is
+    exempt from penalization once both smoothing parameters are positive. If `lambda_null` is
+    estimated to be very large during fitting, the null-space coefficients are effectively zeroed
+    and the term is excluded from the model, which is the mechanism behind automatic term
+    selection.
 
     Examples
     --------
@@ -139,29 +143,30 @@ class ShrinkageCRS(CRS):
     r"""Shrinkage Cubic Regression Spline.
 
     Equivalent to mgcv's `bs="cs"` basis. `CRS` penalizes only the curvature of a natural cubic
-    spline, leaving its 2-dimensional null space of constant and linear functions completely free —
-    a large smoothing parameter flattens the fit to a line, but never removes it from the model.
-    `ShrinkageCRS` adds a second penalty, built directly from the eigenstructure of the ordinary CRS
-    penalty, that specifically targets this null space. Following the double-penalty approach of
-    Marra & Wood (2011), the two penalties are given independent smoothing parameters during fitting,
-    so that both the wiggly and the linear/constant parts of the term can be shrunk simultaneously,
-    letting the term drop out of the model entirely. Prefer `ShrinkageCRS` over plain `CRS` for
-    univariate terms whose presence in the model is uncertain and where automatic selection via GCV
-    or REML is preferred over an explicit inclusion/exclusion test.
+    spline, leaving its 2-dimensional null space of constant and linear functions completely free
+    — a large smoothing parameter flattens the fit to a line, but never removes it from the model.
+    `ShrinkageCRS` adds a second penalty, built directly from the eigenstructure of the ordinary
+    CRS penalty, that specifically targets this null space. Following the double-penalty approach
+    of Marra & Wood (2011), the two penalties are given independent smoothing parameters during
+    fitting, so that both the wiggly and the linear/constant parts of the term can be shrunk
+    simultaneously, letting the term drop out of the model entirely. Prefer `ShrinkageCRS` over
+    plain `CRS` for univariate terms whose presence in the model is uncertain and where automatic
+    selection via GCV or REML is preferred over an explicit inclusion/exclusion test.
 
     The basis functions are identical to `CRS` (`bs="cr"`); only the penalty structure differs.
 
     Parameters
     ----------
     k:
-        Number of basis functions (equal to the number of knots). Must be at least `3`. The default
-        is `10`. See `CRS` for guidance on choosing `k`.
+        Number of basis functions (equal to the number of knots). Must be at least `3`. The
+        default is `10`. See `CRS` for guidance on choosing `k`.
 
     Notes
     -----
-    `ShrinkageCRS` reuses the exact basis construction of `CRS`: `k` knots at evenly-spaced quantiles
-    of the training data, with the design matrix built from natural-cubic-spline basis functions
-    (see `CRS` for the full construction). What changes is the penalty. The ordinary CRS penalty is
+    `ShrinkageCRS` reuses the exact basis construction of `CRS`: `k` knots at evenly-spaced
+    quantiles of the training data, with the design matrix built from natural-cubic-spline basis
+    functions (see `CRS` for the full construction). What changes is the penalty. The ordinary CRS
+    penalty is
 
     $$
     \mathbf{S}_{\text{wiggle}} = \mathbf{Q} \mathbf{R}^{-1} \mathbf{Q}^\top,

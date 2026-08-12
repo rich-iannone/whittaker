@@ -148,7 +148,7 @@ class ConformalPredictor:
 
     def _predict_cv_plus(self, new_data: InputData) -> ConformalResult:
         new_data = prepare_data(new_data)
-        n_cal = len(self.calibration_scores)
+        len(self.calibration_scores)
         n_folds = len(self._models)
         n_new = len(next(iter(new_data.values())))
 
@@ -279,9 +279,10 @@ def conformal_fit(
     \quad \text{quantile of} \quad \{|y_i - \hat\mu(x_i)| : i \in \text{calibration set}\},$$
 
     which, under exchangeability of calibration and test points, guarantees
-    `P(y \in [\hat\mu(x) - \hat q, \hat\mu(x) + \hat q]) \ge \text{level}` marginally over new draws.
-    CV+ and jackknife+ replace this single quantile with, for each test point, the appropriate
-    quantile of the `n` (or `n_folds`) values `{fold/LOO prediction +/- that fold's residual}`,
+    `P(y \in [\hat\mu(x) - \hat q, \hat\mu(x) + \hat q]) \ge \text{level}` marginally over new
+    draws. CV+ and jackknife+ replace this single quantile with, for each test point, the
+    appropriate quantile of the `n` (or `n_folds`) values
+    `{fold/LOO prediction +/- that fold's residual}`,
     trading extra computation for tighter, locally-adapted intervals while retaining the same
     finite-sample coverage guarantee.
 

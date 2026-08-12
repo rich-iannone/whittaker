@@ -260,7 +260,7 @@ class TestPSplineBasisMatrix:
         ps = PSpline(k=10, degree=1, m=1).fit(x)
         B = ps.basis_matrix(x)
         # Fit a linear function via regression (no penalty).
-        knot_vals = np.linspace(0.0, 1.0, 10)
+        np.linspace(0.0, 1.0, 10)
         coef, *_ = np.linalg.lstsq(B, x, rcond=None)
         assert_allclose(B @ coef, x, atol=1e-6)
 
