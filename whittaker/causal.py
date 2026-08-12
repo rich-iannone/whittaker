@@ -1,4 +1,4 @@
-"""Causal GAMs: partially linear models and double machine learning.
+r"""Causal GAMs: partially linear models and double machine learning.
 
 Implements causal inference with GAM-based nuisance estimation:
 
@@ -28,26 +28,32 @@ from whittaker.gam import GAM
 
 @dataclass
 class TreatmentEffect:
-    """Average treatment effect estimate with inference.
+    r"""Average treatment effect estimate with inference.
+
+    Returned by `CausalGAM.treatment_effect()`, this holds the debiased/double-machine-learning
+    estimate of the average treatment effect (ATE) together with its standard error, confidence
+    interval, and a Wald test against the null of no effect.
 
     Attributes
     ----------
     ate:
-        Estimated average treatment effect.
+        Estimated average treatment effect: the coefficient `theta` in the partially linear model
+        `Y = theta * D + f(X) + eps`, or its interactive-model analogue.
     se:
-        Standard error of the ATE estimate.
+        Standard error of the ATE estimate, computed from the influence function of the DML moment
+        condition.
     ci_lower:
-        Lower bound of the confidence interval.
+        Lower bound of the `level`-confidence interval, `ate - z * se`.
     ci_upper:
-        Upper bound of the confidence interval.
+        Upper bound of the `level`-confidence interval, `ate + z * se`.
     level:
-        Confidence level.
+        Confidence level used to construct the interval (e.g. `0.95`).
     p_value:
-        Two-sided p-value for H0: ATE = 0.
+        Two-sided p-value for `H0: ATE = 0`, from a normal (Wald) approximation.
     method:
-        Estimation method used.
+        Estimation method used (`"partially_linear"` or `"interactive"`).
     n_obs:
-        Number of observations.
+        Number of observations used in estimation.
     """
 
     ate: float
@@ -69,24 +75,28 @@ class TreatmentEffect:
 
 @dataclass
 class CATEResult:
-    """Conditional average treatment effect estimates.
+    r"""Conditional average treatment effect estimates.
+
+    Returned by `CausalGAM.cate()` when the model was fit with `method="interactive"`. Represents
+    the treatment effect as a smooth function of one confounder variable, evaluated on a grid (or on
+    user-supplied covariate data), together with pointwise confidence bands.
 
     Attributes
     ----------
     x:
-        Covariate values at which CATE is evaluated.
+        Covariate values of `variable` at which CATE is evaluated.
     cate:
-        CATE estimates.
+        CATE estimates, `tau(x) = E[Y(1) - Y(0) | X = x]`, at each value of `x`.
     se:
-        Standard errors.
+        Standard errors of the CATE estimates.
     lower:
-        Lower CI bounds.
+        Lower pointwise confidence bounds, `cate - z * se`.
     upper:
-        Upper CI bounds.
+        Upper pointwise confidence bounds, `cate + z * se`.
     variable:
-        Name of the conditioning variable.
+        Name of the conditioning (confounder) variable that CATE is plotted against.
     level:
-        Confidence level.
+        Confidence level used for the bands.
     """
 
     x: NDArray
@@ -100,24 +110,32 @@ class CATEResult:
 
 @dataclass
 class MediationResult:
-    """Mediation analysis results.
+    r"""Mediation analysis results.
+
+    Returned by `mediation_analysis()`. Decomposes the total effect of a treatment on an outcome
+    into a direct component (not passing through the mediator) and an indirect component (passing
+    through the mediator), following the potential-outcomes framework of Imai, Keele, & Tingley
+    (2010). Standard errors are obtained by a nonparametric bootstrap over the whole estimation
+    procedure (refitting both the mediator and outcome GAMs on each resample).
 
     Attributes
     ----------
     total_effect:
-        Total effect of treatment on outcome.
+        Total effect of treatment on outcome, `direct_effect + indirect_effect`.
     direct_effect:
-        Direct effect (not through mediator).
+        Direct effect of treatment on outcome, holding the mediator fixed at its value under
+        treatment (natural direct effect).
     indirect_effect:
-        Indirect effect (through mediator).
+        Indirect effect of treatment on outcome operating through the mediator (natural indirect
+        effect).
     proportion_mediated:
-        Fraction of total effect mediated.
+        Fraction of the total effect attributable to the mediator, `indirect_effect / total_effect`.
     total_se:
-        SE of total effect.
+        Bootstrap standard error of the total effect.
     direct_se:
-        SE of direct effect.
+        Bootstrap standard error of the direct effect.
     indirect_se:
-        SE of indirect effect.
+        Bootstrap standard error of the indirect effect.
     n_obs:
         Number of observations.
     """
@@ -143,10 +161,28 @@ class MediationResult:
 
 
 class CausalGAM:
-    """Causal GAM for treatment effect estimation.
+    r"""Causal GAM for treatment effect estimation.
 
-    Uses double/debiased machine learning (DML) with GAM nuisance functions to estimate treatment
-    effects that are robust to regularization bias.
+    Estimates the causal effect of a treatment `D` on an outcome `Y`, controlling for a set of
+    confounders `X`, using double/debiased machine learning (DML; Chernozhukov et al. 2018) with GAM
+    nuisance models. Two structural forms are supported:
+
+    - **Partially linear** (`method="partially_linear"`): `Y = theta * D + f(X) + eps`, giving a
+      single constant average treatment effect (ATE) `theta`.
+    - **Interactive** (`method="interactive"`): `Y = g(D, X) + eps`, allowing the treatment effect
+      to vary smoothly with `X` (conditional average treatment effect, CATE).
+
+    DML addresses the regularization bias that arises when flexible, penalized nuisance models
+    (here, GAMs for `E[Y | X]` and `E[D | X]`) are plugged directly into a naive treatment-effect
+    estimator: the smoothing bias in the nuisance fits would otherwise leak into the treatment
+    effect estimate. Cross-fitting (fitting nuisance models on one subset of folds and evaluating
+    residuals on the held-out fold) together with a Neyman-orthogonal moment condition makes the
+    resulting ATE estimate root-n consistent and asymptotically normal even though the nuisance GAMs
+    converge at slower nonparametric rates.
+
+    Use `CausalGAM` for observational-data effect estimation where confounding is plausibly
+    captured by smooth functions of observed covariates, and you want valid inference (standard
+    errors, confidence intervals) on the treatment effect rather than just a point prediction.
 
     Parameters
     ----------
@@ -155,14 +191,60 @@ class CausalGAM:
     treatment:
         Name of the treatment variable.
     confounders:
-        List of confounder variable names.
+        List of confounder variable names. Both the outcome and treatment nuisance GAMs use
+        `s(c)` smooth terms for each confounder `c`.
     method:
         `"partially_linear"` (default) for constant ATE, or `"interactive"` for heterogeneous
-        treatment effects.
+        treatment effects (enables `.cate()`).
     family:
-        Response distribution for the outcome model.
+        Response distribution for the outcome nuisance model. Defaults to `Gaussian()`. The
+        treatment nuisance model always uses `Gaussian()` regardless of this setting, since DML
+        residualizes the treatment via its conditional mean.
     n_folds:
-        Number of cross-fitting folds for DML (default `5`).
+        Number of cross-fitting folds for DML (default `5`). Each fold's nuisance models are fit on
+        the other `n_folds - 1` folds and evaluated on the held-out fold to avoid overfitting bias.
+
+    Notes
+    -----
+    Fitting proceeds in three steps. First, cross-fitted residuals are formed for both outcome and
+    treatment:
+
+    $$\hat\varepsilon_{Y,i} = Y_i - \hat m_Y(X_i), \qquad
+    \hat\varepsilon_{D,i} = D_i - \hat m_D(X_i)$$
+
+    where `\hat m_Y` and `\hat m_D` are GAM estimates of `E[Y \mid X]` and `E[D \mid X]`, each fit on
+    folds excluding observation `i`. Second, the ATE is estimated by the residual-on-residual
+    regression (the partialling-out estimator):
+
+    $$\hat\theta = \frac{\sum_i \hat\varepsilon_{D,i} \, \hat\varepsilon_{Y,i}}
+    {\sum_i \hat\varepsilon_{D,i}^2}$$
+
+    Third, its standard error is derived from the empirical variance of the Neyman-orthogonal score
+    $\psi_i = \hat\varepsilon_{D,i}(\hat\varepsilon_{Y,i} - \hat\theta \hat\varepsilon_{D,i})$:
+
+    $$\widehat{\mathrm{se}}(\hat\theta) = \sqrt{\frac{\overline{\psi^2}}
+    {\left(\sum_i \hat\varepsilon_{D,i}^2\right)^{2} / n}}$$
+
+    When `method="interactive"`, a further GAM is fit on the pseudo-outcome
+    `\hat\varepsilon_{Y,i} / \hat\varepsilon_{D,i}`, weighted by `\hat\varepsilon_{D,i}^2`, to recover
+    the CATE as a smooth function of the confounders.
+
+    Examples
+    --------
+    ```{python}
+    import numpy as np
+    from whittaker.causal import CausalGAM
+
+    rng = np.random.default_rng(0)
+    n = 1000
+    x = rng.uniform(0, 1, n)
+    d = rng.binomial(1, 1 / (1 + np.exp(-(2 * x - 1))), n).astype(float)
+    y = 1.5 * d + np.sin(2 * np.pi * x) + rng.normal(scale=0.3, size=n)
+
+    model = CausalGAM(outcome="y", treatment="d", confounders=["x"], n_folds=5)
+    model.fit({"x": x, "d": d, "y": y}, seed=0)
+    print(model.treatment_effect())
+    ```
     """
 
     def __init__(
@@ -222,16 +304,23 @@ class CausalGAM:
         select: bool = False,
         seed: int | None = None,
     ) -> CausalGAM:
-        """Fit the causal GAM via cross-fitted DML.
+        r"""Fit the causal GAM via cross-fitted DML.
+
+        Randomly assigns observations to `n_folds` folds, then for each fold fits an outcome GAM
+        `E[Y | X]` and a treatment GAM `E[D | X]` on the remaining folds and predicts residuals on
+        the held-out fold. The pooled cross-fitted residuals are combined into the partialling-out
+        ATE estimate and its standard error (see class Notes). If `method="interactive"`, an
+        additional CATE model is fit on the residual ratio.
 
         Parameters
         ----------
         data:
-            Column-oriented data containing outcome, treatment, and confounders.
+            Column-oriented data containing outcome, treatment, and confounder columns.
         fit_method:
-            Smoothing parameter method for nuisance GAMs.
+            Smoothing parameter selection method for the outcome and treatment nuisance GAMs
+            (default `"REML"`).
         select:
-            Enable variable selection in nuisance GAMs.
+            Enable double-penalty variable selection in the nuisance GAMs.
         seed:
             Random seed for fold assignment.
 
@@ -319,7 +408,10 @@ class CausalGAM:
         self._cate_model.fit(cate_data, method=fit_method, select=select, weights=weights)
 
     def treatment_effect(self, level: float = 0.95) -> TreatmentEffect:
-        """Compute the average treatment effect with inference.
+        r"""Compute the average treatment effect with inference.
+
+        Builds a `TreatmentEffect` from the ATE and standard error computed during `fit()`, adding a
+        normal-approximation confidence interval and two-sided Wald p-value for `H0: ATE = 0`.
 
         Parameters
         ----------
@@ -358,9 +450,13 @@ class CausalGAM:
         n_points: int = 100,
         level: float = 0.95,
     ) -> CATEResult:
-        """Estimate conditional average treatment effects.
+        r"""Estimate conditional average treatment effects.
 
-        Requires `method="interactive"`. Returns CATE as a function of a chosen confounder variable.
+        Requires `method="interactive"`. Evaluates the fitted CATE model (a GAM regressed on the
+        pseudo-outcome `\hat\varepsilon_Y / \hat\varepsilon_D`) either on user-supplied `new_data` or
+        on a grid over one confounder, holding the other confounders at their training-data means.
+        Returns CATE as a function of a chosen confounder variable, together with pointwise
+        confidence bands derived from the CATE model's own standard errors.
 
         Parameters
         ----------
@@ -494,10 +590,18 @@ def mediation_analysis(
     n_simulations: int = 1000,
     seed: int | None = None,
 ) -> MediationResult:
-    """Causal mediation analysis with GAM nuisance models.
+    r"""Causal mediation analysis with GAM nuisance models.
 
-    Estimates direct and indirect effects of `treatment` on `outcome` through a `mediator`,
-    controlling for `confounders`. Uses the simulation-based approach (Imai, Keele, Tingley 2010).
+    Estimates how much of the total effect of `treatment` on `outcome` operates through an
+    intermediate `mediator` variable, versus acting directly, controlling for `confounders`. Uses
+    the simulation-based approach of Imai, Keele, & Tingley (2010): a mediator GAM
+    `E[M | D, X]` and an outcome GAM `E[Y | D, M, X]` are fit on the observed data, and then used to
+    predict the outcome under counterfactual combinations of treatment and mediator status that
+    isolate the direct and indirect pathways.
+
+    Use this when you have a hypothesized causal chain `treatment -> mediator -> outcome` (plus a
+    possible direct `treatment -> outcome` path) and want to decompose the total causal effect into
+    how much passes through the mediator versus how much does not.
 
     Parameters
     ----------
@@ -508,23 +612,64 @@ def mediation_analysis(
     mediator:
         Name of the mediator variable.
     confounders:
-        List of confounder variable names.
+        List of confounder variable names, entered as smooth terms in both the mediator and outcome
+        models.
     data:
-        Column-oriented data.
+        Column-oriented data containing outcome, treatment, mediator, and confounder columns.
     family:
-        Response distribution for the outcome model.
+        Response distribution for the outcome model. Defaults to `Gaussian()`. The mediator model
+        always uses `Gaussian()`.
     fit_method:
-        Smoothing parameter method.
+        Smoothing parameter selection method for both nuisance models.
     select:
-        Enable variable selection.
+        Enable double-penalty variable selection in the nuisance models.
     n_simulations:
-        Number of Monte Carlo draws for inference.
+        Number of bootstrap resamples used to estimate standard errors for the total, direct, and
+        indirect effects.
     seed:
-        Random seed.
+        Random seed for the bootstrap.
+
+    Notes
+    -----
+    Natural direct and indirect effects are computed by contrasting predicted outcomes under three
+    counterfactual scenarios, holding treatment fixed at `d \in \{0, 1\}` and setting the mediator to
+    its predicted value under either treatment level:
+
+    $$\text{indirect} = \frac{1}{n}\sum_i \left[\hat Y_i(1, \hat M_i(1)) - \hat Y_i(1, \hat
+    M_i(0))\right], \qquad
+    \text{direct} = \frac{1}{n}\sum_i \left[\hat Y_i(1, \hat M_i(0)) - \hat Y_i(0, \hat M_i(0))\right]$$
+
+    where `\hat Y_i(d, m)` is the outcome GAM's prediction with treatment set to `d` and mediator set
+    to `m`, and `\hat M_i(d)` is the mediator GAM's prediction with treatment set to `d`. The total
+    effect is `indirect + direct`, and `proportion_mediated = indirect / total`. Standard errors for
+    all three quantities come from re-running the full procedure (refitting both GAMs) on
+    `n_simulations` bootstrap resamples of the data.
 
     Returns
     -------
     MediationResult
+        The total, direct, and indirect effects with bootstrap standard errors, and the proportion
+        of the total effect that is mediated.
+
+    Examples
+    --------
+    ```{python}
+    import numpy as np
+    from whittaker.causal import mediation_analysis
+
+    rng = np.random.default_rng(0)
+    n = 500
+    x = rng.uniform(0, 1, n)
+    d = rng.binomial(1, 0.5, n).astype(float)
+    m = 0.5 * d + 0.3 * x + rng.normal(scale=0.2, size=n)
+    y = 0.4 * d + 0.8 * m + np.sin(2 * np.pi * x) + rng.normal(scale=0.3, size=n)
+
+    result = mediation_analysis(
+        outcome="y", treatment="d", mediator="m", confounders=["x"],
+        data={"x": x, "d": d, "m": m, "y": y}, n_simulations=200, seed=0,
+    )
+    print(result)
+    ```
     """
     if family is None:
         family = Gaussian()
