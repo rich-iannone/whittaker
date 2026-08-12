@@ -32,7 +32,7 @@ def _import_polars():
         import polars as pl
 
         return pl
-    except ImportError:
+    except ImportError:  # pragma: no cover - exercised only when polars is not installed
         raise ImportError(
             "Polars is required for PolarsGAM. Install it with: pip install whittaker[polars]"
         ) from None
