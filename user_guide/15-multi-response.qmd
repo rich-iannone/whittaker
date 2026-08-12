@@ -24,7 +24,7 @@ import numpy as np
 import whittaker as wk
 
 # Generate two correlated responses driven by the same smooth
-rng = np.random.default_rng(42)
+rng = np.random.default_rng(23)
 n = 300
 x = np.linspace(0, 2 * np.pi, n)
 
@@ -78,7 +78,7 @@ alt.Chart({"values": plot_data}).mark_line(strokeWidth=2).encode(
     x=alt.X("x:Q"),
     y=alt.Y("y:Q"),
     color=alt.Color("response:N"),
-).properties(width=500, height=300, title="Multi-response GAM predictions")
+).properties(width="container", height=300, title="Multi-response GAM predictions")
 ```
 
 ## Predictions with standard errors
@@ -149,7 +149,7 @@ labels = base.mark_text(fontSize=12).encode(
     ),
 )
 
-(heatmap + labels).properties(width=250, height=250, title="Residual correlation matrix")
+(heatmap + labels).properties(width="container", height=250, title="Residual correlation matrix")
 ```
 
 ## Joint prediction
@@ -195,7 +195,7 @@ response-specific terms on top of the shared formula:
 
 ```{python}
 # Add an extra covariate z that only affects y1
-rng = np.random.default_rng(42)
+rng = np.random.default_rng(23)
 z = rng.uniform(0, 1, n)
 data_extra = {"x": x, "z": z, "y1": y1 + 2 * z, "y2": y2}
 
