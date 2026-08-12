@@ -72,18 +72,90 @@ class Gaussian(Family):
     """
 
     def link(self, mu: NDArray) -> NDArray:
+        r"""Apply the identity link: $\eta = \mu$.
+
+        The Gaussian family uses the identity link, so this is a no-op that returns `mu`
+        unchanged.
+
+        Parameters
+        ----------
+        mu
+            Conditional mean values, shape `(n,)`.
+
+        Returns
+        -------
+        NDArray
+            Linear predictor values $\eta = \mu$, shape `(n,)`.
+        """
         return mu
 
     def link_inverse(self, eta: NDArray) -> NDArray:
+        r"""Apply the inverse identity link: $\mu = \eta$.
+
+        Returns `eta` unchanged, since the identity link is self-inverse.
+
+        Parameters
+        ----------
+        eta
+            Linear predictor values, shape `(n,)`.
+
+        Returns
+        -------
+        NDArray
+            Conditional mean values $\mu = \eta$, shape `(n,)`.
+        """
         return eta
 
     def link_derivative(self, mu: NDArray) -> NDArray:
+        r"""Derivative of the identity link: $g'(\mu) = 1$.
+
+        Parameters
+        ----------
+        mu
+            Conditional mean values, shape `(n,)`.
+
+        Returns
+        -------
+        NDArray
+            An array of ones, shape `(n,)`.
+        """
         return np.ones_like(mu)
 
     def variance(self, mu: NDArray) -> NDArray:
+        r"""Constant variance function: $V(\mu) = 1$.
+
+        The Gaussian variance does not depend on the mean, so `Var(Y) = phi * V(mu) = phi`
+        (the residual variance `sigma^2`).
+
+        Parameters
+        ----------
+        mu
+            Conditional mean values, shape `(n,)`.
+
+        Returns
+        -------
+        NDArray
+            An array of ones, shape `(n,)`.
+        """
         return np.ones_like(mu)
 
     def deviance(self, y: NDArray, mu: NDArray, *, weights: NDArray | None = None) -> float:
+        r"""Total deviance: the (weighted) residual sum of squares $\sum_i (y_i - \hat\mu_i)^2$.
+
+        Parameters
+        ----------
+        y
+            Observed response values, shape `(n,)`.
+        mu
+            Fitted conditional mean values, shape `(n,)`.
+        weights
+            Optional prior weights, shape `(n,)`.
+
+        Returns
+        -------
+        float
+            The total (weighted) residual sum of squares.
+        """
         d = (y - mu) ** 2
         if weights is not None:
             d = weights * d
@@ -92,15 +164,68 @@ class Gaussian(Family):
     def log_likelihood(
         self, y: NDArray, mu: NDArray, scale: float, *, weights: NDArray | None = None
     ) -> float:
+        r"""Gaussian log-likelihood evaluated at variance `scale`.
+
+        Computes $\ell_i = -\tfrac{1}{2}\log(2\pi\phi) - \tfrac{(y_i - \mu_i)^2}{2\phi}$ for
+        each observation, where $\phi$ is `scale`, and sums (optionally weighted) over
+        observations.
+
+        Parameters
+        ----------
+        y
+            Observed response values, shape `(n,)`.
+        mu
+            Fitted conditional mean values, shape `(n,)`.
+        scale
+            Residual variance $\phi = \sigma^2$.
+        weights
+            Optional prior weights, shape `(n,)`.
+
+        Returns
+        -------
+        float
+            The total log-likelihood.
+        """
         ll_i = -0.5 * np.log(2 * np.pi * scale) - 0.5 * (y - mu) ** 2 / scale
         if weights is not None:
             ll_i = weights * ll_i
         return float(np.sum(ll_i))
 
     def simulate(self, mu: NDArray, scale: float, rng: object) -> NDArray:
+        """Simulate Gaussian response values `N(mu, scale)`.
+
+        Parameters
+        ----------
+        mu
+            Mean (fitted values), shape `(n,)`.
+        scale
+            Residual variance `sigma^2`.
+        rng
+            A `numpy.random.Generator` instance.
+
+        Returns
+        -------
+        NDArray
+            Simulated response values, shape `(n,)`.
+        """
         return rng.normal(mu, np.sqrt(scale))
 
     def initialize(self, y: NDArray) -> NDArray:
+        """Starting values for `mu`: a copy of the observed response `y`.
+
+        Appropriate for the Gaussian family since the identity link places no constraint on the
+        valid range of `mu`.
+
+        Parameters
+        ----------
+        y
+            Observed response values, shape `(n,)`.
+
+        Returns
+        -------
+        NDArray
+            Starting values for `mu`, shape `(n,)`.
+        """
         return y.copy()
 
     def __repr__(self) -> str:
