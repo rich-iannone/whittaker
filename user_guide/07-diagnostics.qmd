@@ -25,7 +25,7 @@ import numpy as np
 import whittaker as wk
 
 # Generate data: sin(x) + noise
-rng = np.random.default_rng(42)
+rng = np.random.default_rng(23)
 n = 300
 x = np.linspace(0, 2 * np.pi, n)
 y = np.sin(x) + rng.normal(0, 0.3, n)
@@ -63,8 +63,7 @@ cannot capture the true function shape. The `check()` method runs a basis dimens
 
 ```{python}
 # Run the check
-check_result = model.check()
-print(check_result)
+model.check();
 ```
 
 The k-index is based on the ratio of the residual variance estimated from neighboring residuals to
@@ -125,7 +124,7 @@ alt.Chart({"values": resid_data}).mark_circle(
     x=alt.X("fitted:Q", title="Fitted values"),
     y=alt.Y("residual:Q", title="Deviance residuals"),
 ).properties(
-    width=500, height=300,
+    width="container", height=300,
     title="Residuals vs. fitted values"
 ) + alt.Chart({"values": [{"y": 0}]}).mark_rule(
     color="firebrick", strokeDash=[4, 4]
@@ -173,7 +172,7 @@ ref_line = alt.Chart({"values": ref_data}).mark_line(
 ).encode(x="x:Q", y="y:Q")
 
 (qq_points + ref_line).properties(
-    width=400, height=400,
+    width="container", height=400,
     title="Normal QQ plot of residuals"
 )
 ```
@@ -193,7 +192,7 @@ alt.Chart({"values": hist_data}).mark_bar(
     x=alt.X("residual:Q", bin=alt.Bin(maxbins=30), title="Deviance residuals"),
     y=alt.Y("count():Q", title="Frequency"),
 ).properties(
-    width=500, height=250,
+    width="container", height=250,
     title="Distribution of residuals"
 )
 ```
@@ -205,7 +204,7 @@ using too few basis functions for a complex signal.
 
 ```{python}
 # Generate data with high-frequency oscillation
-rng = np.random.default_rng(42)
+rng = np.random.default_rng(23)
 n = 300
 x = np.linspace(0, 4 * np.pi, n)
 y = np.sin(x) + 0.5 * np.sin(3 * x) + rng.normal(0, 0.3, n)
@@ -215,8 +214,7 @@ model_bad = wk.GAM("y ~ s(x, k=5)")
 model_bad.fit({"x": x, "y": y}, method="REML")
 
 # Check: the k-index should flag the problem
-check_bad = model_bad.check()
-print(check_bad)
+model_bad.check();
 ```
 
 ```{python}
@@ -225,8 +223,7 @@ model_good = wk.GAM("y ~ s(x, k=20)")
 model_good.fit({"x": x, "y": y}, method="REML")
 
 # The check should now pass
-check_good = model_good.check()
-print(check_good)
+model_good.check();
 ```
 
 ```{python}
@@ -252,7 +249,7 @@ alt.Chart({"values": plot_data}).mark_line().encode(
         alt.value([4, 4]),
         alt.value([0])
     ),
-).properties(width=600, height=300, title="Effect of basis dimension on fit quality")
+).properties(width="container", height=300, title="Effect of basis dimension on fit quality")
 ```
 
 The underfit model (k=5) misses the high-frequency component entirely, while k=20 captures both
