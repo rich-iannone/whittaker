@@ -177,12 +177,32 @@ class DuckDBGAM(BigGAM):
 
     @property
     def chunk_size(self) -> int:
-        """Arrow batch size when streaming from DuckDB."""
+        """Arrow batch size used when streaming from DuckDB.
+
+        This is the `chunk_size` value passed to `__init__`: the number of rows per Arrow batch
+        that `_stream_as_dict` requests from `conn.sql(query).fetch_arrow_reader(batch_size=...)`
+        while reading `fit()`'s data source.
+
+        Returns
+        -------
+        int
+            The configured Arrow batch size, in rows.
+        """
         return self._chunk_size
 
     @property
     def n_rows(self) -> int:
-        """Total number of rows in the DuckDB source."""
+        """Total number of rows in the DuckDB source used by the most recent fit.
+
+        Populated by `fit()` via `_count_rows`, which runs a `SELECT COUNT(*)` against the
+        normalized source query before streaming the data. Remains `0` until `fit()` has been
+        called at least once.
+
+        Returns
+        -------
+        int
+            Row count of the table, view, or query passed to `fit()`.
+        """
         return self._n_rows
 
     def fit(
