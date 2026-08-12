@@ -32,7 +32,7 @@ def _import_duckdb():
         import duckdb
 
         return duckdb
-    except ImportError:
+    except ImportError:  # pragma: no cover - exercised only when duckdb is not installed
         raise ImportError(
             "DuckDB is required for DuckDBGAM. Install it with: pip install whittaker[duckdb]"
         ) from None
@@ -53,7 +53,7 @@ def _count_rows(conn, source_query: str) -> int:
 
 def _fetch_as_dict(conn, source_query: str) -> InternalData:
     """Fetch all rows from a DuckDB query as dict[str, NDArray]."""
-    arrow_table = conn.sql(source_query).arrow()
+    arrow_table = conn.sql(source_query).fetch_arrow_table()
     return {
         col: _to_array(arrow_table.column(col).to_numpy(zero_copy_only=False))
         for col in arrow_table.column_names
