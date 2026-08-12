@@ -1,4 +1,4 @@
-"""Negative Binomial (NB2) family with log link."""
+r"""Negative Binomial (NB2) family with log link."""
 
 from __future__ import annotations
 
@@ -11,20 +11,69 @@ _EPS = np.finfo(float).eps
 
 
 class NegativeBinomial(Family):
-    """Negative Binomial family with log link (NB2 parameterization).
+    r"""Negative Binomial family with log link (NB2 parameterization).
 
-    The NB2 variance function is V(μ) = μ + μ²/θ, where θ controls overdispersion. As θ → ∞ the
-    distribution converges to Poisson.
-
-    - Link: g(μ) = log(μ)
-    - Variance function: V(μ) = μ + μ²/θ
-    - Deviance: 2 Σ [y log(y/μ) − (y + θ) log((y + θ)/(μ + θ))]
+    The Negative Binomial family models count data that is overdispersed relative to the
+    Poisson distribution, i.e. where the observed variance exceeds the mean. This commonly
+    arises when counts are driven by unobserved heterogeneity across observations (e.g. some
+    individuals or locations are systematically more prone to events than others). Whittaker
+    uses the NB2 parameterization, where the variance function is
+    `V(mu) = mu + mu^2/theta` and `theta` controls the degree of overdispersion: as
+    `theta -> infinity` the distribution converges to `Poisson`, while smaller `theta` implies
+    heavier overdispersion. The canonical log link is used, giving the same multiplicative
+    interpretation of coefficients as `Poisson`.
 
     Parameters
     ----------
-    theta:
-        Initial overdispersion parameter (must be positive). Estimated during fitting via outer
-        iteration unless held fixed.
+    theta : float, default=1.0
+        Overdispersion (size) parameter, must be positive. Smaller values of `theta` imply
+        greater overdispersion; larger values make the distribution approach `Poisson`. The
+        value supplied at construction is used as the starting point and is refined during
+        fitting via an outer iteration around P-IRLS unless explicitly held fixed by the
+        caller.
+
+    Notes
+    -----
+    The canonical link is the natural logarithm:
+
+    $$
+    g(\mu) = \log(\mu)
+    $$
+
+    The variance function is
+
+    $$
+    V(\mu) = \mu + \frac{\mu^2}{\theta},
+    $$
+
+    so the variance always exceeds the mean by the extra term $\mu^2/\theta$. The deviance is
+
+    $$
+    D(y, \hat\mu) = 2 \sum_i \left[ y_i \log\!\left(\frac{y_i}{\hat\mu_i}\right)
+    - (y_i + \theta) \log\!\left(\frac{y_i + \theta}{\hat\mu_i + \theta}\right) \right] .
+    $$
+
+    Examples
+    --------
+    Fit a GAM to overdispersed count data:
+
+    ```{python}
+    import numpy as np
+    import whittaker as wk
+
+    rng = np.random.default_rng(0)
+    n = 200
+    x = np.linspace(0, 2 * np.pi, n)
+    mu = np.exp(0.5 * np.sin(x))
+    theta = 3.0
+    y = rng.negative_binomial(theta, theta / (theta + mu))
+
+    data = {"x": x, "y": y}
+
+    model = wk.GAM("y ~ s(x)", family=wk.NegativeBinomial(theta=theta))
+    model.fit(data, method="REML")
+    print(model.summary())
+    ```
     """
 
     def __init__(self, theta: float = 1.0) -> None:
