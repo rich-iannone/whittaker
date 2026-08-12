@@ -459,7 +459,19 @@ class BigGAM(GAM):
 
     @property
     def n_discrete(self) -> int:
-        """Number of discretization grid points per covariate."""
+        """Number of discretization grid points per covariate.
+
+        This is the `n_discrete` value passed to `__init__`: the maximum number of unique
+        representative values each covariate (or combination of covariates, for multi-dimensional
+        smooths) is rounded onto before the smooth basis is evaluated. It bounds the number of
+        unique rows `d` used when accumulating `X'WX` during fitting (see the class docstring),
+        and therefore controls the tradeoff between fit accuracy and memory/speed.
+
+        Returns
+        -------
+        int
+            The discretization grid size configured for this model.
+        """
         return self._n_discrete
 
     def fit(
@@ -551,7 +563,23 @@ class BigGAM(GAM):
         return cols
 
     def smooth_tests(self):
-        """Approximate significance tests for smooth terms (discretized version)."""
+        """Approximate significance tests for each smooth term.
+
+        This is the `BigGAM` counterpart to `~whittaker.gam.GAM.smooth_tests`, adapted to the
+        discretized fitting path: because `self._model_matrix.X` is never materialized, the
+        per-term design columns needed for the test are reconstructed on demand from each
+        smooth's `DiscretizedBlock` via `_expand_block_columns` (or read directly from
+        `parametric_cols` for non-smooth columns) rather than sliced out of a dense `X`. For each
+        smooth term, the coefficient sub-vector, its covariance sub-block, and its expanded
+        design columns are passed to `~whittaker.fitting.inference._smooth_test` to obtain an
+        approximate chi-squared test of whether the term is uniformly zero.
+
+        Returns
+        -------
+        list of SmoothTestResult
+            One result per smooth term (or per `by=` level), each with `term_label`, `stat`,
+            `edf`, `ref_df`, and `p_value` attributes.
+        """
         from whittaker.fitting.inference import SmoothTestResult, _smooth_test
 
         self._check_fitted()
