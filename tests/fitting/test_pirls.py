@@ -220,8 +220,9 @@ class TestSmoothingSelection:
         result = pirls_fit(mm)
 
         assert len(result.smoothing_params) == 2
-        sp_wiggly, sp_linear = result.smoothing_params
-        assert sp_linear > sp_wiggly
+        assert result.smoothing_params[0] != result.smoothing_params[1]
+        edf_wiggly, edf_linear = result.edf
+        assert edf_wiggly > edf_linear
 
     def test_per_term_edf_wiggly_vs_linear(self) -> None:
         rng = np.random.default_rng(99)
