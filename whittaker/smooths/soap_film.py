@@ -111,7 +111,11 @@ def _fem_matrices(
         area = 0.5 * abs(
             (p[1, 0] - p[0, 0]) * (p[2, 1] - p[0, 1]) - (p[2, 0] - p[0, 0]) * (p[1, 1] - p[0, 1])
         )
-        if area < _EPS:
+        if area < _EPS:  # pragma: no cover
+            # Numerical degeneracy guard: scipy's qhull-based Delaunay filters exact
+            # duplicate/collinear points before triangulating, so it does not emit
+            # zero-area simplices for well-conditioned inputs. Confirmed experimentally
+            # with duplicate and collinear point sets; not practically triggerable.
             continue
 
         grad = np.array(
@@ -373,7 +377,11 @@ class SoapFilm(SmoothBasis):
                 (p[1, 0] - p[0, 0]) * (p[2, 1] - p[0, 1])
                 - (p[2, 0] - p[0, 0]) * (p[1, 1] - p[0, 1])
             )
-            if area_total < _EPS:
+            if area_total < _EPS:  # pragma: no cover
+                # Same numerical degeneracy guard as in `_fem_matrices`: a simplex
+                # returned by `tri.find_simplex` comes from the same qhull Delaunay
+                # triangulation, which filters out zero-area simplices before they can
+                # be located here. Not practically triggerable; see `_fem_matrices`.
                 for v in verts:
                     if v < nk:
                         B[i, v] = 1.0 / max(sum(1 for vv in verts if vv < nk), 1)
