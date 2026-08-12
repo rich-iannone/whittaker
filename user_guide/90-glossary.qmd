@@ -18,7 +18,7 @@ Basis dimension (`k`)
   an upper bound on the flexibility of the smooth: higher `k` allows more complex shapes, but
   the **smoothing parameter** $\lambda$ prevents overfitting by penalizing excess curvature.
   In practice, `k` should be set large enough that the data do not need more flexibility than
-  it allows; the **k-index test** (`model.check()`) flags terms where `k` may be too small.
+  it allows. The **k-index test** (`model.check()`) flags terms where `k` may be too small.
   The default in Whittaker is `k=10` for most basis types.
 
 Basis function
@@ -102,7 +102,7 @@ Convexity constraint
 
 Cross-validation (CV)
 : A resampling procedure for estimating out-of-sample model performance. The data are split
-  into $k$ folds; the model is trained on $k - 1$ folds and evaluated on the held-out fold,
+  into $k$ folds. The model is trained on $k - 1$ folds and evaluated on the held-out fold,
   rotating so every observation is used for evaluation exactly once. The $k$ scores are averaged
   to produce a single performance estimate. In Whittaker, `cross_validate()` returns a
   `CVResult` with the mean score, its standard error, and per-fold breakdowns.
@@ -164,7 +164,7 @@ DuckDBGAM
 
 Effective degrees of freedom (EDF)
 : The effective number of parameters used by a smooth term, accounting for penalization. An
-  EDF of 1 means the term is a straight line; higher values indicate more complex shapes. The
+  EDF of 1 means the term is a straight line. Higher values indicate more complex shapes. The
   total EDF across all terms determines model complexity. Accessed via `model.edf_total` and
   reported per term in `model.summary()`.
 
@@ -382,7 +382,7 @@ PAVA (Pool Adjacent Violators Algorithm)
 Pearson residuals
 : Residuals standardized by the variance function:
   $r_i^P = (y_i - \hat\mu_i) / \sqrt{V(\hat\mu_i)}$. For Poisson models, this divides by
-  $\sqrt{\hat\mu_i}$; for Binomial, by $\sqrt{\hat\mu_i(1 - \hat\mu_i)}$. Useful for
+  $\sqrt{\hat\mu_i}$. For Binomial, by $\sqrt{\hat\mu_i(1 - \hat\mu_i)}$. Useful for
   checking the variance assumption.
 
 Penalty matrix
@@ -479,7 +479,7 @@ Smoothing parameter ($\lambda$)
 
 StreamingGAM
 : A GAM variant for online learning that accumulates sufficient statistics incrementally as
-  new data batches arrive. Each `partial_fit()` call updates the running totals; `solve()`
+  new data batches arrive. Each `partial_fit()` call updates the running totals. `solve()`
   produces a GAM fit from the accumulated statistics. An optional `decay` parameter
   downweights older batches for tracking distribution shift. Available via `StreamingGAM`.
 
@@ -521,9 +521,8 @@ Variance function ($V(\mu)$)
   diagnostics.
 
 VIF (Variance Inflation Factor)
-: A diagnostic for collinearity among the parametric terms (or among smooths, via
-  **concurvity**). A VIF of 1 means no collinearity; values above 5-10 are concerning.
-  Computed by `model.vif()`.
+: A diagnostic for collinearity among the parametric terms (or among smooths, via **concurvity**). A
+  VIF of 1 means no collinearity (values above 5-10 are concerning). Computed by `model.vif()`.
 
 Working response
 : An adjusted dependent variable used internally by **P-IRLS**. At each iteration, the
