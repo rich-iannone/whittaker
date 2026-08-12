@@ -270,21 +270,48 @@ class MRFBasis(SmoothBasis):
 
     @property
     def n_basis(self) -> int:
-        """Number of basis functions, i.e. the number of retained region levels."""
+        """Number of basis functions, i.e. the number of retained region levels.
+
+        Returns
+        -------
+        int
+            The number `k` of unique region levels retained during `fit()`.
+
+        Raises
+        ------
+        RuntimeError
+            If accessed before `fit()` has been called.
+        """
         if not self._fitted:
             raise RuntimeError("n_basis is not available until fit() is called.")
         return len(self._levels)
 
     @property
     def k(self) -> int:
-        """Requested (before `fit()`) or actual (after `fit()`) number of region levels."""
+        """Requested or actual number of region levels.
+
+        Before `fit()` is called, returns the `k` value passed at construction
+        (the requested cap on the number of levels, or `-1` for "all levels").
+        After `fit()`, returns the actual number of region levels retained.
+
+        Returns
+        -------
+        int
+            The requested or actual level count.
+        """
         if self._fitted:
             return len(self._levels)
         return self._k_request
 
     @property
     def levels(self) -> NDArray:
-        """Sorted array of unique region labels retained during `fit()`."""
+        """Sorted array of unique region labels retained during `fit()`.
+
+        Returns
+        -------
+        NDArray
+            A copy of the sorted region labels, shape `(k,)`.
+        """
         self._check_fitted()
         return self._levels.copy()
 
