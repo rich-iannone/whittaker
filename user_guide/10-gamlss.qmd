@@ -303,7 +303,7 @@ line_beta = alt.Chart({"values": fit_beta}).mark_line(
 )
 ```
 
-The logit link on $\mu$ constrains predictions to $(0, 1)$; the log link on $\sigma$ (the
+The logit link on $\mu$ constrains predictions to $(0, 1)$. The log link on $\sigma$ (the
 precision parameter) keeps it positive. Modeling precision as a function of $x$ avoids the common
 problem of over- or under-dispersed residuals at different covariate values.
 
