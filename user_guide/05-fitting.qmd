@@ -22,7 +22,7 @@ For a given set of smoothing parameters $\boldsymbol{\lambda} = (\lambda_1, \ldo
 fitting proceeds in five steps:
 
 1. **Initialize**: set $\mu = $ `family.initialize(y)`, $\eta = g(\mu)$. The initialization is
-   family-specific: for Gaussian data $\mu = y$; for Poisson $\mu = y + 0.1$; for binomial
+   family-specific: for Gaussian data $\mu = y$, for Poisson $\mu = y + 0.1$, for binomial
    $\mu = (y + 0.5)/2$.
 2. **Pseudo-data**: compute the working response
    $$z = \eta + (y - \mu)\, g'(\mu)$$
@@ -56,9 +56,9 @@ non-Gaussian counterparts.
 ## Smoothness selection
 
 The roughness of each smooth is controlled by a non-negative smoothing parameter $\lambda_j$. Larger
-$\lambda_j$ produces a smoother $f_j$; $\lambda_j = 0$ removes the penalty entirely (interpolating
-spline). Rather than setting $\lambda_j$ by hand, Whittaker selects it automatically by optimizing
-one of three criteria.
+$\lambda_j$ produces a smoother $f_j$ while $\lambda_j = 0$ removes the penalty entirely
+(interpolating spline). Rather than setting $\lambda_j$ by hand, Whittaker selects it automatically
+by optimizing one of three criteria.
 
 ### GCV (generalized cross-validation)
 
@@ -520,8 +520,8 @@ parametric (unpenalized) coefficients including the intercept.
 | $\approx 1$ | The smooth is approximately linear |
 | $\approx 2$ | The smooth is approximately quadratic |
 | $3$--$5$ | Moderate curvature |
-| $> 5$ | High complexity; consider checking the data for artifacts |
-| $\approx k - 1$ | The smooth is using nearly all available basis functions; increase `k` |
+| $> 5$ | High complexity: consider checking the data for artifacts |
+| $\approx k - 1$ | The smooth is using nearly all available basis functions: increase `k` |
 
 ```{python}
 # EDF interpretation
@@ -573,7 +573,7 @@ proportional to $\sqrt{\hat\phi}$, so an overestimated scale produces wider conf
 | Default, general-purpose fitting | **REML** |
 | Reproducing a legacy analysis that used GCV | GCV |
 | Comparing models with different fixed effects via LRT | ML |
-| Very large $n$ (> 50,000) | GCV may be faster; both give similar results |
+| Very large $n$ (> 50,000) | GCV may be faster (both give similar results) |
 | Sparse data or small $n$ | **REML** (GCV tends to undersmooth) |
 
 ### When to increase `k`
