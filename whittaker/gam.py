@@ -1,4 +1,4 @@
-"""Top-level GAM class: the primary user-facing API."""
+r"""Top-level GAM class: the primary user-facing API."""
 
 from __future__ import annotations
 
@@ -19,21 +19,30 @@ from whittaker.model_matrix import ModelMatrix, build_model_matrix, predict_matr
 
 @dataclass
 class PredictionResult:
-    """Result of `GAM.predict()` with optional standard errors and intervals.
+    """Container returned by `GAM.predict()` for `type="response"` or `type="link"`.
+
+    Bundles the point predictions together with their optional standard errors and interval
+    bounds so that all quantities produced by a single `predict()` call travel together. Use
+    `values` for the predictions themselves; the other attributes are populated only when the
+    corresponding arguments (`se=True`, `interval=...`) were requested.
 
     Attributes
     ----------
-    values:
-        Predicted values on the response scale, shape `(n,)`.
-    se:
-        Standard errors of the predictions (on the linear predictor scale), shape `(n,)`, or `None`
-        if `se=False`.
-    linear_predictor:
-        Predictions on the linear predictor scale, shape `(n,)`.
-    lower:
-        Lower bound of the interval on the response scale, or `None` if no interval requested.
-    upper:
-        Upper bound of the interval on the response scale, or `None` if no interval requested.
+    values : numpy.ndarray
+        Predicted values, shape `(n,)`. On the response scale (`mu`) when `type="response"`, or on
+        the linear predictor scale (`eta`) when `type="link"`.
+    se : numpy.ndarray or None
+        Standard errors of the linear predictor, shape `(n,)`. `None` unless `se=True` was passed
+        to `predict()`.
+    linear_predictor : numpy.ndarray
+        Predictions on the linear predictor scale, shape `(n,)`. Always populated, regardless of
+        `type`, so that the response-scale mean can be recovered via the link function.
+    lower : numpy.ndarray or None
+        Lower bound of the requested interval, on the same scale as `values`. `None` unless
+        `interval` was set to `"confidence"`, `"prediction"`, or `"simultaneous"`.
+    upper : numpy.ndarray or None
+        Upper bound of the requested interval, on the same scale as `values`. `None` unless
+        `interval` was set.
     """
 
     values: NDArray
@@ -45,19 +54,25 @@ class PredictionResult:
 
 @dataclass
 class TermsPredictionResult:
-    """Result of `GAM.predict(type="terms")`.
+    """Container returned by `GAM.predict(type="terms")`.
 
-    Each smooth term's contribution to the linear predictor is returned separately, along with an
-    optional standard error per term.
+    Instead of collapsing every smooth's effect into a single linear predictor, each smooth
+    term's contribution is kept separate. This is useful for decomposing a fitted additive model
+    into its constituent partial effects — e.g. to inspect how much of the prediction at a point
+    comes from `s(x1)` versus `s(x2)` — without needing to build partial-effect plots.
 
     Attributes
     ----------
-    terms:
-        Dict mapping term labels to their contributions, each shape `(n,)`.
-    se:
-        Dict mapping term labels to standard errors, each shape `(n,)`. `None` if `se=False`.
-    labels:
-        Term labels in formula order.
+    terms : dict[str, numpy.ndarray]
+        Maps each term label (e.g. `"s(x1)"`, `"te(x1, x2)"`, or `"s(x1):group_a"` for
+        factor-`by` smooths) to that term's contribution to the linear predictor, each of shape
+        `(n,)`. Contributions sum (plus the intercept and any parametric terms) to the full
+        linear predictor.
+    se : dict[str, numpy.ndarray] or None
+        Maps each term label to its per-term standard error, each of shape `(n,)`. `None` unless
+        `se=True` was passed to `predict()`.
+    labels : list[str]
+        Term labels in formula order, matching the keys of `terms` and `se`.
     """
 
     terms: dict[str, NDArray]
@@ -67,26 +82,37 @@ class TermsPredictionResult:
 
 @dataclass
 class GamCheckResult:
-    """Result of `GAM.gam_check()` with diagnostic information.
+    """Container returned by `GAM.gam_check()`, bundling residual diagnostics with fit summary
+    statistics and basis-dimension adequacy checks.
+
+    This mirrors the console output of R mgcv's `gam.check()`: it lets you inspect whether the
+    residuals look well-behaved and whether any smooth's basis dimension `k` was set too small
+    (in which case the smooth may be under-fitting), all from a single object. Printing the
+    result (or relying on its `__repr__`) gives a compact textual report; the individual
+    attributes are also available for building custom diagnostic plots (see `GAM.check()`).
 
     Attributes
     ----------
-    deviance_residuals:
-        Deviance residuals, shape `(n,)`.
-    fitted_values:
-        Fitted values μ on the response scale, shape `(n,)`.
-    response:
-        Response values y, shape `(n,)`.
-    k_check:
-        Basis dimension check results (list of `KCheckResult`).
-    deviance_explained:
-        Proportion of deviance explained.
-    scale:
-        Estimated scale parameter.
-    edf_total:
-        Total effective degrees of freedom.
-    n_obs:
-        Number of observations.
+    deviance_residuals : numpy.ndarray
+        Deviance residuals, shape `(n,)`. Should look approximately normal and homoscedastic for
+        a well-specified model.
+    fitted_values : numpy.ndarray
+        Fitted values `mu` on the response scale, shape `(n,)`.
+    response : numpy.ndarray
+        Observed response values `y` used for fitting, shape `(n,)`.
+    k_check : list[KCheckResult]
+        One basis-dimension check per smooth term. Each entry reports a k-index and a
+        simulation-based p-value; low p-values (typically flagged with `*`) suggest the smooth's
+        basis dimension `k` may be too small to capture the true function.
+    deviance_explained : float
+        Proportion of null deviance explained by the model, in `[0, 1]` (analogous to R-squared
+        for non-Gaussian families).
+    scale : float
+        Estimated scale (dispersion) parameter `phi`.
+    edf_total : float
+        Total effective degrees of freedom across all model terms.
+    n_obs : int
+        Number of observations used in the fit.
     """
 
     deviance_residuals: NDArray
@@ -116,14 +142,77 @@ class GamCheckResult:
 
 
 class GAM:
-    """Generalized Additive Model.
+    r"""Generalized Additive Model with automatic smoothness selection.
+
+    A GAM extends the generalized linear model by replacing some or all linear predictor terms
+    with smooth, data-driven functions of the covariates:
+
+    $$
+    g(\mathbb{E}[y_i]) = \eta_i = \beta_0 + \sum_j \beta_j x_{ij} + \sum_k f_k(z_{ik})
+    $$
+
+    where $g$ is a link function, $\beta_j x_{ij}$ are ordinary parametric (linear) terms, and
+    each $f_k$ is an unspecified smooth function represented by a spline basis (`s()`) or a
+    tensor product of bases for multivariate smooths (`te()`, `ti()`, `t2()`). This lets the
+    model capture nonlinear relationships without having to guess a parametric form ahead of
+    time, while still supporting the full range of exponential-family response distributions
+    (Gaussian, Binomial, Poisson, Gamma, Tweedie, and more) via a `Family` object.
+
+    Use `GAM` when you suspect a covariate's effect on the response is nonlinear, when you want
+    interaction surfaces between two or more continuous covariates, or when you want automatic,
+    data-driven control of model complexity rather than manually choosing a polynomial degree or
+    a fixed set of basis functions.
+
+    A `GAM` is specified with a formula string in an R/mgcv-like syntax, e.g.
+    `"y ~ s(x1) + s(x2, bs='cr', k=15) + te(x3, x4) + group"`, where `s()` denotes a univariate
+    (or `by=`-varying) smooth, `te()`/`ti()`/`t2()` denote tensor-product smooths of two or more
+    variables, and bare names denote ordinary parametric terms. See `Formula`, `SmoothTerm`,
+    `LinearTerm`, `InteractionTerm`, and `OffsetTerm` for the term types this formula parses
+    into.
+
+    Fitting (`fit()`) proceeds by Penalized Iteratively Reweighted Least Squares (P-IRLS): each
+    smooth's wiggliness is controlled by a quadratic penalty $\lambda_k \boldsymbol{\beta}_k^T
+    \mathbf{S}_k \boldsymbol{\beta}_k$ on its coefficients, and the smoothing parameters
+    $\lambda_k$ are themselves estimated from the data — by default via Generalized
+    Cross-Validation (GCV), or via Restricted Maximum Likelihood (REML) or Marginal Likelihood
+    (ML) when smooths are treated as correlated random effects. Larger $\lambda_k$ shrinks a
+    smooth toward a simpler (e.g. linear or constant) shape; smaller $\lambda_k$ allows more
+    flexibility. This automatic selection is what distinguishes a GAM from simply choosing a
+    fixed spline basis: the *effective* complexity of each term (its effective degrees of
+    freedom, or EDF) is learned rather than fixed in advance.
+
+    Once fitted, a `GAM` supports prediction with standard errors and intervals (`predict()`),
+    partial-effect plotting (`plot()`), residual and basis-dimension diagnostics (`check()`,
+    `gam_check()`, `k_check()`), hypothesis tests for parametric and smooth terms
+    (`parametric_tests()`, `smooth_tests()`), and a text summary (`summary()`) analogous to
+    `summary.gam()` in R's mgcv.
 
     Parameters
     ----------
-    formula:
-        Model formula as a string (e.g. `"y ~ s(x1) + s(x2) + x3"`).
-    family:
-        Response distribution family. Defaults to `Gaussian()` (identity link).
+    formula : str or Formula
+        Model formula, either as a string (e.g. `"y ~ s(x1) + s(x2) + x3"`) or an already-parsed
+        `Formula` object. The left-hand side names the response column; the right-hand side lists
+        smooth terms (`s()`, `te()`, `ti()`, `t2()`), parametric terms (bare column names),
+        interactions (`x1 * x2`), and optionally an `offset(...)` term. Use `0 +` or `- 1` on the
+        right-hand side to suppress the intercept.
+    family : Family or None
+        Response distribution and link function. Defaults to `Gaussian()` (identity link) if not
+        given. Other options include `Binomial`, `Poisson`, `Gamma`, and `Tweedie`-family
+        classes, each defining the variance function, deviance, and link used during P-IRLS.
+
+    Examples
+    --------
+    ```{python}
+    import numpy as np
+    from whittaker import GAM
+
+    rng = np.random.default_rng(0)
+    x = np.sort(rng.uniform(0, 10, 200))
+    y = np.sin(x) + rng.normal(scale=0.2, size=200)
+
+    gam = GAM("y ~ s(x)").fit({"x": x, "y": y})
+    print(gam.summary())
+    ```
     """
 
     def __init__(
@@ -166,31 +255,57 @@ class GAM:
         weights: NDArray | None = None,
         select: bool = False,
     ) -> GAM:
-        """Fit the GAM to data.
+        r"""Fit the GAM to data via Penalized Iteratively Reweighted Least Squares (P-IRLS).
+
+        Builds the model matrix from the formula, then alternates between (a) an IRLS step that
+        linearizes the exponential-family log-likelihood around the current fit and (b) a
+        penalized weighted-least-squares solve that shrinks each smooth toward simplicity
+        according to its smoothing parameter. When `smoothing_params` is not fixed, this inner
+        P-IRLS loop is itself wrapped in an outer loop that re-estimates the smoothing parameters
+        (by GCV, REML, or ML) at each iteration, until both the coefficients and the smoothing
+        parameters converge.
 
         Parameters
         ----------
-        data:
-            Column-oriented data as `{name: 1-D array}`. All columns referenced by the formula must
-            be present.
-        smoothing_params:
-            Fixed smoothing parameters, one per smooth term. If `None`, smoothing parameters are
-            selected automatically via *method*.
-        method:
-            Smoothing parameter selection: `"GCV"`, `"REML"`, or `"ML"`.
-        weights:
+        data : dict[str, numpy.ndarray]
+            Column-oriented data as `{name: 1-D array}`. All columns referenced by the formula
+            (response, smooth covariates, parametric terms, and any `by=` factor) must be
+            present.
+        smoothing_params : list[float] or None
+            Fixed smoothing parameters $\lambda_k$, one per penalty (a `te()`/`t2()` term
+            contributes more than one). If `None` (default), smoothing parameters are selected
+            automatically via `method`.
+        method : str
+            Criterion used to select smoothing parameters when `smoothing_params` is not fixed.
+            One of:
+
+            - `"GCV"` (default): minimizes the Generalized Cross-Validation score
+              $\text{GCV} = n \cdot D / (n - \text{tr}(\mathbf{H}))^2$, where $D$ is the deviance
+              and $\mathbf{H}$ is the influence (hat) matrix. Fast and does not require treating
+              smooths as random effects, but can occasionally undersmooth.
+            - `"REML"`: maximizes the Restricted Maximum Likelihood, treating each smooth's
+              penalized coefficients as correlated Gaussian random effects and integrating out
+              the fixed (unpenalized) effects. Generally the most reliable choice and the one
+              recommended when using `select=True`.
+            - `"ML"`: maximizes the Marginal Likelihood, similar to REML but without correcting
+              for uncertainty in the fixed effects; tends to undersmooth slightly relative to
+              REML.
+        weights : numpy.ndarray or None
             Observation (prior) weights, shape `(n,)`. Must be positive. When provided, the model
-            minimizes the weighted deviance `sum(w_i * d_i)` and uses weighted IRLS.
-        select:
-            If `True`, add an extra penalty on each smooth's null space so that terms can be
-            penalized to zero entirely (double penalty approach). This enables automatic smooth
-            selection: irrelevant smooths are shrunk out of the model. Recommended with
-            `method="REML"`.
+            minimizes the weighted deviance $\sum_i w_i d_i$ and uses weighted IRLS throughout.
+        select : bool
+            If `True`, augment each smooth's wiggliness penalty with a second penalty on its null
+            space (the component, such as a pure linear trend, that the ordinary penalty never
+            shrinks). With both penalties free, GCV/REML/ML can drive a term's smoothing
+            parameters high enough to remove it from the model entirely, giving automatic term
+            selection analogous to the lasso (Marra & Wood, 2011). Recommended together with
+            `method="REML"`. Has no additional effect on bases whose null space is already zero
+            (e.g. `bs="re"`, `bs="fs"`, or the shrinkage bases `"ts"`/`"cs"`).
 
         Returns
         -------
         GAM
-            Returns `self` for method chaining.
+            Returns `self` for method chaining, e.g. `GAM(formula).fit(data).predict(new_data)`.
         """
         data = prepare_data(data)
         self._data = data
@@ -288,41 +403,76 @@ class GAM:
         level: float = 0.95,
         unconditional: bool = False,
     ) -> PredictionResult | TermsPredictionResult:
-        """Predict on new data.
+        r"""Predict from the fitted model on new data.
+
+        Applies the estimated coefficients to a model matrix built from `new_data`, using the
+        same basis transformations (knots, factor levels, centering constraints) fitted on the
+        training data. Supports predictions on the response or linear-predictor scale, per-term
+        decompositions, and pointwise or simultaneous uncertainty intervals.
 
         Parameters
         ----------
-        new_data:
-            Column-oriented new data. Must contain all covariate columns referenced by the formula
-            (response column is not needed).
-        se:
-            If `True`, compute standard errors on the linear predictor scale (for `type="response"`
-            and `"link"`) or per-term standard errors (for `type="terms"`).
-        type:
-            Prediction type:
+        new_data : dict[str, numpy.ndarray]
+            Column-oriented new data. Must contain all covariate columns referenced by the
+            formula (the response column is not needed).
+        se : bool
+            If `True`, compute standard errors on the linear predictor scale (for
+            `type="response"` and `type="link"`) or per-term standard errors (for
+            `type="terms"`). Default `False`.
+        type : str
+            Prediction type. One of:
 
-            - `"response"` (default): predictions on the response scale (mu = g^{-1}(eta)).
-            - `"link"`: predictions on the linear predictor scale (eta = X beta).
-            - `"terms"`: individual smooth term contributions to the linear predictor.
-        interval:
-            Interval type. `None` (default) returns no intervals. `"confidence"` computes
-            intervals for the mean response (uncertainty in eta only). `"prediction"` computes
-            intervals for a new observation (adds response-distribution variance). Intervals are
-            computed on the linear predictor scale and transformed to the response scale. Not
-            available for `type="terms"`.
-        level:
-            Nominal coverage probability for the interval (default `0.95`).
-        unconditional:
-            If `True`, include smoothing parameter uncertainty in standard errors and intervals
-            (Marra & Wood 2012). This uses the unconditional covariance matrix V_c instead of the
-            conditional V_p, producing wider and more honest intervals. Requires that the model was
+            - `"response"` (default): predictions on the response scale,
+              $\mu = g^{-1}(\eta)$.
+            - `"link"`: predictions on the linear predictor scale, $\eta = \mathbf{X}
+              \boldsymbol{\beta}$.
+            - `"terms"`: individual smooth term contributions to the linear predictor, returned
+              separately rather than summed (see `TermsPredictionResult`).
+        interval : str or None
+            Interval type. `None` (default) returns no intervals. Ignored (and must be `None`)
+            when `type="terms"`. Otherwise one of:
+
+            - `"confidence"`: interval for the mean response, reflecting uncertainty in $\eta$
+              only.
+            - `"prediction"`: interval for a new individual observation, adding the
+              response-distribution variance on top of the uncertainty in $\eta$.
+            - `"simultaneous"`: a band with `level` coverage for the *entire* curve
+              simultaneously (via posterior simulation), rather than pointwise coverage.
+
+            All interval types are computed on the linear predictor scale and transformed to the
+            response scale for `type="response"`.
+        level : float
+            Nominal coverage probability for the interval, e.g. `0.95` for a 95% interval
+            (default).
+        unconditional : bool
+            If `True`, include smoothing-parameter uncertainty in standard errors and intervals
+            (Marra & Wood, 2012), using the unconditional covariance matrix $V_c$ in place of the
+            conditional $V_p$. This produces wider, more honest intervals that account for the
+            fact that $\lambda$ was itself estimated from the data. Requires that the model was
             fitted with `method="REML"` or `method="ML"`.
 
         Returns
         -------
-        PredictionResult | TermsPredictionResult
-            For `type="response"` or `"link"`, a `PredictionResult`. For `type="terms"`, a
-            `TermsPredictionResult` with per-smooth contributions.
+        PredictionResult or TermsPredictionResult
+            For `type="response"` or `type="link"`, a `PredictionResult` with `values`, `se`,
+            `linear_predictor`, `lower`, and `upper`. For `type="terms"`, a
+            `TermsPredictionResult` with per-smooth contributions and standard errors.
+
+        Examples
+        --------
+        ```{python}
+        import numpy as np
+        from whittaker import GAM
+
+        rng = np.random.default_rng(0)
+        x = np.sort(rng.uniform(0, 10, 200))
+        y = np.sin(x) + rng.normal(scale=0.2, size=200)
+
+        gam = GAM("y ~ s(x)").fit({"x": x, "y": y})
+        new_x = np.linspace(0, 10, 5)
+        result = gam.predict({"x": new_x}, se=True, interval="confidence")
+        result.values, result.lower, result.upper
+        ```
         """
         self._check_fitted()
         new_data = prepare_data(new_data)
@@ -1013,7 +1163,24 @@ class GAM:
         return anova_gam(*model_pairs, scale_known=self._family.scale_known)
 
     def summary(self) -> str:
-        """Return a text summary of the fitted model."""
+        """Return a text summary of the fitted model, analogous to `summary.gam()` in R's mgcv.
+
+        The summary reports, in order: the formula and family; a table of parametric
+        (non-smooth) coefficients with estimates, standard errors, test statistics (`t` for
+        unknown-scale families such as Gaussian and Gamma, `z` for known-scale families such as
+        Binomial and Poisson), and p-values; a table of approximate significance for each smooth
+        term (effective degrees of freedom, reference degrees of freedom, a chi-squared-type
+        statistic, and a p-value); and overall fit statistics (total EDF, deviance, null
+        deviance, proportion of deviance explained, GCV score, estimated scale, AIC, and BIC).
+        Use this for a quick, human-readable check of which terms are significant and how well
+        the model fits, without extracting individual result objects via `parametric_tests()`
+        and `smooth_tests()`.
+
+        Returns
+        -------
+        str
+            Multi-line text summary suitable for printing.
+        """
         self._check_fitted()
         r = self._fit_result
         mm = self._model_matrix
@@ -1086,19 +1253,42 @@ class GAM:
         n_points: int = 200,
         level: float = 0.95,
     ) -> object:
-        """Plot partial effects with confidence bands for each smooth term.
+        """Plot the estimated partial effect of each smooth term, with a confidence band.
+
+        For every smooth in the formula, evaluates the term's contribution to the linear
+        predictor over an evenly spaced grid spanning its covariate's observed range (holding
+        other terms out, i.e. this shows the additive component `f_k(x)` itself, not the full
+        fitted response), together with a pointwise confidence band derived from the model's
+        coefficient covariance. This is the standard way to visually inspect the *shape* of each
+        estimated smooth — e.g. whether it is roughly linear, monotonic, or has a distinct
+        peak — without needing to call `predict(type="terms")` and plot manually.
 
         Parameters
         ----------
-        n_points:
-            Number of evenly spaced evaluation points per smooth.
-        level:
-            Confidence level for the bands (the default is `0.95`).
+        n_points : int
+            Number of evenly spaced evaluation points per smooth (default `200`).
+        level : float
+            Confidence level for the bands, e.g. `0.95` for a 95% band (default).
 
         Returns
         -------
         altair.VConcatChart or altair.Chart
-            One panel per smooth term.
+            A vertically concatenated chart with one panel per smooth term (or a single `Chart`
+            if the model has exactly one smooth).
+
+        Examples
+        --------
+        ```{python}
+        import numpy as np
+        from whittaker import GAM
+
+        rng = np.random.default_rng(0)
+        x = np.sort(rng.uniform(0, 10, 200))
+        y = np.sin(x) + rng.normal(scale=0.2, size=200)
+
+        gam = GAM("y ~ s(x)").fit({"x": x, "y": y})
+        gam.plot()
+        ```
         """
         from whittaker.plotting import partial_effects
 
@@ -1108,21 +1298,50 @@ class GAM:
         self,
         plots: tuple[str, ...] | list[str] | None = None,
     ) -> list[object]:
-        """Produce GAM diagnostic plots.
+        """Produce a standard set of residual diagnostic plots for the fitted model.
 
-        Returns a list of individual full-width Altair charts, one per diagnostic. In a notebook
-        each chart renders independently with its own interactive controls.
+        This is the visual counterpart to `gam_check()`: rather than a textual report, it
+        renders one chart per diagnostic so that residual behavior can be inspected at a glance.
+        The available diagnostics are:
+
+        - `"qq"`: a Q-Q plot of the deviance residuals against theoretical normal quantiles, for
+          checking distributional adequacy.
+        - `"residuals"`: deviance residuals plotted against fitted values (linear predictor
+          scale), for checking non-constant variance or missed structure.
+        - `"histogram"`: a histogram of the deviance residuals.
+        - `"response"`: fitted values plotted against observed response values, for checking
+          overall calibration.
+
+        Each chart is returned as an individual, full-width Altair chart rather than a single
+        combined grid, so that in a notebook each one renders with its own independent
+        interactive controls (zoom, tooltip, etc.).
 
         Parameters
         ----------
-        plots:
-            Which diagnostics to show. A list of names chosen from `"qq"`, `"residuals"`,
-            `"histogram"`, `"response"`. `None` (default) returns all four.
+        plots : tuple[str, ...] or list[str] or None
+            Which diagnostics to produce. A sequence of names chosen from `"qq"`, `"residuals"`,
+            `"histogram"`, `"response"`. `None` (default) produces all four, in that order.
 
         Returns
         -------
         list[altair.Chart]
-            One chart per requested diagnostic plot.
+            One chart per requested diagnostic, in the order given by `plots` (or the default
+            order `["qq", "residuals", "histogram", "response"]`).
+
+        Examples
+        --------
+        ```{python}
+        import numpy as np
+        from whittaker import GAM
+
+        rng = np.random.default_rng(0)
+        x = np.sort(rng.uniform(0, 10, 200))
+        y = np.sin(x) + rng.normal(scale=0.2, size=200)
+
+        gam = GAM("y ~ s(x)").fit({"x": x, "y": y})
+        charts = gam.check(plots=["qq", "residuals"])
+        len(charts)
+        ```
         """
         from whittaker.plotting import check as _check
 
