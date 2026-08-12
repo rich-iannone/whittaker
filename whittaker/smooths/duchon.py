@@ -300,11 +300,30 @@ class DuchonSpline(SmoothBasis):
 
     @property
     def n_basis(self) -> int:
-        """Total number of basis functions `k`."""
+        """Total number of basis functions.
+
+        Equal to `k`: the `M` polynomial null-space columns plus the
+        `k - M` truncated-spline columns retained from the eigendecomposition
+        of the projected Duchon kernel matrix.
+
+        Returns
+        -------
+        int
+            The basis dimension `k`.
+        """
         return self.k
 
     @property
     def is_fitted(self) -> bool:
+        """Whether the basis has been fitted.
+
+        Returns
+        -------
+        bool
+            `True` once `fit()` has been called and the null-space basis,
+            eigenvectors, and eigenvalues have been computed; `False`
+            otherwise.
+        """
         return self._fitted
 
     def __repr__(self) -> str:
