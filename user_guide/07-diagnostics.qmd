@@ -82,7 +82,7 @@ model2.check()
 ```
 
 Keep increasing `k` until the k-index test is no longer significant. The smoothing parameter
-selection (REML) will prevent overfitting even with a large `k`; the penalty shrinks away
+selection (REML) will prevent overfitting even with a large `k`. The penalty shrinks away
 unnecessary complexity.
 :::
 
