@@ -37,7 +37,7 @@ import numpy as np
 import whittaker as wk
 
 # Generate data
-rng = np.random.default_rng(42)
+rng = np.random.default_rng(23)
 n = 600
 x = np.linspace(0, 2 * np.pi, n)
 y = np.sin(x) + rng.normal(0, 0.3, n)
@@ -49,8 +49,8 @@ sgam = wk.StreamingGAM("y ~ s(x)")
 batch_size = 200
 for i in range(0, n, batch_size):
     batch = {
-        "x": x[i:i + batch_size],
-        "y": y[i:i + batch_size],
+        "x": x[i : i + batch_size],
+        "y": y[i : i + batch_size],
     }
     sgam.partial_fit(batch)
 
@@ -125,7 +125,7 @@ alt.Chart({"values": plot_data + true_data}).mark_line().encode(
         alt.value([4, 4]),
         alt.value([0])
     ),
-).properties(width=500, height=300, title="Streaming GAM vs. full GAM")
+).properties(width="container", height=300, title="Streaming GAM vs. full GAM")
 ```
 
 ## Exponential decay for sliding windows
@@ -136,7 +136,7 @@ sufficient statistics are multiplied by `decay` before the new batch is added.
 
 ```{python}
 # Simulate a distribution shift: first half is sin(x), second half is 2*sin(x)
-rng = np.random.default_rng(42)
+rng = np.random.default_rng(23)
 n = 400
 x = np.linspace(0, 2 * np.pi, n // 2)
 
@@ -187,7 +187,7 @@ alt.Chart({"values": plot_data}).mark_line().encode(
         alt.value([4, 4]),
         alt.value([0])
     ),
-).properties(width=500, height=300, title="Exponential decay: tracking distribution shift")
+).properties(width="container", height=300, title="Exponential decay: tracking distribution shift")
 ```
 
 ::: {.callout-note}
@@ -207,7 +207,7 @@ inspect this history to monitor how the model evolves over time.
 
 ```{python}
 # Build a longer history
-rng = np.random.default_rng(42)
+rng = np.random.default_rng(23)
 sgam = wk.StreamingGAM("y ~ s(x)")
 
 for batch_idx in range(10):
@@ -234,7 +234,7 @@ edf_data = [
 alt.Chart({"values": edf_data}).mark_line(point=True).encode(
     x=alt.X("batch:Q", title="Batch number"),
     y=alt.Y("edf:Q", title="EDF total"),
-).properties(width=400, height=250, title="EDF convergence over batches")
+).properties(width="container", height=250, title="EDF convergence over batches")
 ```
 
 ### Should I refit?
@@ -286,7 +286,7 @@ Streaming GAMs support the same formula syntax as regular GAMs:
 
 ```{python}
 # Two smooth terms
-rng = np.random.default_rng(42)
+rng = np.random.default_rng(23)
 n = 300
 x1 = np.linspace(0, 2 * np.pi, n)
 x2 = rng.uniform(0, 1, n)
@@ -295,7 +295,11 @@ y = np.sin(x1) + 2 * x2 + rng.normal(0, 0.3, n)
 sgam2 = wk.StreamingGAM("y ~ s(x1) + s(x2)")
 batch_size = 100
 for i in range(0, n, batch_size):
-    batch = {"x1": x1[i:i + batch_size], "x2": x2[i:i + batch_size], "y": y[i:i + batch_size]}
+    batch = {
+        "x1": x1[i : i + batch_size],
+        "x2": x2[i : i + batch_size],
+        "y": y[i : i + batch_size],
+    }
     sgam2.partial_fit(batch)
 sgam2.solve()
 
