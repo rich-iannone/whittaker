@@ -80,25 +80,111 @@ class ZeroInflatedPoisson(GAMLSSFamily):
 
     @property
     def parameter_names(self) -> tuple[str, ...]:
+        """Names of the distributional parameters modeled by this family.
+
+        Returns
+        -------
+        tuple of str
+            `("mu", "pi")` — the Poisson mean and the zero-inflation probability, both
+            modeled as smooth functions of covariates.
+        """
         return ("mu", "pi")
 
     def link(self, param: str, values: NDArray) -> NDArray:
+        r"""Map a distributional parameter from its natural scale to the link scale.
+
+        Applies the parameter-specific link function used internally by `GAMLSS`: the log
+        link $\eta = \log(\mu)$ for `mu` (clamped away from zero via `_MU_FLOOR`), and the
+        logit link $\eta = \log(\pi / (1-\pi))$ for `pi` (clamped away from 0 and 1).
+
+        Parameters
+        ----------
+        param : str
+            Name of the parameter to transform, either `"mu"` or `"pi"`.
+        values : NDArray
+            Values of `param` on its natural scale.
+
+        Returns
+        -------
+        NDArray
+            Transformed values on the link (linear predictor) scale.
+        """
         if param == "mu":
             return np.log(np.maximum(values, _MU_FLOOR))
         return logit(np.clip(values, _EPS, 1.0 - _EPS))
 
     def link_inverse(self, param: str, eta: NDArray) -> NDArray:
+        r"""Map a distributional parameter from the link scale back to its natural scale.
+
+        Implements the inverse of `link`: $\mu = e^{\eta}$ (clipped to $[-30, 30]$ before
+        exponentiating to avoid overflow) for `mu`, and $\pi = \mathrm{expit}(\eta)$ for `pi`.
+
+        Parameters
+        ----------
+        param : str
+            Name of the parameter to transform, either `"mu"` or `"pi"`.
+        eta : NDArray
+            Linear predictor values on the link scale.
+
+        Returns
+        -------
+        NDArray
+            Values of `param` on its natural scale.
+        """
         if param == "mu":
             return np.exp(np.clip(eta, -30.0, 30.0))
         return expit(eta)
 
     def link_derivative(self, param: str, values: NDArray) -> NDArray:
+        r"""Compute the derivative of the link function with respect to the natural parameter.
+
+        Used by the IRLS fitting routine in `GAMLSS` to convert working responses between
+        the link and natural scales. Returns $d\eta/d\mu = 1/\mu$ for `mu` and
+        $d\eta/d\pi = 1/(\pi(1-\pi))$ for `pi`, both evaluated with the same clamping used
+        in `link`.
+
+        Parameters
+        ----------
+        param : str
+            Name of the parameter, either `"mu"` or `"pi"`.
+        values : NDArray
+            Values of `param` on its natural scale.
+
+        Returns
+        -------
+        NDArray
+            Derivative of the link function evaluated at `values`.
+        """
         if param == "mu":
             return 1.0 / np.maximum(values, _MU_FLOOR)
         v = np.clip(values, _EPS, 1.0 - _EPS)
         return 1.0 / (v * (1.0 - v))
 
     def dl_dtheta(self, param: str, y: NDArray, params: dict[str, NDArray]) -> NDArray:
+        r"""Compute the first derivative of the log-likelihood with respect to a parameter.
+
+        Implements the family-specific score function used by `GAMLSS` to build the
+        working response at each IRLS iteration. For zero observations the derivative
+        accounts for the mixture weight of the point mass versus the Poisson component at
+        zero; for positive observations it reduces to the ordinary Poisson score. For `mu`
+        this is $\partial \ell / \partial \mu$, and for `pi` it is
+        $\partial \ell / \partial \pi$, both derived from the zero-inflated Poisson
+        log-likelihood.
+
+        Parameters
+        ----------
+        param : str
+            Name of the parameter to differentiate with respect to, either `"mu"` or `"pi"`.
+        y : NDArray
+            Observed response values.
+        params : dict of str to NDArray
+            Current fitted values of all distributional parameters (`"mu"` and `"pi"`).
+
+        Returns
+        -------
+        NDArray
+            Elementwise first derivative of the log-likelihood with respect to `param`.
+        """
         mu = np.maximum(params["mu"], _MU_FLOOR)
         pi = np.clip(params["pi"], _EPS, 1.0 - _EPS)
         exp_neg_mu = np.exp(-np.minimum(mu, 700.0))
@@ -117,6 +203,28 @@ class ZeroInflatedPoisson(GAMLSSFamily):
         )
 
     def d2l_dtheta2(self, param: str, y: NDArray, params: dict[str, NDArray]) -> NDArray:
+        r"""Compute the (negative) second derivative of the log-likelihood.
+
+        Implements the family-specific working weight used by `GAMLSS`'s Fisher-scoring
+        updates. The returned values approximate $-\partial^2 \ell / \partial \theta^2$ for
+        `theta` in `{"mu", "pi"}`, computed separately for zero and positive observations to
+        reflect the zero-inflated mixture, and floored at `_EPS` to keep weights strictly
+        positive.
+
+        Parameters
+        ----------
+        param : str
+            Name of the parameter, either `"mu"` or `"pi"`.
+        y : NDArray
+            Observed response values.
+        params : dict of str to NDArray
+            Current fitted values of all distributional parameters (`"mu"` and `"pi"`).
+
+        Returns
+        -------
+        NDArray
+            Elementwise working weight for `param`.
+        """
         mu = np.maximum(params["mu"], _MU_FLOOR)
         pi = np.clip(params["pi"], _EPS, 1.0 - _EPS)
         exp_neg_mu = np.exp(-np.minimum(mu, 700.0))
@@ -131,6 +239,30 @@ class ZeroInflatedPoisson(GAMLSSFamily):
         return np.maximum(np.where(y == 0, w_zero, w_pos), _EPS)
 
     def log_likelihood(self, y: NDArray, params: dict[str, NDArray]) -> float:
+        r"""Compute the total log-likelihood under the zero-inflated Poisson model.
+
+        Evaluates
+
+        $$
+        \ell = \sum_{i: y_i = 0} \log\!\big(\pi_i + (1-\pi_i) e^{-\mu_i}\big)
+        + \sum_{i: y_i > 0} \Big[\log(1-\pi_i) + y_i \log(\mu_i) - \mu_i - \log(y_i!)\Big],
+        $$
+
+        summing the point-mass contribution for structural zeros with the Poisson
+        contribution for observed counts.
+
+        Parameters
+        ----------
+        y : NDArray
+            Observed response values.
+        params : dict of str to NDArray
+            Fitted values of `"mu"` and `"pi"` for each observation.
+
+        Returns
+        -------
+        float
+            Total log-likelihood summed over all observations.
+        """
         mu = np.maximum(params["mu"], _MU_FLOOR)
         pi = np.clip(params["pi"], _EPS, 1.0 - _EPS)
         exp_neg_mu = np.exp(-np.minimum(mu, 700.0))
@@ -140,6 +272,23 @@ class ZeroInflatedPoisson(GAMLSSFamily):
         return float(np.sum(ll_i))
 
     def initialize(self, y: NDArray) -> dict[str, NDArray]:
+        """Generate starting values for `mu` and `pi` before the first IRLS iteration.
+
+        Sets `mu` to the mean of the strictly positive observations (or 1.0 if none are
+        positive) for every observation, and sets `pi` to half the observed fraction of
+        zeros, clipped to `[0.01, 0.5]`, giving `GAMLSS` a reasonable starting point
+        without any structural information about the covariates.
+
+        Parameters
+        ----------
+        y : NDArray
+            Observed response values.
+
+        Returns
+        -------
+        dict of str to NDArray
+            Initial values for `"mu"` and `"pi"`, each broadcast to the shape of `y`.
+        """
         zero_frac = float(np.mean(y == 0))
         y_pos = y[y > 0]
         mu_est = float(np.mean(y_pos)) if len(y_pos) > 0 else 1.0
@@ -149,6 +298,26 @@ class ZeroInflatedPoisson(GAMLSSFamily):
         }
 
     def simulate(self, params: dict[str, NDArray], rng: object) -> NDArray:
+        """Draw a random sample of counts from the fitted zero-inflated Poisson model.
+
+        For each observation, flips a `pi`-weighted coin to decide whether it is a
+        structural zero; observations that are not structural zeros are drawn from
+        `Poisson(mu)`, so a sampled value can still be zero even when it was not selected
+        as a structural zero.
+
+        Parameters
+        ----------
+        params : dict of str to NDArray
+            Fitted values of `"mu"` and `"pi"` for each observation to simulate.
+        rng : object
+            Random number generator exposing `uniform` and `poisson` methods, such as a
+            `numpy.random.Generator`.
+
+        Returns
+        -------
+        NDArray
+            Simulated response values, one per row of `params`.
+        """
         mu = np.maximum(params["mu"], _MU_FLOOR)
         pi = np.clip(params["pi"], _EPS, 1.0 - _EPS)
         is_structural_zero = rng.uniform(size=len(mu)) < pi
@@ -243,23 +412,95 @@ class ZeroInflatedNegativeBinomial(GAMLSSFamily):
 
     @property
     def theta(self) -> float:
+        """Fixed negative binomial size (overdispersion) parameter.
+
+        Returns
+        -------
+        float
+            The value supplied at construction; smaller values indicate more
+            overdispersion relative to the Poisson case, which is recovered as
+            `theta -> infinity`.
+        """
         return self._theta
 
     @property
     def parameter_names(self) -> tuple[str, ...]:
+        """Names of the distributional parameters modeled by this family.
+
+        Returns
+        -------
+        tuple of str
+            `("mu", "pi")` — the negative binomial mean and the zero-inflation
+            probability, both modeled as smooth functions of covariates. The
+            overdispersion parameter `theta` is fixed at construction and is not part of
+            this tuple.
+        """
         return ("mu", "pi")
 
     def link(self, param: str, values: NDArray) -> NDArray:
+        r"""Map a distributional parameter from its natural scale to the link scale.
+
+        Applies the log link $\eta = \log(\mu)$ for `mu` (clamped away from zero via
+        `_MU_FLOOR`), and the logit link $\eta = \log(\pi / (1-\pi))$ for `pi` (clamped
+        away from 0 and 1). The overdispersion parameter `theta` is fixed and has no link.
+
+        Parameters
+        ----------
+        param : str
+            Name of the parameter to transform, either `"mu"` or `"pi"`.
+        values : NDArray
+            Values of `param` on its natural scale.
+
+        Returns
+        -------
+        NDArray
+            Transformed values on the link (linear predictor) scale.
+        """
         if param == "mu":
             return np.log(np.maximum(values, _MU_FLOOR))
         return logit(np.clip(values, _EPS, 1.0 - _EPS))
 
     def link_inverse(self, param: str, eta: NDArray) -> NDArray:
+        r"""Map a distributional parameter from the link scale back to its natural scale.
+
+        Implements the inverse of `link`: $\mu = e^{\eta}$ (clipped to $[-30, 30]$ before
+        exponentiating to avoid overflow) for `mu`, and $\pi = \mathrm{expit}(\eta)$ for `pi`.
+
+        Parameters
+        ----------
+        param : str
+            Name of the parameter to transform, either `"mu"` or `"pi"`.
+        eta : NDArray
+            Linear predictor values on the link scale.
+
+        Returns
+        -------
+        NDArray
+            Values of `param` on its natural scale.
+        """
         if param == "mu":
             return np.exp(np.clip(eta, -30.0, 30.0))
         return expit(eta)
 
     def link_derivative(self, param: str, values: NDArray) -> NDArray:
+        r"""Compute the derivative of the link function with respect to the natural parameter.
+
+        Returns $d\eta/d\mu = 1/\mu$ for `mu` and $d\eta/d\pi = 1/(\pi(1-\pi))$ for `pi`,
+        using the same clamping applied in `link`, for use by `GAMLSS`'s IRLS fitting
+        routine.
+
+        Parameters
+        ----------
+        param : str
+            Name of the parameter, either `"mu"` or `"pi"`.
+        values : NDArray
+            Values of `param` on its natural scale.
+
+        Returns
+        -------
+        NDArray
+            Derivative of the link function evaluated at `values`.
+        """
         if param == "mu":
             return 1.0 / np.maximum(values, _MU_FLOOR)
         v = np.clip(values, _EPS, 1.0 - _EPS)
@@ -276,6 +517,29 @@ class ZeroInflatedNegativeBinomial(GAMLSSFamily):
         )
 
     def dl_dtheta(self, param: str, y: NDArray, params: dict[str, NDArray]) -> NDArray:
+        r"""Compute the first derivative of the log-likelihood with respect to a parameter.
+
+        Implements the family-specific score function for the zero-inflated negative
+        binomial model, combining the derivative of the `NB(0 | mu, theta)` probability
+        weighted by the mixture for zero observations with the ordinary negative binomial
+        score $\partial \ell / \partial \mu = (y - \mu) / (\mu (1 + \mu/\theta))$ for
+        positive observations. For `pi` the score reflects the same zero/positive split as
+        in `ZeroInflatedPoisson.dl_dtheta`.
+
+        Parameters
+        ----------
+        param : str
+            Name of the parameter to differentiate with respect to, either `"mu"` or `"pi"`.
+        y : NDArray
+            Observed response values.
+        params : dict of str to NDArray
+            Current fitted values of `"mu"` and `"pi"`.
+
+        Returns
+        -------
+        NDArray
+            Elementwise first derivative of the log-likelihood with respect to `param`.
+        """
         mu = np.maximum(params["mu"], _MU_FLOOR)
         pi = np.clip(params["pi"], _EPS, 1.0 - _EPS)
         theta = self._theta
@@ -294,6 +558,27 @@ class ZeroInflatedNegativeBinomial(GAMLSSFamily):
         return np.where(y == 0, dl_zero, dl_pos)
 
     def d2l_dtheta2(self, param: str, y: NDArray, params: dict[str, NDArray]) -> NDArray:
+        r"""Compute the (negative) second derivative of the log-likelihood.
+
+        Implements the family-specific working weight used by `GAMLSS`'s Fisher-scoring
+        updates for the zero-inflated negative binomial model, computed separately for
+        zero and positive observations and floored at `_EPS` to keep weights strictly
+        positive.
+
+        Parameters
+        ----------
+        param : str
+            Name of the parameter, either `"mu"` or `"pi"`.
+        y : NDArray
+            Observed response values.
+        params : dict of str to NDArray
+            Current fitted values of `"mu"` and `"pi"`.
+
+        Returns
+        -------
+        NDArray
+            Elementwise working weight for `param`.
+        """
         mu = np.maximum(params["mu"], _MU_FLOOR)
         pi = np.clip(params["pi"], _EPS, 1.0 - _EPS)
         theta = self._theta
@@ -312,6 +597,30 @@ class ZeroInflatedNegativeBinomial(GAMLSSFamily):
         return np.maximum(np.where(y == 0, w_zero, w_pos), _EPS)
 
     def log_likelihood(self, y: NDArray, params: dict[str, NDArray]) -> float:
+        r"""Compute the total log-likelihood under the zero-inflated negative binomial model.
+
+        Evaluates
+
+        $$
+        \ell = \sum_{i: y_i = 0} \log\!\big(\pi_i + (1-\pi_i)\, \mathrm{NB}(0 \mid \mu_i, \theta)\big)
+        + \sum_{i: y_i > 0} \Big[\log(1-\pi_i) + \log \mathrm{NB}(y_i \mid \mu_i, \theta)\Big],
+        $$
+
+        where $\mathrm{NB}(\cdot \mid \mu, \theta)$ is the negative binomial probability
+        mass function in the mean-size parameterization with the fixed `theta`.
+
+        Parameters
+        ----------
+        y : NDArray
+            Observed response values.
+        params : dict of str to NDArray
+            Fitted values of `"mu"` and `"pi"` for each observation.
+
+        Returns
+        -------
+        float
+            Total log-likelihood summed over all observations.
+        """
         mu = np.maximum(params["mu"], _MU_FLOOR)
         pi = np.clip(params["pi"], _EPS, 1.0 - _EPS)
 
@@ -322,6 +631,23 @@ class ZeroInflatedNegativeBinomial(GAMLSSFamily):
         return float(np.sum(ll_i))
 
     def initialize(self, y: NDArray) -> dict[str, NDArray]:
+        """Generate starting values for `mu` and `pi` before the first IRLS iteration.
+
+        Sets `mu` to the mean of the strictly positive observations (or 1.0 if none are
+        positive) for every observation, and sets `pi` to half the observed fraction of
+        zeros, clipped to `[0.01, 0.5]`. The fixed overdispersion parameter `theta` is not
+        part of the returned dictionary since it is not estimated per observation.
+
+        Parameters
+        ----------
+        y : NDArray
+            Observed response values.
+
+        Returns
+        -------
+        dict of str to NDArray
+            Initial values for `"mu"` and `"pi"`, each broadcast to the shape of `y`.
+        """
         zero_frac = float(np.mean(y == 0))
         y_pos = y[y > 0]
         mu_est = float(np.mean(y_pos)) if len(y_pos) > 0 else 1.0
@@ -331,6 +657,27 @@ class ZeroInflatedNegativeBinomial(GAMLSSFamily):
         }
 
     def simulate(self, params: dict[str, NDArray], rng: object) -> NDArray:
+        """Draw a random sample of counts from the fitted zero-inflated NB model.
+
+        For each observation, flips a `pi`-weighted coin to decide whether it is a
+        structural zero; observations that are not structural zeros are drawn from a
+        negative binomial distribution with the fixed `theta` and success probability
+        `theta / (mu + theta)`, so a sampled value can still be zero even when it was not
+        selected as a structural zero.
+
+        Parameters
+        ----------
+        params : dict of str to NDArray
+            Fitted values of `"mu"` and `"pi"` for each observation to simulate.
+        rng : object
+            Random number generator exposing `uniform` and `negative_binomial` methods,
+            such as a `numpy.random.Generator`.
+
+        Returns
+        -------
+        NDArray
+            Simulated response values, one per row of `params`.
+        """
         mu = np.maximum(params["mu"], _MU_FLOOR)
         pi = np.clip(params["pi"], _EPS, 1.0 - _EPS)
         theta = self._theta
