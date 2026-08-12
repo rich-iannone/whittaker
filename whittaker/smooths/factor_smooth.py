@@ -144,7 +144,10 @@ class FactorSmoothBasis(SmoothBasis):
         self._marginal_nsd: int
 
     def fit(  # type: ignore[override]
-        self, x_numeric: NDArray, factor: NDArray | None = None, **kwargs: Any,
+        self,
+        x_numeric: NDArray,
+        factor: NDArray | None = None,
+        **kwargs: Any,
     ) -> FactorSmoothBasis:
         """Fit the factor-smooth basis.
 
@@ -191,7 +194,10 @@ class FactorSmoothBasis(SmoothBasis):
         return self
 
     def basis_matrix(  # type: ignore[override]
-        self, x_numeric: NDArray, factor: NDArray | None = None, **kwargs: Any,
+        self,
+        x_numeric: NDArray,
+        factor: NDArray | None = None,
+        **kwargs: Any,
     ) -> NDArray:
         """Build the block-diagonal basis matrix.
 
