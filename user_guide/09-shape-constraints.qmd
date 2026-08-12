@@ -65,7 +65,7 @@ import whittaker as wk
 import altair as alt
 
 # Simulate a dose-response curve (Emax-like shape with noise)
-rng = np.random.default_rng(42)
+rng = np.random.default_rng(23)
 n = 150
 dose = np.sort(rng.uniform(0, 10, n))
 # True response: saturating Emax curve
@@ -123,7 +123,7 @@ lines = alt.Chart({"values": fit_data}).mark_line(strokeWidth=2).encode(
 )
 
 (points + lines).properties(
-    width=550, height=320,
+    width="container", height=320,
     title="Dose-response: monotone increasing vs. unconstrained"
 )
 ```
@@ -144,7 +144,7 @@ increases due to measurement noise, but the true process is strictly decreasing.
 
 ```{python}
 # Simulate exponential decay with noise
-rng = np.random.default_rng(42)
+rng = np.random.default_rng(23)
 n = 120
 time = np.sort(rng.uniform(0, 10, n))
 # True decay: A(t) = 100 * exp(-0.3 * t)
@@ -199,7 +199,7 @@ lines = alt.Chart({"values": fit_data}).mark_line(strokeWidth=2).encode(
 )
 
 (points + lines).properties(
-    width=550, height=320,
+    width="container", height=320,
     title="Radioactive decay: monotone decreasing vs. unconstrained"
 )
 ```
@@ -225,11 +225,11 @@ increases at high levels (diminishing returns to scale), producing a convex func
 
 ```{python}
 # Simulate a U-shaped average cost curve
-rng = np.random.default_rng(42)
+rng = np.random.default_rng(23)
 n = 180
 quantity = np.sort(rng.uniform(1, 20, n))
 # True cost: quadratic with minimum around q=10
-true_cost = 0.5 * (quantity - 10)**2 + 20
+true_cost = 0.5 * (quantity - 10) ** 2 + 20
 y_cost = true_cost + rng.normal(0, 3, n)
 
 data_cost = {"quantity": quantity, "y": y_cost}
@@ -280,7 +280,7 @@ lines = alt.Chart({"values": fit_data}).mark_line(strokeWidth=2).encode(
 )
 
 (points + lines).properties(
-    width=550, height=320,
+    width="container", height=320,
     title="Average cost curve: convex vs. unconstrained"
 )
 ```
@@ -300,7 +300,7 @@ yield. The relationship is concave.
 
 ```{python}
 # Simulate diminishing returns
-rng = np.random.default_rng(42)
+rng = np.random.default_rng(23)
 n = 160
 fertilizer = np.sort(rng.uniform(0, 100, n))
 # True yield: square root relationship (concave)
@@ -355,7 +355,7 @@ lines = alt.Chart({"values": fit_data}).mark_line(strokeWidth=2).encode(
 )
 
 (points + lines).properties(
-    width=550, height=320,
+    width="container", height=320,
     title="Diminishing returns: concave vs. unconstrained"
 )
 ```
@@ -376,7 +376,7 @@ high temperatures).
 
 ```{python}
 # Simulate two-predictor model with different constraints
-rng = np.random.default_rng(42)
+rng = np.random.default_rng(23)
 n = 250
 
 dose = np.sort(rng.uniform(0, 10, n))
@@ -385,7 +385,7 @@ temperature = rng.uniform(5, 45, n)
 # True relationship:
 #   efficacy increases monotonically with dose (log-like)
 #   degradation is convex in temperature (U-shaped around 25C)
-true_efficacy = 20 * np.log1p(dose) - 0.02 * (temperature - 25)**2
+true_efficacy = 20 * np.log1p(dose) - 0.02 * (temperature - 25) ** 2
 y_eff = true_efficacy + rng.normal(0, 3, n)
 
 data_combined = {"dose": dose, "temperature": temperature, "y": y_eff}
@@ -426,14 +426,14 @@ chart_dose = alt.Chart({"values": dose_plot_data}).mark_line(
 ).encode(
     x=alt.X("x:Q", title="Dose"),
     y=alt.Y("fit:Q", title="Predicted efficacy"),
-).properties(width=270, height=250, title="Dose effect (mpi)")
+).properties(width="container", height=250, title="Dose effect (mpi)")
 
 chart_temp = alt.Chart({"values": temp_plot_data}).mark_line(
     strokeWidth=2, color="darkgreen"
 ).encode(
     x=alt.X("x:Q", title="Temperature (C)"),
     y=alt.Y("fit:Q", title="Predicted efficacy"),
-).properties(width=270, height=250, title="Temperature effect (cx)")
+).properties(width="container", height=250, title="Temperature effect (cx)")
 
 chart_dose | chart_temp
 ```
