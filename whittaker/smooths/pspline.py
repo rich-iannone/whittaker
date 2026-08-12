@@ -99,43 +99,79 @@ def _bspline_design(x: NDArray, t: NDArray, degree: int) -> NDArray:
 
 
 class PSpline(SmoothBasis):
-    """P-Spline: B-spline basis with m-th order difference penalty.
+    r"""P-Spline: B-spline basis with m-th order difference penalty.
 
-    Equivalent to mgcv's `bs="ps"` basis. The k basis functions are B-splines of degree `degree`
-    with equally-spaced knots over the training data range. The penalty penalizes the m-th finite
-    differences of adjacent B-spline coefficients.
-
-    P-splines are:
-
-    - **Cheap to construct**: no eigendecomposition or system solve.
-    - **Data-location agnostic**: knots are equidistant, not at data quantiles.
-    - **Well-suited to large k**: the penalty is banded (sparse).
-    - **Naturally extrapolating**: B-splines extrapolate smoothly beyond the training range using
-    the boundary B-spline functions.
+    A P-spline (Eilers & Marx 1996) combines a rich B-spline basis on equally-spaced knots with a
+    discrete difference penalty directly on the coefficients, rather than an integrated-derivative
+    penalty on the fitted curve. This decouples basis richness from smoothness — you can use many
+    more basis functions than you would dare with an unpenalized spline, because the difference
+    penalty (together with an appropriately chosen `lambda`) does the work of controlling wiggliness.
+    Equivalent to mgcv's `bs="ps"` basis. P-splines are a good default choice for a single
+    continuous covariate: they are cheap to construct (no eigendecomposition or dense linear solve
+    is needed to build the penalty), the penalty matrix is banded/sparse which keeps large-`k` fits
+    fast, and B-splines extrapolate smoothly beyond the training range via their boundary basis
+    functions. Unlike `CRS`, knots are equidistant rather than placed at data quantiles, so P-splines
+    are somewhat less efficient when the data are very unevenly distributed but are simpler and
+    faster to set up.
 
     Parameters
     ----------
     k:
-        Number of B-spline basis functions. Must satisfy `k >= degree + 1`. The default is `10`.
+        Number of B-spline basis functions. Must satisfy `k >= degree + 1`. Larger `k` gives a
+        richer basis (more, narrower B-splines) and lets the fit follow finer local structure; as
+        with other penalized bases, wiggliness is ultimately governed by the penalty and `lambda`,
+        not by `k` alone, so `k` can usually be set generously (e.g. `k=20-40`) without much
+        downside. The default is `10`.
     degree:
-        Polynomial degree of each B-spline piece. The default is `3` (cubic).
+        Polynomial degree of each B-spline piece. `degree=3` (cubic) is the conventional choice and
+        matches most GAM software; `degree=1` gives a piecewise-linear basis useful for less smooth
+        phenomena, `degree=0` a step-function basis. The default is `3` (cubic).
     m:
-        Order of the difference penalty. The penalty penalizes the m-th differences of adjacent
-        coefficients. The default is `2` (second differences: penalizes curvature). Must satisfy
-        `0 < m < k`.
+        Order of the difference penalty applied to adjacent B-spline coefficients. `m=2` (the
+        default) penalizes second differences, which is the discrete analogue of penalizing
+        curvature and is by far the most common choice; `m=1` penalizes changes in level (shrinks
+        toward a constant), `m=3` penalizes changes in slope-of-slope for extra-smooth fits. Must
+        satisfy `0 < m < k`. The default is `2` (second differences: penalizes curvature).
+
+    Notes
+    -----
+    The knot vector is built by `_bspline_knots()`: `degree + 1` repeated (clamped) knots at each
+    of `x_min` and `x_max`, plus `k - degree - 1` interior knots equally spaced between them,
+    giving `k` B-spline basis functions of the requested `degree` via `scipy`'s `BSpline`
+    machinery (de Boor's algorithm). Because the knots are equally spaced rather than data-adaptive,
+    the design matrix `basis_matrix(x)` can be evaluated in closed form for any `x`, including
+    points beyond `[x_min, x_max]`, which the boundary B-splines extend smoothly.
+
+    The penalty acts directly on the coefficient vector `\boldsymbol{\beta}` through the `m`-th
+    order finite-difference matrix `\mathbf{D}_m` (shape `(k - m, k)`, built by applying
+    `numpy.diff` `m` times to the identity):
+
+    $$
+    \mathbf{S} = \mathbf{D}_m^\top \mathbf{D}_m,
+    $$
+
+    a `k \times k` positive semi-definite matrix of rank `k - m`. Its `m`-dimensional null space is
+    spanned by the discrete polynomial sequences `[1, 1, \ldots, 1]`, `[0, 1, \ldots, k-1]`, ...,
+    up to degree `m - 1` in the coefficient index — i.e. coefficient vectors that are themselves
+    polynomial in index have zero penalty, mirroring how polynomials of degree `< m` have zero
+    `m`-th derivative in the continuous case. Because `S` is banded (bandwidth `m`), it is sparse
+    and cheap to factorize even for large `k`; the main numerical caveat is that `basis_matrix()`
+    clips evaluation points to the B-spline's knot support before calling `scipy`'s
+    `BSpline.design_matrix`, since points exactly at or beyond the padded boundary can otherwise
+    trigger an out-of-support error.
 
     Examples
     --------
-    >>> import numpy as np
-    >>> from whittaker.smooths import PSpline
-    >>> x = np.linspace(0, 1, 100)
-    >>> basis = PSpline(k=10).fit(x)
-    >>> B = basis.basis_matrix(x)
-    >>> B.shape
-    (100, 10)
-    >>> S = basis.penalty_matrix()
-    >>> S.shape
-    (10, 10)
+    ```{python}
+    import numpy as np
+    from whittaker.smooths import PSpline
+
+    x = np.linspace(0, 1, 100)
+    basis = PSpline(k=10).fit(x)
+    B = basis.basis_matrix(x)
+    S = basis.penalty_matrix()
+    B.shape, S.shape
+    ```
     """
 
     def __init__(self, k: int = 10, degree: int = 3, m: int = 2) -> None:
@@ -253,14 +289,32 @@ class PSpline(SmoothBasis):
         return self._S.copy()
 
     def null_space_dimension(self) -> int:
-        """Return `m`: the difference penalty has an `m`-dimensional null space."""
+        """Return the dimension of the penalty null space.
+
+        For a P-spline with difference order `m`, the null space of `D_m^T D_m` is exactly
+        `m`-dimensional: it is spanned by the coefficient sequences that are themselves polynomial
+        in the coefficient index up to degree `m - 1`, since these have zero `m`-th finite
+        difference.
+
+        Returns
+        -------
+        int
+            The difference order `m`.
+        """
         return self.m
 
     def identifiability_constraints(self) -> NDArray | None:
-        """Return the sum-to-zero constraint row.
+        """Return the sum-to-zero constraint row for the intercept.
 
-        Returns a `(1, k)` matrix that enforces mean-zero contribution
-        over the training knot range.
+        Evaluates the basis on a fine equally-spaced grid spanning the training range and averages
+        each column, giving a `(1, k)` row `C` such that `C @ beta == 0` constrains the smooth to
+        have mean zero over the training range.
+
+        Returns
+        -------
+        NDArray
+            Shape `(1, k)` matrix that enforces mean-zero contribution over the training knot
+            range.
         """
         self._check_fitted()
         # Evaluate at equidistant points spanning the training range.
