@@ -1,10 +1,18 @@
 """Model import/export for Whittaker GAMs.
 
-Provides:
+This module provides two independent ways to move a fitted `~whittaker.gam.GAM` in and out of
+process:
 
-- `save_gam` / `load_gam`: Serialize/deserialize a fitted GAM to/from a `.npz` archive.
-- `to_mgcv_dict` / `from_mgcv_dict`: Convert between a fitted GAM and an mgcv-compatible dictionary
-structure (for R interoperability).
+1. `save_gam` / `load_gam`: Serialize a fitted model to a single `.npz` archive and reconstruct it
+   later without re-fitting. This is the round-trip path within Python — everything the model needs
+   for `predict()`, `summary()`, and further inference is captured, including the fitted smooth
+   basis state, so loading is exact and cheap (no basis refitting or optimization is repeated).
+2. `to_mgcv_dict` / `from_mgcv_dict`: Convert to and from a plain dictionary whose keys and structure
+   mirror an `mgcv::gam` object in R. This is the cross-language path — export a Python-fitted model
+   for inspection or comparison in R, or import a model fitted with `mgcv::gam()` in R for use in
+   Python. Because `mgcv` and `whittaker` do not expose identical internals, this conversion is
+   necessarily lossy in places; see the `Notes` sections of `to_mgcv_dict` and `from_mgcv_dict` for
+   specifics.
 """
 
 from __future__ import annotations
@@ -300,18 +308,74 @@ def _basis_from_state(state: dict[str, Any]) -> SmoothBasis:
 
 
 def save_gam(model: Any, path: str | Path) -> None:
-    """Save a fitted GAM to a `.npz` archive.
+    r"""Save a fitted GAM to a `.npz` archive.
 
-    The archive contains the formula, family, fitted coefficients, smoothing parameters, penalty
-    matrices, training design matrix, and fitted smooth basis state (everything needed to
-    reconstruct the model for prediction and inference).
+    Serializes everything needed to reconstruct a fitted `~whittaker.gam.GAM` for prediction and
+    inference without recomputing basis fits or re-running P-IRLS. Use this to persist a model
+    between sessions, ship a fitted model to another machine, or cache an expensive fit. The archive
+    is a standard `numpy` `.npz` file (produced with `numpy.savez_compressed`) and can, in principle,
+    be inspected with `numpy.load` alone, though `load_gam` is the supported way to read it back.
+
+    Internally the archive stores two kinds of data under one file:
+
+    - A single JSON-encoded metadata blob under the key `"__metadata__"`, containing the formula
+      (response, intercept flag, and each term), the family (class name and any extra parameters
+      such as a Tweedie power or negative-binomial dispersion), fit statistics (smoothing parameters,
+      scale, GCV score, EDF, deviance, iteration count, convergence flag, AIC/BIC, etc.), model-matrix
+      metadata (column names, intercept/parametric counts, offset expressions), and, per smooth term,
+      its formula term, coefficient column range, null-space dimension, penalty indices, and basis
+      state (attribute values of the fitted `~whittaker.smooths.base.SmoothBasis`).
+    - Raw `numpy` arrays stored alongside the metadata: `coefficients`, `linear_predictor`,
+      `fitted_values`, `residuals`, the training design matrix `X`, the `response` vector, and,
+      when present, `weights`, `prior_weights`, `pseudo_data`, and `offset`. Each smooth's penalty
+      matrix is stored as `penalty_{i}` (one array per penalty block, in the order the smooths
+      contribute penalties). Any array-valued attribute of a smooth's fitted basis (e.g. knot
+      locations, training covariate values) is stored under a key of the form
+      `smooth_{idx}_basis_{attr}` (or `smooth_{idx}_basis_{attr}_{subkey}` for nested dict
+      attributes), with a `{"__ndarray__": key}` pointer left in the metadata blob so `load_gam` can
+      find it.
+
+    Note that the archive has no explicit format-version field: there is currently no mechanism to
+    detect or migrate across schema changes, so a saved archive is only guaranteed to load correctly
+    with a `whittaker` version compatible with the one that wrote it.
 
     Parameters
     ----------
-    model:
-        A fitted `GAM` instance.
-    path:
-        Output file path. A `.npz` extension is recommended.
+    model : GAM
+        A fitted `~whittaker.gam.GAM` instance, i.e. one on which `fit()` has already been called.
+    path : str or pathlib.Path
+        Output file path. `numpy.savez_compressed` appends a `.npz` extension automatically if the
+        given path does not already end in one.
+
+    Raises
+    ------
+    TypeError
+        If `model` is not a `GAM` instance.
+    RuntimeError
+        If `model` has not been fitted (`model.is_fitted` is `False`).
+
+    Examples
+    --------
+    ```{python}
+    import numpy as np
+    import whittaker as wt
+    from whittaker.io import save_gam, load_gam
+
+    rng = np.random.default_rng(0)
+    x = np.sort(rng.uniform(0, 1, 200))
+    y = np.sin(2 * np.pi * x) + rng.normal(scale=0.2, size=200)
+
+    model = wt.GAM("y ~ s(x)").fit({"x": x, "y": y})
+
+    save_gam(model, "gam_model.npz")
+    reloaded = load_gam("gam_model.npz")
+
+    new_x = np.linspace(0, 1, 5)
+    np.allclose(
+        model.predict({"x": new_x}).values,
+        reloaded.predict({"x": new_x}).values,
+    )
+    ```
     """
     from whittaker.gam import GAM
 
@@ -416,17 +480,43 @@ def save_gam(model: Any, path: str | Path) -> None:
 
 
 def load_gam(path: str | Path) -> Any:
-    """Load a fitted GAM from a `.npz` archive created by `save_gam`.
+    r"""Load a fitted GAM from a `.npz` archive created by `save_gam`.
+
+    Reads back every piece of state that `save_gam` wrote — the formula, family, fitted
+    coefficients and fit statistics, training design matrix and penalties, and each smooth's basis
+    state (restored via an internal `_basis_from_state` helper that reconstructs the original
+    `~whittaker.smooths.base.SmoothBasis` subclass without calling its constructor) — and assembles
+    them into a fully fitted `~whittaker.gam.GAM`. The returned model behaves exactly as it did
+    before saving: `predict()`, `summary()`, `plot()`, and `check()` all work immediately, with no
+    re-fitting or basis refitting performed.
 
     Parameters
     ----------
-    path:
-        Path to the `.npz` file.
+    path : str or pathlib.Path
+        Path to the `.npz` file written by `save_gam`.
 
     Returns
     -------
     GAM
-        A fitted `GAM` ready for prediction and inference.
+        A fitted `~whittaker.gam.GAM` ready for prediction and inference.
+
+    Examples
+    --------
+    ```{python}
+    import numpy as np
+    import whittaker as wt
+    from whittaker.io import save_gam, load_gam
+
+    rng = np.random.default_rng(1)
+    x = np.sort(rng.uniform(0, 1, 150))
+    y = np.cos(3 * x) + rng.normal(scale=0.15, size=150)
+
+    model = wt.GAM("y ~ s(x)").fit({"x": x, "y": y})
+    save_gam(model, "gam_model.npz")
+
+    reloaded = load_gam("gam_model.npz")
+    reloaded.is_fitted
+    ```
     """
     from whittaker.gam import GAM
 
@@ -525,18 +615,78 @@ def load_gam(path: str | Path) -> Any:
 def to_mgcv_dict(model: Any) -> dict[str, Any]:
     """Export a fitted GAM as an mgcv-compatible dictionary.
 
-    The resulting dictionary mirrors the structure of an mgcv `gam` object in R, making it suitable
-    for JSON export and import by R code.
+    Builds a plain `dict` whose keys and nested structure mirror the fields of a fitted `gam` object
+    from R's `mgcv` package, rather than `whittaker`'s own internal representation. Use this when you
+    need to hand a Python-fitted model to R code — typically by serializing the result with
+    `json.dumps` and reading it in R with `jsonlite::fromJSON`, or comparing a `whittaker` fit against
+    an equivalent `mgcv::gam()` fit term by term.
+
+    Top-level keys include `coefficients` (the fitted coefficient vector), `sp` (smoothing
+    parameters), `scale` and `scale.estimated`, `gcv.ubre`, `edf` and `edf.total`, `deviance` and
+    `null.deviance`, `aic`, `n` (observation count) and `p` (coefficient count), `converged`, `iter`,
+    `method`, `formula` (as a string), `family` (a nested dict with the family name and any extra
+    parameter such as a Tweedie power or negative-binomial `theta`), `smooth` (a list, one entry per
+    smooth term), `nsdf`, and `intercept`.
+
+    Each entry in `smooth` describes one smooth term with mgcv-style field names: `term` (covariate
+    names), `bs` (the two-letter mgcv basis-type code), `label`, `first.para`/`last.para` (1-based
+    coefficient column range), `null.space.dim`, `df`, optionally `by`/`by.level` for `by`-variable
+    smooths, and `S` (a list of penalty matrix blocks, sliced from the model's full penalty matrices
+    down to just this term's coefficient columns). The `bs` code is produced by mapping the
+    `whittaker` basis class name to mgcv's naming convention, e.g. `TPRS` maps to `"tp"`,
+    `ShrinkageTPRS` to `"ts"`, `CRS` to `"cr"`, `PSpline` to `"ps"`, `CyclicPSpline` to `"cp"`,
+    `RandomEffectBasis` to `"re"`, and so on; a basis with no known mgcv counterpart falls back to its
+    `whittaker` class name unchanged.
 
     Parameters
     ----------
-    model:
-        A fitted `GAM` instance.
+    model : GAM
+        A fitted `~whittaker.gam.GAM` instance.
 
     Returns
     -------
     dict
-        An mgcv-compatible dictionary with keys like `coefficients`, `sp`, `family`, `smooth`, etc.
+        An mgcv-compatible dictionary with keys such as `coefficients`, `sp`, `family`, `smooth`,
+        `edf`, and `deviance`, suitable for JSON serialization and import into R.
+
+    Raises
+    ------
+    TypeError
+        If `model` is not a `GAM` instance.
+    RuntimeError
+        If `model` has not been fitted (`model.is_fitted` is `False`).
+
+    Notes
+    -----
+    This function is intended to interoperate with the R `mgcv` package's `gam` object structure so
+    that a `whittaker` fit can be inspected or compared from R. Full fidelity is not guaranteed: not
+    every `mgcv` field is populated (for example, no `Vp`/`Vc` covariance matrices are exported), and
+    not every `whittaker` family or basis has a direct `mgcv` equivalent, in which case the original
+    class name is used as-is rather than an invented mgcv code.
+
+    Examples
+    --------
+    ```{python}
+    import json
+    import numpy as np
+    import whittaker as wt
+    from whittaker.io import to_mgcv_dict
+
+    rng = np.random.default_rng(2)
+    x = np.sort(rng.uniform(0, 1, 100))
+    y = x**2 + rng.normal(scale=0.1, size=100)
+
+    model = wt.GAM("y ~ s(x)").fit({"x": x, "y": y})
+    mgcv_dict = to_mgcv_dict(model)
+
+    sorted(mgcv_dict.keys())
+    ```
+
+    ```{python}
+    # The dict is JSON-serializable and can be written out for R to read.
+    payload = json.dumps(mgcv_dict)
+    mgcv_dict["smooth"][0]["bs"]
+    ```
     """
     from whittaker.gam import GAM
 
@@ -636,21 +786,78 @@ def from_mgcv_dict(
 ) -> Any:
     """Import an mgcv `gam` object exported as a dictionary.
 
-    This reconstructs a fitted `GAM` from an mgcv-compatible dictionary structure. The resulting
-    model can be used for prediction if `data` (the original training data) is provided to build the
-    design matrix; otherwise only the coefficients and smoothing parameters are restored.
+    The inverse of `to_mgcv_dict`: reconstructs a `~whittaker.gam.GAM` from a dictionary shaped like
+    an R `mgcv::gam` object, typically produced in R with `jsonlite::toJSON(gam_model)` (or an
+    equivalent hand-built dict) and passed into Python after parsing the JSON. Use this to bring a
+    model fitted in R into `whittaker` for further prediction, plotting, or comparison against a
+    Python fit.
+
+    There are two modes, selected by whether `data` is supplied:
+
+    - Without `data` (the default): only the formula, family, fitted coefficients, and smoothing
+      parameters are restored onto the returned `GAM`. No model matrix or smooth basis is built, so
+      the result is a lightweight container for inspecting the imported coefficients — it is *not*
+      usable for `predict()`, since the smooth bases (knots, constraints, etc.) that the coefficients
+      were fit against are not reconstructed.
+    - With `data` (the original training data, as `{name: 1-D array}`): `~whittaker.model_matrix
+      .build_model_matrix` is called on `data` to refit each smooth's basis and assemble the design
+      matrix, the linear predictor and fitted values are recomputed from the imported coefficients,
+      and a full `FitResult` (deviance, residuals, etc.) is attached. In this mode the returned model
+      is fully usable for `predict()` on new data, since its smooth bases were rebuilt from the same
+      training data mgcv used.
+
+    The R family name in `d["family"]["family"]` is translated to the corresponding `whittaker`
+    family class via an internal mapping (`_mgcv_family_map`), e.g. `"gaussian"` -> `Gaussian`,
+    `"poisson"` -> `Poisson`, `"binomial"` -> `Binomial`, `"Gamma"` -> `Gamma`,
+    `"inverse.gaussian"` -> `InverseGaussian`, `"Tweedie"` -> `Tweedie`, `"nb"` -> `NegativeBinomial`,
+    `"cox.ph"` -> `CoxPH`, and `"betar"` -> `Beta`. A family name not in this table is passed through
+    unchanged and will raise `ValueError` if it does not match a known `whittaker` family class.
 
     Parameters
     ----------
-    d:
-        An mgcv-compatible dictionary (e.g., from `jsonlite::toJSON(gam_model)` in R).
-    data:
-        Training data as `{name: 1-D array}`. Required for full model reconstruction.
+    d : dict
+        An mgcv-compatible dictionary, e.g. parsed from `jsonlite::toJSON(gam_model)` in R, or
+        produced by `to_mgcv_dict`. Must contain at least `"coefficients"`; `"formula"`, `"family"`,
+        `"sp"`, and `"smooth"` are used when present to reconstruct the formula, family, and
+        smoothing parameters as accurately as possible.
+    data : dict[str, numpy.ndarray], optional
+        The original training data used to fit the model in R, as `{name: 1-D array}`. When given,
+        smooth bases are rebuilt from this data and the returned model supports `predict()`. When
+        omitted (the default), only coefficients and smoothing parameters are restored and the model
+        cannot be used for prediction.
 
     Returns
     -------
     GAM
-        A fitted `GAM` instance.
+        A `~whittaker.gam.GAM` instance. Fully fitted and prediction-ready when `data` is provided;
+        otherwise a formula/family/coefficient container only.
+
+    Notes
+    -----
+    This function is intended to interoperate with the R `mgcv` package's `gam` object structure.
+    Full fidelity is not guaranteed: only the family names listed in `_mgcv_family_map` are
+    recognized, and mgcv fields with no `whittaker` counterpart (e.g. certain smooth-specific `xt`
+    options) are ignored rather than reconstructed.
+
+    Examples
+    --------
+    ```{python}
+    import numpy as np
+    import whittaker as wt
+    from whittaker.io import to_mgcv_dict, from_mgcv_dict
+
+    rng = np.random.default_rng(3)
+    x = np.sort(rng.uniform(0, 1, 120))
+    y = np.sin(2 * x) + rng.normal(scale=0.1, size=120)
+    data = {"x": x, "y": y}
+
+    model = wt.GAM("y ~ s(x)").fit(data)
+    mgcv_dict = to_mgcv_dict(model)
+
+    # Round-trip through the mgcv-style dict, refitting bases from the training data.
+    reimported = from_mgcv_dict(mgcv_dict, data=data)
+    reimported.predict({"x": np.linspace(0, 1, 3)}).values
+    ```
     """
     from whittaker.gam import GAM
     from whittaker.model_matrix import build_model_matrix
