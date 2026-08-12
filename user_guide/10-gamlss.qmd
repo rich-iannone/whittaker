@@ -80,7 +80,7 @@ import numpy as np
 import whittaker as wk
 import altair as alt
 
-rng = np.random.default_rng(42)
+rng = np.random.default_rng(23)
 n = 400
 
 x = np.linspace(0, 6, n)
@@ -166,7 +166,7 @@ true_line = alt.Chart({"values": true_data}).mark_line(
 ).encode(x="x:Q", y="mu_true:Q")
 
 (band + points + line + true_line).properties(
-    width=600, height=350,
+    width="container", height=350,
     title="GaussianLS: prediction intervals widen as variance increases"
 )
 ```
@@ -236,7 +236,7 @@ line_gamma = alt.Chart({"values": fit_gamma}).mark_line(
 ).encode(x="x:Q", y=alt.Y("mu:Q", title="y"))
 
 (points_gamma + line_gamma).properties(
-    width=500, height=300,
+    width="container", height=300,
     title="Gamma location-scale: fitted mean"
 )
 ```
@@ -298,7 +298,7 @@ line_beta = alt.Chart({"values": fit_beta}).mark_line(
 ).encode(x="x:Q", y=alt.Y("mu:Q", title="y"))
 
 (points_beta + line_beta).properties(
-    width=500, height=300,
+    width="container", height=300,
     title="Beta location-scale: fitted mean proportion"
 )
 ```
@@ -429,7 +429,7 @@ rate_true = alt.Chart(
 )
 
 top_panel = (points_zip + rate_fitted + rate_true).properties(
-    width=600, height=220, title="Fitted rate (mu) with observed counts"
+    width="container", height=220, title="Fitted rate (mu) with observed counts"
 )
 
 # Bottom panel: zero-inflation probability
@@ -447,7 +447,7 @@ pi_true_line = alt.Chart(
 )
 
 bottom_panel = (pi_fitted + pi_true_line).properties(
-    width=600, height=200, title="Fitted zero-inflation probability (pi)"
+    width="container", height=200, title="Fitted zero-inflation probability (pi)"
 )
 
 alt.vconcat(top_panel, bottom_panel).resolve_scale(x="shared")
@@ -500,7 +500,7 @@ alt.Chart({"values": fit_compare}).mark_line(strokeWidth=2).encode(
     y=alt.Y("rate:Q", title="Fitted rate (mu)"),
     color=alt.Color("model:N", title="Model"),
 ).properties(
-    width=500, height=300,
+    width="container", height=300,
     title="ZIP vs. ZINB: fitted rate comparison"
 )
 ```
