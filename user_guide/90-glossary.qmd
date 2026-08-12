@@ -1,0 +1,539 @@
+---
+title: Glossary
+guide-section: "Reference"
+---
+
+Terms used throughout the Whittaker documentation, listed alphabetically. Where a term has
+a direct counterpart in Whittaker's API, the relevant class or function is noted.
+
+Additive model
+: A regression model in which the predictor is the sum of individual functions of the
+  covariates: $\eta = \beta_0 + f_1(x_1) + f_2(x_2) + \cdots$. Each function $f_j$ captures
+  the effect of one covariate independently. Because the model is additive, the contribution
+  of each covariate can be estimated and visualized separately. See also **generalized additive
+  model**.
+
+Basis dimension (`k`)
+: The number of basis functions used to represent a smooth term before penalization. It sets
+  an upper bound on the flexibility of the smooth: higher `k` allows more complex shapes, but
+  the **smoothing parameter** $\lambda$ prevents overfitting by penalizing excess curvature.
+  In practice, `k` should be set large enough that the data do not need more flexibility than
+  it allows; the **k-index test** (`model.check()`) flags terms where `k` may be too small.
+  The default in Whittaker is `k=10` for most basis types.
+
+Basis function
+: One of a set of known functions whose weighted sum approximates an unknown smooth function.
+  For example, a cubic regression spline with `k=10` represents a smooth as
+  $f(x) = \sum_{j=1}^{10} \beta_j B_j(x)$, where each $B_j$ is a basis function and the
+  $\beta_j$ are estimated coefficients. Different basis types (TPRS, CRS, P-splines) use
+  different sets of basis functions with different mathematical properties.
+
+Beta family
+: A response family for proportions on the open interval $(0, 1)$, using a logit link by
+  default: $g(\mu) = \log(\mu / (1 - \mu))$. The variance function is
+  $V(\mu) = \mu(1-\mu)/(1+\phi)$, where $\phi$ is a precision parameter. Available via
+  `Beta()`. See also **BetaLS** for the distributional variant.
+
+BetaLS (Beta location-scale)
+: A **GAMLSS** family that models both the mean $\mu$ and the precision $\phi$ of a Beta
+  distribution as smooth functions of covariates. The logit link constrains $\mu$ to $(0, 1)$
+  and the log link keeps $\phi$ positive. Available via `BetaLS()`. See also **GAMLSS**.
+
+BigGAM
+: A scalable variant of `GAM` that uses discretized P-IRLS to fit models on large datasets.
+  Each covariate is binned into `n_discrete` unique values and sufficient statistics are
+  accumulated over the grid, reducing memory from $O(n \cdot p)$ to $O(d \cdot p)$ where
+  $d \ll n$. Uses **fREML** for smoothing parameter estimation. See also **PolarsGAM**,
+  **DuckDBGAM**.
+
+Binomial family
+: A response family for binary outcomes or proportions. The default logit link maps the linear
+  predictor to a probability: $P(y = 1 \mid x) = 1 / (1 + e^{-\eta})$. The variance function
+  is $V(\mu) = \mu(1 - \mu)$. Available via `Binomial()`.
+
+Canonical link
+: The link function that sets $g(\mu) = \theta$, where $\theta$ is the canonical parameter of
+  the exponential family. Using the canonical link simplifies the score equations and
+  guarantees concavity of the log-likelihood. Examples: identity for Gaussian, log for Poisson,
+  logit for Binomial. Non-canonical links are sometimes preferred for interpretability.
+
+CATE (Conditional Average Treatment Effect)
+: The expected treatment effect conditional on covariates: $\tau(x) = E[Y(1) - Y(0) \mid X =
+  x]$. Unlike the **ATE**, CATE allows the effect to vary across the covariate space. Estimated
+  by `CausalGAM` with `method="interactive"`. See also **treatment effect**.
+
+CausalGAM
+: A GAM-based implementation of the **double machine learning** (DML) framework for estimating
+  causal treatment effects from observational data. It uses cross-fitted nuisance models to
+  partial out confounders, producing debiased estimates of the **ATE** or **CATE**. Available
+  via `CausalGAM`.
+
+Concavity constraint
+: A shape constraint that forces a smooth to curve downward (i.e., $f''(x) \le 0$). Useful
+  for modeling diminishing returns. Specified with `bs="cv"` in the formula. See also
+  **shape constraint**, **convexity constraint**.
+
+Concordance
+: See **concurvity**.
+
+Concurvity
+: The nonlinear analogue of collinearity. When two smooth terms in a GAM can approximate each
+  other, the model has high concurvity, which inflates standard errors and makes individual
+  term estimates unreliable. Diagnosed with `model.concurvity()`, which returns pairwise and
+  overall concurvity measures. Values above 0.8 are typically concerning.
+
+Confidence band (interval)
+: A band around the fitted curve that reflects uncertainty in the estimated smooth.
+  **Pointwise** intervals cover the true value at each individual $x$ with the stated
+  probability. **Simultaneous** bands cover the entire curve at once and are wider, accounting
+  for the multiple-testing aspect of evaluating many points. Simultaneous bands are produced by
+  `predict(..., interval="simultaneous")`.
+
+Conformal prediction
+: A distribution-free method for constructing prediction intervals with finite-sample coverage
+  guarantees. Whittaker implements three conformal methods: **split conformal** (`"split"`),
+  **CV+** (`"cv+"`), and **jackknife+** (`"jackknife+"`). The intervals adapt to local
+  variance without distributional assumptions. Available via `ConformalPredictor`.
+
+Convexity constraint
+: A shape constraint that forces a smooth to curve upward (i.e., $f''(x) \ge 0$). Useful for
+  modeling U-shaped cost curves or economies of scale. Specified with `bs="cx"` in the formula.
+  See also **shape constraint**, **concavity constraint**.
+
+Cross-validation (CV)
+: A resampling procedure for estimating out-of-sample model performance. The data are split
+  into $k$ folds; the model is trained on $k - 1$ folds and evaluated on the held-out fold,
+  rotating so every observation is used for evaluation exactly once. The $k$ scores are averaged
+  to produce a single performance estimate. In Whittaker, `cross_validate()` returns a
+  `CVResult` with the mean score, its standard error, and per-fold breakdowns.
+
+Cubic regression spline (CRS)
+: A piecewise cubic polynomial with knots placed at quantiles of the covariate. The pieces
+  join with continuous first and second derivatives, ensuring overall smoothness. CRS uses a
+  wiggliness penalty on the integrated squared second derivative. Specified with `bs="cr"` in
+  the formula. See also **cyclic CRS**.
+
+Cumulant function
+: The function $b(\theta)$ in the exponential family density whose derivatives give the mean
+  ($\mu = b'(\theta)$) and the **variance function** ($V(\mu) = b''(\theta)$). It
+  characterizes the distribution and determines the **deviance**.
+
+Cyclic CRS
+: A variant of the **cubic regression spline** that wraps around, matching function values and
+  derivatives at the boundary knots. Useful for periodic covariates such as time of day or day
+  of year. Specified with `bs="cc"` in the formula.
+
+Cyclic P-spline
+: A variant of the **P-spline** basis with periodic boundary conditions. Like cyclic CRS but
+  using B-spline basis functions with a difference penalty. Specified with `bs="cps"` in the
+  formula.
+
+Deviance
+: A measure of the discrepancy between the fitted model and a saturated (perfect-fit) model:
+  $D = 2\phi[\ell(\text{saturated}) - \ell(\text{fitted})]$. It generalizes the residual sum
+  of squares to non-Gaussian families and is the quantity minimized during **P-IRLS** fitting.
+  The **deviance explained** (analogous to $R^2$) is $1 - D / D_\text{null}$.
+
+Deviance residuals
+: Residuals based on the contribution of each observation to the total deviance:
+  $r_i^D = \text{sign}(y_i - \hat\mu_i) \sqrt{d_i}$, where $d_i$ is the unit deviance.
+  Deviance residuals are more nearly normally distributed than raw residuals for non-Gaussian
+  families, making them the default choice for diagnostic plots.
+
+Dispersion parameter ($\phi$)
+: A scale parameter that controls the spread of the response distribution beyond what is
+  captured by the variance function. For Gaussian models, $\phi = \sigma^2$. For Poisson and
+  Binomial, $\phi = 1$ (known). For Gamma, $\phi$ is estimated. Accessed via `model.scale`.
+
+Double machine learning (DML)
+: A framework for estimating causal effects in the presence of high-dimensional confounders.
+  DML uses cross-fitting to estimate nuisance functions (outcome and treatment models)
+  separately from the target causal parameter, avoiding regularization bias. Implemented in
+  Whittaker via **CausalGAM**.
+
+Double penalty (smooth selection)
+: A technique for automatic smooth term selection that adds a second penalty to each smooth,
+  allowing the entire term to be shrunk to zero (effectively removed from the model). Activated
+  with `select=True` in `model.fit()`. Terms that do not contribute receive near-zero
+  **effective degrees of freedom**.
+
+DuckDBGAM
+: A scalable GAM backend that streams data from DuckDB tables or SQL queries via Arrow. Ideal
+  when the data lives in a database or when SQL-based filtering and transformation are needed
+  before fitting. See also **BigGAM**, **PolarsGAM**.
+
+Effective degrees of freedom (EDF)
+: The effective number of parameters used by a smooth term, accounting for penalization. An
+  EDF of 1 means the term is a straight line; higher values indicate more complex shapes. The
+  total EDF across all terms determines model complexity. Accessed via `model.edf_total` and
+  reported per term in `model.summary()`.
+
+ELF (Expectile-Like Family) loss
+: The smoothed loss function used by **QuantileGAM** to approximate the quantile check
+  function. It replaces the non-differentiable kink at zero with a smooth surrogate controlled
+  by a bandwidth parameter $\sigma$. As $\sigma \to 0$, ELF converges to the true check
+  function. The smoothness enables P-IRLS fitting. See also **sigma calibration**.
+
+Exponential family
+: A class of probability distributions whose density can be written as
+  $f(y \mid \theta, \phi) = a(y, \phi) \exp[(y\theta - b(\theta))/\phi]$. All response
+  families in Whittaker (Gaussian, Poisson, Binomial, Gamma, etc.) belong to this class.
+  The exponential family structure enables a unified fitting algorithm (**P-IRLS**).
+
+Factor smooth (`bs="fs"`)
+: A smooth interaction that creates a separate smooth of a numeric covariate for each level
+  of a grouping factor, with all levels sharing the same **smoothing parameter**. Useful for
+  random-slope models. Specified with `s(x, group, bs="fs")` in the formula. Available via
+  `FactorSmoothBasis`.
+
+Family
+: An object that specifies the conditional distribution of the response and the **link
+  function** connecting the mean to the linear predictor. Every GAM requires a family. Whittaker
+  provides: `Gaussian`, `Poisson`, `Binomial`, `Gamma`, `NegativeBinomial`, `Beta`, `Tweedie`,
+  `InverseGaussian`, and `CoxPH`. Set via the `family=` argument to `GAM`.
+
+Fitted values
+: The model's estimate of the conditional mean $\hat\mu_i$ for each training observation.
+  On the response scale, fitted values are obtained by applying the inverse link to the linear
+  predictor: $\hat\mu = g^{-1}(\hat\eta)$. Accessed via `model.predict(training_data)`.
+
+Formula
+: A string specifying the model structure: the response variable, smooth terms, linear terms,
+  and interactions. Whittaker uses R-style formula syntax: `"y ~ s(x1) + s(x2) + x3"` specifies
+  a model with two smooth terms and one linear term. The formula is parsed into a `Formula`
+  object that builds the **model matrix**.
+
+fREML (fast REML)
+: A variant of **REML** optimized for discretized fitting in **BigGAM** and its streaming
+  variants. It exploits the reduced-rank structure of the discretized design matrix for
+  efficient smoothing parameter estimation. The recommended method for large datasets.
+
+Functional GAM
+: A GAM for scalar-on-function regression, where one or more predictors are entire curves
+  (functions) observed on a grid. The model estimates a **coefficient function** $\beta(t)$
+  that weights the functional covariate along its domain. Available via `FunctionalGAM` with
+  `FunctionalTerm` specifications.
+
+Gamma family
+: A response family for strictly positive, right-skewed continuous data. The default link is
+  the inverse: $g(\mu) = 1/\mu$. The log link is often preferred for interpretability. The
+  variance function is $V(\mu) = \mu^2$, meaning variance grows with the squared mean.
+  Available via `Gamma()`.
+
+GammaLS (Gamma location-scale)
+: A **GAMLSS** family that models both the mean $\mu$ and the coefficient of variation of a
+  Gamma distribution as smooth functions of covariates. Available via `GammaLS()`.
+
+GAMLSS (Generalized Additive Models for Location, Scale, and Shape)
+: An extension of GAMs that models multiple parameters of the response distribution (not just
+  the mean) as smooth functions of covariates. For example, `GaussianLS` models both the mean
+  $\mu$ and the standard deviation $\sigma$, capturing heteroscedasticity. Fitted via
+  alternating outer iteration. Available via `GAMLSS` with distributional families such as
+  `GaussianLS`, `GammaLS`, `BetaLS`, `ZeroInflatedPoisson`, and `ZeroInflatedNegativeBinomial`.
+
+Gaussian family
+: The default response family, assuming continuous unbounded responses with constant variance.
+  The identity link maps the linear predictor directly to the mean: $\hat\mu = \hat\eta$.
+  Fitting reduces to penalized least squares and converges in a single P-IRLS step. Available
+  via `Gaussian()`.
+
+GaussianLS (Gaussian location-scale)
+: A **GAMLSS** family that models both the mean $\mu$ and the standard deviation $\sigma$ as
+  smooth functions of covariates. Useful when variance changes with the predictors
+  (heteroscedasticity). Available via `GaussianLS()`.
+
+GCV (Generalized Cross-Validation)
+: A smoothing parameter selection criterion that estimates leave-one-out cross-validation
+  error without refitting: $\text{GCV} = n \sum (y_i - \hat\mu_i)^2 / (n - \text{EDF})^2$.
+  GCV tends to undersmooth more than **REML** and is less robust to concurvity. It is an
+  alternative to `method="REML"` in `model.fit()`.
+
+Generalized additive model (GAM)
+: A regression model that extends the generalized linear model by replacing linear covariate
+  effects with smooth functions: $g(\mu) = \beta_0 + f_1(x_1) + f_2(x_2) + \cdots$. The
+  smooth functions are estimated from the data using penalized regression splines, with
+  **smoothing parameters** controlling the trade-off between fit and smoothness. The central
+  class in Whittaker is `GAM`.
+
+Generalized linear model (GLM)
+: A regression model that extends linear regression to non-Gaussian responses via a **link
+  function** and an exponential family distribution. A GLM is a GAM in which every smooth
+  function is replaced by a linear term. GLMs are a special case of GAMs.
+
+Hat matrix (influence matrix)
+: The matrix $\mathbf{A}$ such that $\hat{\mathbf{y}} = \mathbf{A} \mathbf{y}$. Its diagonal
+  elements $A_{ii}$ measure each observation's leverage (influence on its own fitted value).
+  The trace of $\mathbf{A}$ equals the **effective degrees of freedom**. High-leverage
+  observations warrant closer inspection in diagnostics.
+
+Heteroscedasticity
+: The condition in which the variance of the response depends on the predictors. Standard GAMs
+  with a Gaussian family assume constant variance. When heteroscedasticity is present,
+  **GAMLSS** (which models variance as a smooth function) or **quantile regression** (which
+  makes no variance assumption) are more appropriate.
+
+Identifiability constraint
+: A constraint applied to each smooth term to make it uniquely estimable. By default, smooth
+  terms in a GAM are centered to have mean zero across the data, so the intercept $\beta_0$
+  captures the overall level. Without this constraint, the intercept and the smooth would be
+  confounded.
+
+Inverse link
+: The function $g^{-1}$ that maps from the linear predictor scale back to the response
+  (mean) scale. For example, with a log link, the inverse link is $g^{-1}(\eta) = e^\eta$.
+  Predictions on the response scale are obtained by applying the inverse link to the linear
+  predictor.
+
+k-index test
+: A diagnostic test for whether the **basis dimension** `k` is large enough for a smooth
+  term. It compares the estimated residual variance near neighbouring covariate values to the
+  overall residual variance. A significant result (p-value below 0.05) suggests that `k`
+  should be increased. Produced by `model.check()` and reported as a `GamCheckResult`.
+
+Knot
+: A fixed point along the covariate axis where basis function pieces join. In **CRS**, knots
+  are placed at quantiles of the covariate. In **P-splines**, knots are equally spaced. The
+  number and placement of knots, combined with the **smoothing parameter**, determine the
+  shape of the fitted smooth.
+
+Laplace approximation
+: An approximation to the marginal likelihood used in **REML** and **ML** estimation of
+  smoothing parameters. It replaces the integral over the coefficient space with a Gaussian
+  approximation centered at the mode, enabling efficient optimization of the smoothing
+  parameter objective.
+
+Linear predictor ($\eta$)
+: The additive combination of the intercept, smooth terms, and linear terms before applying
+  the link function: $\eta_i = \beta_0 + \sum_j f_j(x_{ij})$. For Gaussian models with an
+  identity link, $\eta = \mu$. For other families, $\eta$ is on a transformed scale (log, logit,
+  etc.) and must be back-transformed via the **inverse link** to obtain predictions on the
+  response scale.
+
+Link function
+: A monotonic, differentiable function $g$ that maps the conditional mean $\mu$ to the
+  **linear predictor** $\eta$: $g(\mu) = \eta$. The link ensures that predictions respect the
+  constraints of the response distribution (e.g., the log link keeps Poisson means positive).
+  Each **family** has a default (canonical) link, but alternatives are available.
+
+Marginal effect
+: The change in the predicted response for a unit change in one covariate, holding all others
+  fixed. For a smooth term $f(x)$, the marginal effect at a point is the derivative
+  $f'(x)$. Computed by `model.derivatives()`.
+
+Mediation analysis
+: A causal analysis that decomposes the total effect of a treatment on an outcome into a
+  **direct effect** (not through the mediator) and an **indirect effect** (through the
+  mediator). Requires the assumption of no unmeasured confounders of the mediator-outcome
+  relationship. Available via `mediation_analysis()`.
+
+ML (Maximum Likelihood)
+: A smoothing parameter selection criterion that maximizes the full (profiled) log-likelihood
+  over the smoothing parameters. ML tends to undersmooth relative to **REML** because it does
+  not account for the loss of degrees of freedom from estimating the fixed effects. Selected
+  with `method="ML"` in `model.fit()`.
+
+Model matrix (design matrix)
+: The matrix $\mathbf{X}$ whose columns are the evaluated basis functions (and any parametric
+  terms) for all observations. Each row corresponds to an observation and each column to a
+  **basis function** or parametric coefficient. The model matrix is constructed from the
+  **formula** and the data by the `ModelMatrix` class.
+
+Monotonicity constraint
+: A shape constraint that forces a smooth to be non-decreasing (`bs="mpi"`) or non-increasing
+  (`bs="mpd"`). Enforced by projecting P-IRLS updates onto the monotone cone using the pool
+  adjacent violators algorithm (**PAVA**). See also **shape constraint**.
+
+Negative Binomial family
+: A response family for overdispersed count data (variance exceeds the mean). Uses the NB2
+  parameterization with variance function $V(\mu) = \mu + \mu^2/\theta$, where $\theta$
+  controls overdispersion. As $\theta \to \infty$, the distribution converges to Poisson.
+  Available via `NegativeBinomial()`.
+
+Non-crossing constraint
+: A constraint in **quantile regression** that ensures fitted quantile curves do not cross:
+  $\hat{Q}_{\tau_1}(x) \le \hat{Q}_{\tau_2}(x)$ whenever $\tau_1 < \tau_2$. Enforced by
+  isotonic projection after each P-IRLS update. Activated with `non_crossing=True` in
+  `QuantileGAM`.
+
+Offset
+: A term in the linear predictor with a fixed coefficient of 1, not estimated from the data.
+  Offsets are used to account for known exposure or population size in rate models. Specified
+  as `offset(log_exposure)` in the formula.
+
+P-IRLS (Penalized Iteratively Reweighted Least Squares)
+: The core fitting algorithm for GAMs. It iterates between constructing a penalized working
+  linear model (using weights and a working response derived from the current fit) and solving
+  the resulting penalized least-squares problem. For Gaussian models with an identity link,
+  P-IRLS converges in a single step. For other families, it iterates until convergence.
+
+P-spline
+: A smooth basis that combines B-spline basis functions with a difference penalty on adjacent
+  coefficients. The penalty order controls the type of smoothness: first-order penalizes
+  jumps, second-order (default) penalizes curvature. P-splines are computationally efficient
+  because the B-spline basis and the penalty matrix are both banded. Specified with `bs="ps"`
+  in the formula.
+
+PAVA (Pool Adjacent Violators Algorithm)
+: An algorithm for isotonic regression that enforces monotonicity by iteratively merging
+  adjacent blocks of values that violate the ordering constraint, replacing them with their
+  weighted average. Used internally by **monotonicity constraints** and the **non-crossing
+  constraint** in quantile regression.
+
+Pearson residuals
+: Residuals standardized by the variance function:
+  $r_i^P = (y_i - \hat\mu_i) / \sqrt{V(\hat\mu_i)}$. For Poisson models, this divides by
+  $\sqrt{\hat\mu_i}$; for Binomial, by $\sqrt{\hat\mu_i(1 - \hat\mu_i)}$. Useful for
+  checking the variance assumption.
+
+Penalty matrix
+: The matrix $\mathbf{S}$ that encodes the smoothness penalty for a basis. The penalized
+  objective is $\|\mathbf{y} - \mathbf{X}\boldsymbol\beta\|^2 + \lambda
+  \boldsymbol\beta^\top \mathbf{S} \boldsymbol\beta$. For a second-derivative penalty,
+  $\mathbf{S}$ is the integrated squared second derivative of the basis functions. Larger
+  $\lambda$ values penalize wiggliness more strongly.
+
+Poisson family
+: A response family for non-negative integer counts, assuming equidispersion (variance equals
+  the mean). The log link ensures predicted counts are positive:
+  $\hat\mu = \exp(\hat\eta)$. When the data show overdispersion, consider **Negative Binomial**
+  or **quasi-Poisson** approaches. Available via `Poisson()`.
+
+PolarsGAM
+: A scalable GAM backend that extends **BigGAM** to accept Polars DataFrames, LazyFrames, or
+  file paths (Parquet, CSV, IPC, NDJSON). Data is streamed in chunks via Polars' lazy engine,
+  so the full dataset never needs to be in memory. See also **BigGAM**, **DuckDBGAM**.
+
+Prediction interval
+: An interval intended to cover a future observation (not just the mean) with a stated
+  probability. Prediction intervals are wider than **confidence bands** because they account
+  for both estimation uncertainty and residual noise. Produced by
+  `predict(..., interval="prediction")`.
+
+PredictionResult
+: The object returned by `GAM.predict()`. Contains `.values` (predicted means on the response
+  scale), `.linear_predictor` (on the link scale), and optionally `.se`, `.lower`, `.upper`
+  when standard errors or intervals are requested.
+
+Quantile regression
+: A regression method that estimates conditional quantiles $Q_\tau(y \mid x)$ rather than the
+  conditional mean. It is distribution-free and robust to outliers. Whittaker's `QuantileGAM`
+  fits one or more quantiles simultaneously using smooth additive functions and the **ELF**
+  loss. Useful for heteroscedastic data, risk quantification, and adaptive prediction
+  intervals.
+
+Random effect smooth
+: A smooth term that acts as a penalized random intercept or slope. It is a ridge-penalized
+  set of indicator variables for a grouping factor, equivalent to a normal random effect in
+  mixed models. Specified with `bs="re"` in the formula.
+
+REML (Restricted Maximum Likelihood)
+: The recommended smoothing parameter selection criterion. REML maximizes a modified
+  likelihood that accounts for the loss of degrees of freedom from estimating the fixed
+  effects, producing more stable and slightly smoother fits than **GCV** or **ML**. Selected
+  with `method="REML"` in `model.fit()`.
+
+Residuals
+: The difference between observed and fitted values, computed in various forms depending on
+  the family: **deviance residuals** (default), **Pearson residuals**, working residuals, and
+  response residuals. Residual plots are the primary tool for checking model assumptions.
+  Accessed via `model.predict(training_data)` subtracted from the response, or via the
+  `type=` argument.
+
+Scale parameter
+: See **dispersion parameter**.
+
+Shape constraint
+: A restriction on the shape of a smooth term, such as monotonicity, convexity, or concavity.
+  Shape constraints are enforced by projecting the P-IRLS solution onto the constrained space
+  at each iteration. Available basis types: `"mpi"` (monotone increasing), `"mpd"` (monotone
+  decreasing), `"cx"` (convex), `"cv"` (concave). See also **PAVA**.
+
+Shrinkage smooth
+: A variant of TPRS or CRS that includes an extra penalty component capable of shrinking the
+  entire smooth to zero, enabling automatic smooth selection without using `select=True`.
+  Specified with `bs="ts"` (shrinkage TPRS) or `bs="cs"` (shrinkage CRS) in the formula.
+
+Sigma calibration
+: The process of selecting the **ELF** bandwidth parameter $\sigma$ for **quantile
+  regression**. Smaller $\sigma$ gives a tighter approximation to the true quantile but makes
+  optimization harder. `calibrate_sigma()` evaluates candidate values via cross-validation
+  and returns the one that minimizes the out-of-sample pinball loss.
+
+Smooth selection
+: The process of deciding which smooth terms to include in the model. Whittaker supports two
+  approaches: **double penalty** selection (`select=True`), which can shrink entire terms to
+  zero during fitting, and **cross-validation** comparison of models with different term
+  structures. See also **shrinkage smooth**.
+
+Smooth term
+: A nonlinear function of a covariate estimated from the data, expressed as a weighted sum of
+  **basis functions** with a **smoothness penalty**. Written as `s(x)` in the formula.
+  Multiple covariates can form tensor product smooths via `te(x1, x2)` or tensor interactions
+  via `ti(x1, x2)`.
+
+Smoothing parameter ($\lambda$)
+: A non-negative scalar that controls the trade-off between data fidelity and smoothness.
+  When $\lambda = 0$, the smooth interpolates the data (no penalty). As $\lambda \to \infty$,
+  the smooth shrinks to a straight line (maximum penalty). Estimated automatically by
+  **REML**, **GCV**, **ML**, or **fREML**, or set manually via `sp=` in the formula.
+
+StreamingGAM
+: A GAM variant for online learning that accumulates sufficient statistics incrementally as
+  new data batches arrive. Each `partial_fit()` call updates the running totals; `solve()`
+  produces a GAM fit from the accumulated statistics. An optional `decay` parameter
+  downweights older batches for tracking distribution shift. Available via `StreamingGAM`.
+
+Tensor product smooth (`te`)
+: A smooth of two or more covariates constructed by taking the row-wise Kronecker product of
+  marginal basis matrices. Tensor products can model interactions between covariates on
+  different scales. Each marginal has its own **smoothing parameter**, so a two-dimensional
+  `te(x1, x2)` has two or more penalties. Written as `te(x1, x2)` in the formula.
+
+Tensor interaction (`ti`)
+: A smooth that captures only the interaction effect between covariates, excluding the main
+  effects. Used in models like `"y ~ s(x1) + s(x2) + ti(x1, x2)"` to decompose the bivariate
+  surface into interpretable main effects plus a pure interaction. Written as `ti(x1, x2)` in
+  the formula.
+
+Thin plate regression spline (TPRS)
+: The default smooth basis in Whittaker. TPRS approximates the thin plate spline (which
+  minimizes integrated squared second derivatives over any number of dimensions) using a
+  truncated eigen-decomposition. It is isotropic (invariant to rotation of the covariates) and
+  does not require knot placement. Specified with `bs="tp"` in the formula.
+
+Treatment effect (ATE)
+: The average treatment effect: $\text{ATE} = E[Y(1) - Y(0)]$, the expected difference in
+  outcomes between the treated and control conditions, averaged over the population.
+  Estimated by **CausalGAM** and returned as a `TreatmentEffect` object with `.ate`, `.se`,
+  `.ci_lower`, `.ci_upper`, and `.p_value`.
+
+Tweedie family
+: A response family for data with exact zeros mixed with positive continuous values (e.g.,
+  insurance claims, rainfall). The variance function is $V(\mu) = \mu^p$, where the power
+  parameter $p$ is between 1 and 2. At $p = 1$, it reduces to Poisson; at $p = 2$, to Gamma.
+  Available via `Tweedie()`.
+
+Variance function ($V(\mu)$)
+: The function that describes how the variance of the response depends on the mean:
+  $\text{Var}(Y) = \phi \cdot V(\mu)$. Each **family** has a characteristic variance function:
+  $V(\mu) = 1$ for Gaussian, $V(\mu) = \mu$ for Poisson, $V(\mu) = \mu^2$ for Gamma, etc.
+  The variance function determines the weights in **P-IRLS** and is central to residual
+  diagnostics.
+
+VIF (Variance Inflation Factor)
+: A diagnostic for collinearity among the parametric terms (or among smooths, via
+  **concurvity**). A VIF of 1 means no collinearity; values above 5-10 are concerning.
+  Computed by `model.vif()`.
+
+Working response
+: An adjusted dependent variable used internally by **P-IRLS**. At each iteration, the
+  working response is $z_i = \hat\eta_i + (y_i - \hat\mu_i) / g'(\hat\mu_i)$, where
+  $g'$ is the derivative of the link function. P-IRLS then solves a weighted least-squares
+  problem with the working response as the target.
+
+Zero-inflated model
+: A **GAMLSS** model for count data with more zeros than a standard Poisson or Negative
+  Binomial distribution can accommodate. The model has a point-mass component at zero (with
+  probability $\pi$) and a count component (with mean $\mu$). Both $\pi$ and $\mu$ can be
+  modeled as smooth functions of covariates. Available via `ZeroInflatedPoisson()` and
+  `ZeroInflatedNegativeBinomial()`.
