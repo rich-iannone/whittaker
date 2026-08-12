@@ -1,0 +1,12 @@
+{
+  "hash": "5496ca62842a367d671503c6dedf1420",
+  "result": {
+    "engine": "jupyter",
+    "markdown": "---\ntitle: \"[tw()]{.doc-object-name .doc-function .doc-label .doc-label-function}\"\nbody-classes: doc-api-page\npage-navigation: false\nhtml-table-processing: none\n---\n\n::: {.doc-subject}\n\nCreate a Tweedie family with estimated variance power.\n:::\n\n::: {.doc-usage-source}\nUsage\n\n[Source](https://github.com/rich-iannone/whittaker/blob/main/whittaker/families/tweedie_estimated.py#L94-L130){target=\"_blank\" rel=\"noopener\"}\n:::\n\n::: {.doc-signature .doc-Kind.FUNCTION}\n```python\ntw(p_range=(1.01, 1.99), n_grid=20)\n```\n:::\n\n::: {.doc-text}\n\nConvenience constructor mirroring the `tw()` function familiar from `mgcv`. The variance\npower `p` of the Tweedie distribution (see `Tweedie`) is selected automatically by profile\nlikelihood during model fitting rather than fixed by the user. The model is fitted at\n`n_grid` candidate values of `p` spaced across `p_range`, and the value minimizing AIC is\nchosen as the final family.\n:::\n\n## Parameters {.doc-parameters}\n\n::: {.doc-definition-items}\n<code>[p_range]{.doc-parameter-name}[:]{.doc-parameter-annotation-sep} [tuple of float]{.doc-parameter-annotation} [=]{.doc-parameter-default-sep .op} [(1.01, 1.99)]{.doc-parameter-default}</code>\n\n:   `(p_min, p_max)` range to search. Must satisfy `1 < p_min` and `p_max < 2` (or both `> 2`\n    for the positive-continuous case). Defaults to `(1.01, 1.99)`, which covers the compound\n    Poisson-Gamma case used for most zero-inflated positive data.\n\n<code>[n_grid]{.doc-parameter-name}[:]{.doc-parameter-annotation-sep} [int]{.doc-parameter-annotation} [=]{.doc-parameter-default-sep .op} [[20]{.dv}]{.doc-parameter-default}</code>\n\n:   Number of candidate `p` values in the grid search. Defaults to `20`.\n:::\n\n## Returns {.doc-returns}\n\n::: {.doc-definition-items}\n<code> [TweedieEstimated]{.doc-parameter-annotation}</code>\n\n:   A Tweedie family, with variance function $V(\\mu) = \\mu^{p}$ and log link\n    $g(\\mu) = \\log(\\mu)$, whose power `p` will be estimated by profile likelihood the next\n    time the returned family is passed to `GAM.fit()`.\n:::\n\n## Examples {.doc-examples}\n\n::: {#da39f239 .cell execution_count=1}\n``` {.python .cell-code}\nimport whittaker as wk\n\nmodel = wk.GAM(\"y ~ s(x)\", family=wk.tw(p_range=(1.05, 1.95), n_grid=15))\n```\n:::\n\n\n",
+    "supporting": [
+      "tw_files"
+    ],
+    "filters": [],
+    "includes": {}
+  }
+}
