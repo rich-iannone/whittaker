@@ -4,12 +4,15 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
-from sklearn.base import clone
-from sklearn.model_selection import cross_val_score
-from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import StandardScaler
 
-from whittaker.sklearn import GAMClassifier, GAMRegressor
+sklearn = pytest.importorskip("sklearn")
+
+from sklearn.base import clone  # noqa: E402
+from sklearn.model_selection import cross_val_score  # noqa: E402
+from sklearn.pipeline import Pipeline  # noqa: E402
+from sklearn.preprocessing import StandardScaler  # noqa: E402
+
+from whittaker.sklearn import GAMClassifier, GAMRegressor  # noqa: E402
 
 
 @pytest.fixture()
