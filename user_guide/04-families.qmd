@@ -35,8 +35,8 @@ is the **cumulant function**. From this formulation, four key ingredients follow
 - **Mean**: $\mu = b'(\theta)$.
 - **Variance function**: $\text{Var}(Y) = \phi\, V(\mu)$, where $V(\mu) = b''(\theta)$. The shape
   of $V(\mu)$ is what distinguishes one family from another.
-- **Link function**: $g(\mu) = \eta$. The **canonical link** sets $g(\mu) = \theta$; alternative
-  links are also supported.
+- **Link function**: $g(\mu) = \eta$. The **canonical link** sets $g(\mu) = \theta$ (alternative
+  links are also supported).
 - **Deviance**: $D(y, \hat\mu) = 2\phi \sum_i \bigl[\ell(y_i; y_i) - \ell(y_i; \hat\mu_i)\bigr]$,
   where $\ell$ is the log-likelihood. Deviance is the quantity minimized during P-IRLS fitting (see
   [Model fitting](05-fitting.qmd)).
@@ -69,8 +69,8 @@ regression) are covered in a [separate page](10-gamlss.qmd).
 ## Specifying a family
 
 There are two ways to set the family: a string shorthand or a family object. Use the string when the
-default link is what you want; use the object when you need a non-default link or want to set initial
-parameter values.
+default link is what you want. Use the object when you need a non-default link or want to set
+initial parameter values.
 
 ```python
 # String shorthand
@@ -666,7 +666,7 @@ for Gamma).
 
 The `CoxPH()` family supports semiparametric survival analysis via the Cox proportional hazards
 model. Unlike the other families above, this is not a member of the exponential dispersion family in
-the traditional sense; instead, it uses a partial likelihood formulation.
+the traditional sense. Instead, it uses a partial likelihood formulation.
 
 ```python
 model = wk.GAM("survival_object ~ s(age) + s(biomarker)", family=wk.CoxPH())
