@@ -79,6 +79,13 @@ class TweedieEstimated(Tweedie):
 
     @property
     def p_estimated(self) -> bool:
+        """Whether the variance power `p` has completed profile-likelihood estimation.
+
+        `False` immediately after construction, when `p` is only a provisional midpoint of
+        `p_range`. Set to `True` by `_set_p` once `GAM.fit()` has run its grid search over
+        `p_range` and selected the AIC-minimizing value, at which point the inherited `p`
+        property reports the estimated value rather than the placeholder.
+        """
         return self._p_estimated
 
     def _set_p(self, p: float) -> None:
