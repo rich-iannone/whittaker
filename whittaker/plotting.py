@@ -175,7 +175,7 @@ def _partial_effect_1d(
         .encode(y=alt.datum(0))
     )
 
-    return (band + line + zero_rule).properties(width=450, height=300, title=title_str)
+    return (band + line + zero_rule).properties(width="container", height=300, title=title_str)
 
 
 def _partial_effect_2d(
@@ -370,130 +370,156 @@ def _smooth_grid_2d(
     return x1_grid, x2_grid, x_flat
 
 
+_CHECK_PLOT_NAMES = ("qq", "residuals", "histogram", "response")
+
+
 def check(
     model: GAM,
-) -> alt.VConcatChart:
+    plots: tuple[str, ...] | list[str] | None = None,
+) -> list[alt.Chart]:
     """Produce GAM diagnostic plots.
 
-    Returns a 2×2 panel:
+    Returns a list of individual full-width Altair charts. Available plots (selected via `plots=`):
 
-    - QQ plot of deviance residuals
-    - Residuals vs fitted values
-    - Histogram of residuals
-    - Response vs fitted values
+    - `"qq"`: QQ plot of deviance residuals
+    - `"residuals"`: Pearson residuals vs fitted values
+    - `"histogram"`: Histogram of deviance residuals
+    - `"response"`: Response vs fitted values
 
     Parameters
     ----------
     model:
         A fitted GAM.
+    plots:
+        Which diagnostic plots to include. Pass a list of names (e.g., `["qq", "residuals"]`) or
+        `None` (default) for all four.
 
     Returns
     -------
-    altair.VConcatChart
-        A 2×2 diagnostic panel.
+    list[altair.Chart]
+        One chart per requested diagnostic plot.
     """
     _check_altair()
     import altair as alt
 
     model._check_fitted()
 
+    selected = list(plots) if plots is not None else list(_CHECK_PLOT_NAMES)
+    for name in selected:
+        if name not in _CHECK_PLOT_NAMES:
+            raise ValueError(f"Unknown check plot {name!r}. Choose from {_CHECK_PLOT_NAMES}")
+
     deviance_resid = model.get_residuals("deviance")
     pearson_resid = model.get_residuals("pearson")
     fitted = model.fitted_values
     response = model._model_matrix.response
 
-    sorted_resid = np.sort(deviance_resid)
-    n = len(sorted_resid)
-    from scipy.stats import norm
+    result: list[alt.Chart] = []
 
-    theoretical_q = norm.ppf((np.arange(1, n + 1) - 0.5) / n)
+    if "qq" in selected:
+        sorted_resid = np.sort(deviance_resid)
+        n = len(sorted_resid)
+        from scipy.stats import norm
 
-    qq_data = alt.Data(
-        values=[
-            {"theoretical": float(t), "observed": float(o)}
-            for t, o in zip(theoretical_q, sorted_resid)
-        ]
-    )
+        theoretical_q = norm.ppf((np.arange(1, n + 1) - 0.5) / n)
 
-    qq_range = max(abs(float(theoretical_q[0])), abs(float(theoretical_q[-1])))
-    qq_line_data = alt.Data(
-        values=[{"x": -qq_range, "y": -qq_range}, {"x": qq_range, "y": qq_range}]
-    )
-
-    qq_points = (
-        alt.Chart(qq_data)
-        .mark_circle(size=15, color="#4682B4", opacity=0.6)
-        .encode(
-            x=alt.X("theoretical:Q").title("Theoretical quantiles"),
-            y=alt.Y("observed:Q").title("Deviance residuals"),
+        qq_data = alt.Data(
+            values=[
+                {"theoretical": float(t), "observed": float(o)}
+                for t, o in zip(theoretical_q, sorted_resid)
+            ]
         )
-    )
-    qq_ref = (
-        alt.Chart(qq_line_data).mark_line(color="gray", strokeDash=[4, 4]).encode(x="x:Q", y="y:Q")
-    )
-    qq_plot = (qq_points + qq_ref).properties(
-        width=300, height=250, title="QQ plot of deviance residuals"
-    )
 
-    resid_fit_data = alt.Data(
-        values=[{"fitted": float(f), "residual": float(r)} for f, r in zip(fitted, pearson_resid)]
-    )
-
-    resid_fit_plot = (
-        alt.Chart(resid_fit_data)
-        .mark_circle(size=15, color="#4682B4", opacity=0.5)
-        .encode(
-            x=alt.X("fitted:Q").title("Fitted values"),
-            y=alt.Y("residual:Q").title("Pearson residuals"),
+        qq_range = max(abs(float(theoretical_q[0])), abs(float(theoretical_q[-1])))
+        qq_line_data = alt.Data(
+            values=[{"x": -qq_range, "y": -qq_range}, {"x": qq_range, "y": qq_range}]
         )
-        .properties(width=300, height=250, title="Pearson residuals vs fitted")
-    )
-    resid_zero = (
-        alt.Chart(alt.Data(values=[{}]))
-        .mark_rule(strokeDash=[4, 4], color="gray")
-        .encode(y=alt.datum(0))
-    )
-    resid_fit_plot = resid_fit_plot + resid_zero
 
-    hist_data = alt.Data(values=[{"residual": float(r)} for r in deviance_resid])
-    hist_plot = (
-        alt.Chart(hist_data)
-        .mark_bar(color="#4682B4", opacity=0.7)
-        .encode(
-            x=alt.X("residual:Q").bin(maxbins=30).title("Deviance residuals"),
-            y=alt.Y("count()").title("Frequency"),
+        qq_points = (
+            alt.Chart(qq_data)
+            .mark_circle(size=15, color="#4682B4", opacity=0.6)
+            .encode(
+                x=alt.X("theoretical:Q").title("Theoretical quantiles"),
+                y=alt.Y("observed:Q").title("Deviance residuals"),
+            )
         )
-        .properties(width=300, height=250, title="Histogram of deviance residuals")
-    )
-
-    resp_fit_data = alt.Data(
-        values=[{"fitted": float(f), "response": float(y)} for f, y in zip(fitted, response)]
-    )
-
-    resp_range_min = float(min(np.min(fitted), np.min(response)))
-    resp_range_max = float(max(np.max(fitted), np.max(response)))
-    ref_line_data = alt.Data(
-        values=[
-            {"x": resp_range_min, "y": resp_range_min},
-            {"x": resp_range_max, "y": resp_range_max},
-        ]
-    )
-
-    resp_points = (
-        alt.Chart(resp_fit_data)
-        .mark_circle(size=15, color="#4682B4", opacity=0.5)
-        .encode(
-            x=alt.X("fitted:Q").title("Fitted values"),
-            y=alt.Y("response:Q").title("Response"),
+        qq_ref = (
+            alt.Chart(qq_line_data)
+            .mark_line(color="gray", strokeDash=[4, 4])
+            .encode(x="x:Q", y="y:Q")
         )
-    )
-    resp_ref = (
-        alt.Chart(ref_line_data).mark_line(color="gray", strokeDash=[4, 4]).encode(x="x:Q", y="y:Q")
-    )
-    resp_fit_plot = (resp_points + resp_ref).properties(
-        width=300, height=250, title="Response vs fitted"
-    )
+        result.append(
+            (qq_points + qq_ref).properties(
+                width="container", height=250, title="QQ plot of deviance residuals"
+            )
+        )
 
-    top_row = alt.hconcat(qq_plot, resid_fit_plot)
-    bottom_row = alt.hconcat(hist_plot, resp_fit_plot)
-    return alt.vconcat(top_row, bottom_row).resolve_scale(x="independent", y="independent")
+    if "residuals" in selected:
+        resid_fit_data = alt.Data(
+            values=[
+                {"fitted": float(f), "residual": float(r)} for f, r in zip(fitted, pearson_resid)
+            ]
+        )
+
+        resid_fit_plot = (
+            alt.Chart(resid_fit_data)
+            .mark_circle(size=15, color="#4682B4", opacity=0.5)
+            .encode(
+                x=alt.X("fitted:Q").title("Fitted values"),
+                y=alt.Y("residual:Q").title("Pearson residuals"),
+            )
+            .properties(width="container", height=250, title="Pearson residuals vs fitted")
+        )
+        resid_zero = (
+            alt.Chart(alt.Data(values=[{}]))
+            .mark_rule(strokeDash=[4, 4], color="gray")
+            .encode(y=alt.datum(0))
+        )
+        result.append(resid_fit_plot + resid_zero)
+
+    if "histogram" in selected:
+        hist_data = alt.Data(values=[{"residual": float(r)} for r in deviance_resid])
+        result.append(
+            alt.Chart(hist_data)
+            .mark_bar(color="#4682B4", opacity=0.7)
+            .encode(
+                x=alt.X("residual:Q").bin(maxbins=30).title("Deviance residuals"),
+                y=alt.Y("count()").title("Frequency"),
+            )
+            .properties(width="container", height=250, title="Histogram of deviance residuals")
+        )
+
+    if "response" in selected:
+        resp_fit_data = alt.Data(
+            values=[{"fitted": float(f), "response": float(y)} for f, y in zip(fitted, response)]
+        )
+
+        resp_range_min = float(min(np.min(fitted), np.min(response)))
+        resp_range_max = float(max(np.max(fitted), np.max(response)))
+        ref_line_data = alt.Data(
+            values=[
+                {"x": resp_range_min, "y": resp_range_min},
+                {"x": resp_range_max, "y": resp_range_max},
+            ]
+        )
+
+        resp_points = (
+            alt.Chart(resp_fit_data)
+            .mark_circle(size=15, color="#4682B4", opacity=0.5)
+            .encode(
+                x=alt.X("fitted:Q").title("Fitted values"),
+                y=alt.Y("response:Q").title("Response"),
+            )
+        )
+        resp_ref = (
+            alt.Chart(ref_line_data)
+            .mark_line(color="gray", strokeDash=[4, 4])
+            .encode(x="x:Q", y="y:Q")
+        )
+        result.append(
+            (resp_points + resp_ref).properties(
+                width="container", height=250, title="Response vs fitted"
+            )
+        )
+
+    return result
