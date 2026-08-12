@@ -176,7 +176,18 @@ class RandomEffectBasis(SmoothBasis):
         return np.eye(len(self._levels))
 
     def null_space_dimension(self) -> int:
-        """Return `0`: the identity penalty has no unpenalized subspace."""
+        """Return `0`: the identity penalty has no unpenalized subspace.
+
+        Because the penalty matrix is the full-rank identity `I_k`, every basis
+        coefficient is penalized and there is no unpenalized null space, unlike
+        smooths with derivative-based penalties (e.g. TPRS) that leave polynomial
+        trends unpenalized.
+
+        Returns
+        -------
+        int
+            Always `0`.
+        """
         return 0
 
     def identifiability_constraints(self) -> NDArray | None:
@@ -195,21 +206,48 @@ class RandomEffectBasis(SmoothBasis):
 
     @property
     def n_basis(self) -> int:
-        """Number of basis functions, i.e. the number of retained group levels."""
+        """Number of basis functions, i.e. the number of retained group levels.
+
+        Returns
+        -------
+        int
+            The number `k` of unique group levels retained during `fit()`.
+
+        Raises
+        ------
+        RuntimeError
+            If accessed before `fit()` has been called.
+        """
         if not self._fitted:
             raise RuntimeError("n_basis is not available until fit() is called.")
         return len(self._levels)
 
     @property
     def k(self) -> int:
-        """Requested (before `fit()`) or actual (after `fit()`) number of group levels."""
+        """Requested or actual number of group levels.
+
+        Before `fit()` is called, returns the `k` value passed at construction
+        (the requested cap on the number of levels, or `-1` for "all levels").
+        After `fit()`, returns the actual number of group levels retained.
+
+        Returns
+        -------
+        int
+            The requested or actual level count.
+        """
         if self._fitted:
             return len(self._levels)
         return self._k_request
 
     @property
     def levels(self) -> NDArray:
-        """Sorted array of unique group labels retained during `fit()`."""
+        """Sorted array of unique group labels retained during `fit()`.
+
+        Returns
+        -------
+        NDArray
+            A copy of the sorted group labels, shape `(k,)`.
+        """
         self._check_fitted()
         return self._levels.copy()
 
