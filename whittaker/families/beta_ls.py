@@ -1,4 +1,4 @@
-"""Beta GAMLSS family (mean-precision parameterisation)."""
+r"""Beta GAMLSS family (mean-precision parameterisation)."""
 
 from __future__ import annotations
 
@@ -10,12 +10,67 @@ from whittaker.families.gamlss_base import GAMLSSFamily
 
 
 class BetaLS(GAMLSSFamily):
-    """Beta family for GAMLSS with mean-precision parameterisation.
+    r"""Beta family for GAMLSS with mean-precision parameterisation.
 
-    Models `y` in (0, 1) with mean `mu` in (0, 1) and precision `phi > 0`. Uses logit link for mu
-    and log link for phi.
+    `BetaLS` extends the plain `Beta` family by letting both the mean `mu` and the precision
+    `phi` vary smoothly with covariates, rather than treating precision as a single estimated
+    constant. Use it for responses strictly between 0 and 1 (rates, proportions, fractions)
+    where not only the typical level but also how tightly the response clusters around that
+    level changes across the range of the predictors — for example, a proportion that becomes
+    more variable in some regions of the covariate space and more tightly concentrated in
+    others. The mean uses the logit link (as in `Beta`) and the precision uses the log link,
+    keeping `mu` in `(0, 1)` and `phi > 0`.
 
-    If `a = mu * phi` and `b = (1 - mu) * phi` then `y ~ Beta(a, b)`.
+    Parameters
+    ----------
+    None
+        `BetaLS` takes no constructor arguments; both `mu` and `phi` are modeled entirely
+        through the formulas supplied to `GAMLSS`.
+
+    Notes
+    -----
+    The two parameters use distinct link functions:
+
+    $$
+    g_{\mu}(\mu) = \log\!\left(\frac{\mu}{1-\mu}\right), \qquad g_{\phi}(\phi) = \log(\phi).
+    $$
+
+    If `a = mu * phi` and `b = (1 - mu) * phi`, the response follows `y ~ Beta(a, b)` with
+    density
+
+    $$
+    f(y \mid \mu, \phi) = \frac{y^{a-1}(1-y)^{b-1}}{B(a, b)}, \qquad a = \mu\phi,\ \ b = (1-\mu)\phi.
+    $$
+
+    As in `Beta`, larger `phi` concentrates the distribution more tightly around `mu`
+    (`Var(Y) = mu(1-mu) / (1+phi)`), but here `phi` is itself modeled as a smooth function of
+    covariates rather than a single scalar.
+
+    Examples
+    --------
+    Fit a GAMLSS where both the mean and precision of a proportion response vary smoothly:
+
+    ```{python}
+    import numpy as np
+    import whittaker as wk
+    from scipy.special import expit
+
+    rng = np.random.default_rng(0)
+    n = 300
+    x = np.linspace(0, 2 * np.pi, n)
+    mu = expit(np.sin(x))
+    phi = 10.0 + 15.0 * np.abs(np.cos(x))
+    y = rng.beta(mu * phi, (1 - mu) * phi)
+
+    data = {"x": x, "y": y}
+
+    model = wk.GAMLSS(
+        formulas={"mu": "y ~ s(x)", "phi": "y ~ s(x)"},
+        family=wk.BetaLS(),
+    )
+    model.fit(data)
+    print(model.summary())
+    ```
     """
 
     @property
