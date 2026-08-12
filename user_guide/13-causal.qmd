@@ -113,7 +113,7 @@ import numpy as np
 import whittaker as wk
 
 # Simulate RCT-like data with known treatment effect
-rng = np.random.default_rng(42)
+rng = np.random.default_rng(23)
 n = 1000
 
 # Two confounders
@@ -144,7 +144,7 @@ causal = wk.CausalGAM(
     n_folds=5,
 )
 
-causal.fit(data, seed=42)
+causal.fit(data, seed=23)
 ```
 
 The `n_folds=5` argument controls the number of cross-fitting folds. More folds reduce overfitting
@@ -212,7 +212,7 @@ line = alt.Chart({"values": line_data}).mark_line(
 ).encode(x="d_resid:Q", y="y_resid:Q")
 
 (points + line).properties(
-    width=550, height=350,
+    width="container", height=350,
     title="Orthogonalized residuals: slope = estimated ATE"
 )
 ```
@@ -321,7 +321,7 @@ true_line = alt.Chart({"values": true_data}).mark_line(
 ).encode(x="x1:Q", y="true_cate:Q")
 
 (band + cate_line + true_line).properties(
-    width=550, height=350,
+    width="container", height=350,
     title="CATE as a function of x1 (estimated vs. true)"
 )
 ```
@@ -419,7 +419,7 @@ alt.Chart({"values": med_bar_data}).mark_bar().encode(
         ),
         legend=None,
     ),
-).properties(width=400, height=200, title="Mediation decomposition")
+).properties(width="container", height=200, title="Mediation decomposition")
 ```
 
 The results should recover the true effects: a total effect near 2.2, a direct effect near 1.0,
@@ -493,7 +493,7 @@ To illustrate the value of the DML approach, consider what happens when we ignor
 ```{python}
 # Naive estimate: regress y on d without adjusting for confounders
 # Using the ATE simulation data from above
-rng = np.random.default_rng(42)
+rng = np.random.default_rng(23)
 n = 1000
 
 x1 = rng.normal(0, 1, n)
@@ -515,7 +515,7 @@ causal_check = wk.CausalGAM(
     method="partially_linear",
     n_folds=5,
 )
-causal_check.fit({"y": y, "d": d, "x1": x1, "x2": x2}, seed=42)
+causal_check.fit({"y": y, "d": d, "x1": x1, "x2": x2}, seed=23)
 dml_ate = causal_check.treatment_effect().ate
 
 print(f"True ATE:       {true_theta:.3f}")
@@ -556,7 +556,7 @@ points = alt.Chart({"values": dot_data}).mark_point(
 )
 
 (rule + points).properties(
-    width=400, height=200, title="Naive vs. DML: bias comparison"
+    width="container", height=200, title="Naive vs. DML: bias comparison"
 )
 ```
 
