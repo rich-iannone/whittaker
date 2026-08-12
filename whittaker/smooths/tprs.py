@@ -120,50 +120,78 @@ def _polynomial_null_space(x: NDArray, m: int) -> NDArray:
 
 
 class TPRS(SmoothBasis):
-    """Thin Plate Regression Splines (TPRS).
+    r"""Thin Plate Regression Splines (TPRS).
 
-    Constructs a rank-k approximation to the full TPS basis using the leading eigenvectors of the
-    projected kernel matrix (Wood 2003).
-
-    The basis has two parts:
-
-    * **Polynomial null space** (first M = C(m-1+d, d) columns): unpenalised polynomials of total
-    degree ≤ m-1.
-    * **Spline part** (remaining k - M columns): penalised, constructed from the leading
-    eigenvectors of the projected TPS kernel.
-
-    The penalty matrix is block-diagonal:
-
-    S = diag(0, …, 0,  λ_1, …, λ_{k - M})
+    A thin plate spline is the function that minimizes squared error subject to a penalty on
+    total curvature, with no need to choose knot locations — it is the natural multivariate
+    generalization of the cubic smoothing spline. The full thin plate spline has one basis
+    function per unique data point, which is computationally impractical for anything beyond a
+    few hundred observations, so TPRS instead constructs a low-rank approximation using the
+    leading eigenvectors of the (nullspace-projected) thin plate spline kernel matrix (Wood 2003).
+    Because it works for any number of covariate dimensions `d` and requires no knot placement,
+    TPRS is a good default basis for smooth terms of one or more continuous, non-cyclic
+    covariates, especially in more than two dimensions where tensor-product alternatives become
+    unwieldy.
 
     Parameters
     ----------
     k:
-        Total number of basis functions (including the M null-space columns). Must satisfy
-        `k > M`. The default is `10`.
+        Total number of basis functions (including the `M` null-space columns). Must satisfy
+        `k > M`. Larger `k` allows more wiggly fits at the cost of more computation; the penalty
+        (not `k`) ultimately controls smoothness once `lambda` is chosen. The default is `10`.
     m:
-        Spline order. Controls the order of derivative penalised. Must satisfy `2m > d` where
-        `d` is the covariate dimension. Common choices: `m=2` for d ≤ 3 (the default), `m=3` for
-        d ∈ {4, 5}. The default is `2`.
+        Spline order. Controls the order of derivative penalized: `m=2` penalizes (squared)
+        second derivatives, the classic "thin plate" bending energy. Must satisfy `2m > d` where
+        `d` is the covariate dimension. Common choices: `m=2` for `d <= 3` (the default), `m=3`
+        for `d` in `{4, 5}`. The default is `2`.
 
     Notes
     -----
-    Covariates with very different scales can cause numerical issues. It is advisable to center
-    and/or standardize each column of `x` before fitting.
+    The full thin plate spline basis uses the radial kernel
+
+    $$
+    \eta_m(r) = \begin{cases} r^{2m - d} & 2m - d \text{ odd} \\ r^{2m-d} \log(r) & 2m - d \text{ even} \end{cases},
+    $$
+
+    evaluated at pairwise distances `r = ||x_i - x_j||` between data points, plus a polynomial
+    null space of all monomials of total degree at most `m - 1`, which has dimension
+    `M = C(m - 1 + d, d)`. TPRS builds the basis in two stages:
+
+    1. **Polynomial null space** (first `M` columns): the unpenalized low-degree polynomials,
+       for which the roughness penalty is identically zero (e.g. any straight line has zero
+       bending energy under `m=2`).
+    2. **Truncated spline part** (remaining `k - M` columns): the full kernel matrix `E` is
+       projected onto the orthogonal complement of the polynomial null space and eigen-decomposed;
+       the `k - M` eigenvectors with the largest eigenvalues give the best rank-`(k - M)`
+       approximation to the full thin plate spline in the sense of minimizing the change in the
+       penalty for a given basis dimension.
+
+    The resulting penalty matrix is block-diagonal,
+
+    $$
+    \mathbf{S} = \operatorname{diag}(0, \ldots, 0, \lambda_1, \ldots, \lambda_{k-M}),
+    $$
+
+    with the `M` null-space rows/columns exactly zero and the remaining diagonal entries equal to
+    the retained eigenvalues of the projected kernel matrix. Because the basis is derived from an
+    eigendecomposition of a matrix that mixes all covariate scales, columns of `x` with very
+    different scales can cause numerical issues; centering and/or standardizing each column of
+    `x` before fitting is advisable.
 
     Examples
     --------
-    >>> import numpy as np
-    >>> from whittaker.smooths import TPRS
-    >>> rng = np.random.default_rng(0)
-    >>> x = rng.uniform(0, 1, 100)
-    >>> basis = TPRS(k=10).fit(x)
-    >>> B = basis.basis_matrix(x)
-    >>> B.shape
-    (100, 10)
-    >>> S = basis.penalty_matrix()
-    >>> S.shape
-    (10, 10)
+    ```{python}
+    import numpy as np
+    from whittaker.smooths import TPRS
+
+    rng = np.random.default_rng(0)
+    x = rng.uniform(0, 1, 100)
+
+    basis = TPRS(k=10).fit(x)
+    B = basis.basis_matrix(x)
+    S = basis.penalty_matrix()
+    B.shape, S.shape
+    ```
     """
 
     def __init__(self, k: int = 10, m: int = 2) -> None:
