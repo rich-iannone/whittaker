@@ -28,12 +28,12 @@ a weighted sum of known **basis functions** $b_k$:
 $$f(x) = \sum_{k=1}^{K} \beta_k \, b_k(x)$$
 
 The coefficients $\beta_k$ are estimated by penalized likelihood. The **penalty** controls
-smoothness; without it, the model would interpolate the noise. The standard roughness penalty is
+smoothness and without it, the model would interpolate the noise. The standard roughness penalty is
 
 $$\lambda \int \left[ f''(x) \right]^2 dx$$
 
 where $\lambda$ is the **smoothing parameter**. Large $\lambda$ produces a smoother (less wiggly)
-curve; $\lambda \to 0$ reproduces an unpenalized fit; $\lambda \to \infty$ shrinks $f$ toward a
+curve, $\lambda \to 0$ reproduces an unpenalized fit, and $\lambda \to \infty$ shrinks $f$ toward a
 straight line. Whittaker selects $\lambda$ automatically by REML (or GCV), so you rarely need to
 set it by hand.
 
@@ -76,7 +76,7 @@ print(model_tp.summary())
 ```
 
 The summary shows the effective degrees of freedom (EDF) for the smooth. An EDF near 1 means the
-smooth is approximately linear; higher values indicate more curvature. For a sine wave, expect an
+smooth is approximately linear (higher values indicate more curvature). For a sine wave, expect an
 EDF around 5--7.
 
 ```{python}
@@ -445,7 +445,7 @@ additive main effects.
 
 Standard smooth penalties have a **null space**---a set of functions (typically linear) that are
 not penalized at all. This means that even with $\lambda \to \infty$, a standard smooth can never
-shrink to zero; it can only shrink to a straight line.
+shrink to zero (it can only shrink to a straight line).
 
 **Shrinkage splines** add an extra penalty component that penalizes the null space, allowing the
 smooth to be penalized all the way to zero. This turns smoothing parameter selection into an
@@ -516,7 +516,7 @@ print(model_re.summary())
 ```
 
 The EDF for `s(group, bs='re')` reflects how much the group intercepts vary. If all groups have
-similar means, the EDF is shrunk toward zero; if groups differ substantially, the EDF approaches
+similar means, the EDF is shrunk toward zero. If groups differ substantially, the EDF approaches
 the number of groups minus one.
 
 ## Shape-constrained smooths {#shape}
@@ -691,20 +691,20 @@ alt.Chart({"values": fit_data}).mark_line(strokeWidth=2).encode(
 ## Choosing the basis dimension `k` {#choosing-k}
 
 The basis dimension `k` determines the maximum complexity of the smooth. It is **not** the number
-of effective degrees of freedom (EDF); the EDF is always less than or equal to `k - 1` (one
-degree of freedom is consumed by the identifiability constraint).
+of effective degrees of freedom (EDF). The EDF is always less than or equal to `k - 1` (one degree
+of freedom is consumed by the identifiability constraint).
 
 ### Rules of thumb
 
 1. **Start with the default** (`k=10`). This is enough for most smooth relationships.
 2. **Run `model.check()`** after fitting. If the residual pattern for a smooth shows structure, or
-   the k-index is below 1 with a significant p-value, increase `k`.
+the k-index is below 1 with a significant p-value, increase `k`.
 3. **`k` cannot exceed the number of unique covariate values**. For a predictor with only 8 unique
-   values, `k` is capped at 8.
-4. **Doubling `k` is a safe strategy**: if `k=10` seems too low, try `k=20`. If `k=20` still
-   reports a low k-index, try `k=40`.
-5. **Computational cost scales with `k`**: for TPRS, the cost is $O(nk^2)$; for P-splines and
-   cubic splines, it is $O(nk)$ due to banded structure.
+values, `k` is capped at 8.
+4. **Doubling `k` is a safe strategy**: if `k=10` seems too low, try `k=20`. If `k=20` still reports
+a low k-index, try `k=40`.
+5. **Computational cost scales with `k`**: for TPRS, the cost is $O(nk^2)$. For P-splines and cubic
+splines, it is $O(nk)$ due to banded structure.
 
 ```{python}
 # Checking basis dimension adequacy
