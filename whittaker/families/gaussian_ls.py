@@ -75,24 +75,108 @@ class GaussianLS(GAMLSSFamily):
 
     @property
     def parameter_names(self) -> tuple[str, ...]:
+        """Names of the distributional parameters modeled by `GaussianLS`.
+
+        Returns
+        -------
+        tuple[str, ...]
+            Always `('mu', 'sigma')`: the mean and the standard deviation, in the order
+            `GAMLSS` updates them during the RS algorithm.
+        """
         return ("mu", "sigma")
 
     def link(self, param: str, values: NDArray) -> NDArray:
+        """Apply the link function for `mu` or `sigma`.
+
+        `mu` uses the identity link and `sigma` uses the log link, so that `sigma`'s
+        additive predictor is unconstrained while the fitted standard deviation stays
+        positive after applying `link_inverse`.
+
+        Parameters
+        ----------
+        param
+            Either `"mu"` or `"sigma"`.
+        values
+            Parameter values on the natural scale, shape `(n,)`.
+
+        Returns
+        -------
+        NDArray
+            Linked values: `values` unchanged for `"mu"`, `log(values)` for `"sigma"`.
+        """
         if param == "mu":
             return values
         return np.log(values)
 
     def link_inverse(self, param: str, eta: NDArray) -> NDArray:
+        """Apply the inverse link for `mu` or `sigma`.
+
+        Maps the additive predictor `eta` back to the natural scale: unchanged for `mu`
+        (identity link), exponentiated for `sigma` (log link) so it stays positive.
+
+        Parameters
+        ----------
+        param
+            Either `"mu"` or `"sigma"`.
+        eta
+            Additive predictor values, shape `(n,)`.
+
+        Returns
+        -------
+        NDArray
+            `eta` unchanged for `"mu"`, `exp(eta)` for `"sigma"`.
+        """
         if param == "mu":
             return eta
         return np.exp(eta)
 
     def link_derivative(self, param: str, values: NDArray) -> NDArray:
+        r"""Derivative of the link function for `mu` or `sigma`.
+
+        For the identity link, $d\eta/d\mu = 1$; for the log link,
+        $d\eta/d\sigma = 1/\sigma$.
+
+        Parameters
+        ----------
+        param
+            Either `"mu"` or `"sigma"`.
+        values
+            Parameter values on the natural scale at which to evaluate the derivative,
+            shape `(n,)`.
+
+        Returns
+        -------
+        NDArray
+            An array of ones for `"mu"`, or `1 / values` for `"sigma"`.
+        """
         if param == "mu":
             return np.ones_like(values)
         return 1.0 / values
 
     def dl_dtheta(self, param: str, y: NDArray, params: dict[str, NDArray]) -> NDArray:
+        r"""First derivative of the Gaussian log-likelihood with respect to `mu` or `sigma`.
+
+        The score functions are
+
+        $$
+        \frac{\partial \ell}{\partial \mu} = \frac{y - \mu}{\sigma^2}, \qquad
+        \frac{\partial \ell}{\partial \sigma} = -\frac{1}{\sigma} + \frac{(y-\mu)^2}{\sigma^3}.
+        $$
+
+        Parameters
+        ----------
+        param
+            Either `"mu"` or `"sigma"`.
+        y
+            Observed response values, shape `(n,)`.
+        params
+            Current estimates with keys `"mu"` and `"sigma"`, each of shape `(n,)`.
+
+        Returns
+        -------
+        NDArray
+            Elementwise first derivatives, shape `(n,)`.
+        """
         mu = params["mu"]
         sigma = params["sigma"]
         if param == "mu":
@@ -100,24 +184,92 @@ class GaussianLS(GAMLSSFamily):
         return -1.0 / sigma + (y - mu) ** 2 / sigma**3
 
     def d2l_dtheta2(self, param: str, y: NDArray, params: dict[str, NDArray]) -> NDArray:
+        r"""Expected Fisher information for `mu` or `sigma`.
+
+        For the Gaussian distribution these expected information terms do not depend on
+        `y`:
+
+        $$
+        -E\!\left[\frac{\partial^2 \ell}{\partial \mu^2}\right] = \frac{1}{\sigma^2}, \qquad
+        -E\!\left[\frac{\partial^2 \ell}{\partial \sigma^2}\right] = \frac{2}{\sigma^2}.
+        $$
+
+        Parameters
+        ----------
+        param
+            Either `"mu"` or `"sigma"`.
+        y
+            Observed response values, shape `(n,)` (unused, kept for interface
+            consistency).
+        params
+            Current estimates with keys `"mu"` and `"sigma"`, each of shape `(n,)`.
+
+        Returns
+        -------
+        NDArray
+            Elementwise working weights, shape `(n,)`.
+        """
         sigma = params["sigma"]
         if param == "mu":
             return 1.0 / sigma**2
         return 2.0 / sigma**2
 
     def log_likelihood(self, y: NDArray, params: dict[str, NDArray]) -> float:
+        """Total Gaussian log-likelihood at the current `mu` and `sigma`.
+
+        Parameters
+        ----------
+        y
+            Observed response values, shape `(n,)`.
+        params
+            Current estimates with keys `"mu"` and `"sigma"`, each of shape `(n,)`.
+
+        Returns
+        -------
+        float
+            The log-likelihood summed over all observations.
+        """
         mu = params["mu"]
         sigma = params["sigma"]
         ll_i = -np.log(sigma) - 0.5 * np.log(2 * np.pi) - 0.5 * ((y - mu) / sigma) ** 2
         return float(np.sum(ll_i))
 
     def initialize(self, y: NDArray) -> dict[str, NDArray]:
+        """Starting values for `mu` and `sigma` from the raw response.
+
+        `mu` is initialized at the observed values themselves and `sigma` at the sample
+        standard deviation of `y`, constant across observations.
+
+        Parameters
+        ----------
+        y
+            Observed response values, shape `(n,)`.
+
+        Returns
+        -------
+        dict[str, NDArray]
+            `{"mu": y.copy(), "sigma": <constant array of the sample std>}`.
+        """
         return {
             "mu": y.copy(),
             "sigma": np.full_like(y, np.std(y, ddof=1)),
         }
 
     def simulate(self, params: dict[str, NDArray], rng: object) -> NDArray:
+        """Simulate response values from `Normal(mu, sigma)`.
+
+        Parameters
+        ----------
+        params
+            Current estimates with keys `"mu"` and `"sigma"`, each of shape `(n,)`.
+        rng
+            A NumPy random generator used to draw the simulated values.
+
+        Returns
+        -------
+        NDArray
+            Simulated response values, shape `(n,)`.
+        """
         return rng.normal(params["mu"], params["sigma"])
 
     def __repr__(self) -> str:
