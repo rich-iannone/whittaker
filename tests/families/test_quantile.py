@@ -84,6 +84,11 @@ class TestQuantileFamilyLink:
         np.testing.assert_array_equal(qf.link_inverse(x), x)
         np.testing.assert_array_equal(qf.link_derivative(x), np.ones(3))
 
+    def test_variance_is_ones(self):
+        qf = QuantileFamily()
+        mu = np.array([1.0, 5.0, -3.0])
+        np.testing.assert_array_equal(qf.variance(mu), np.ones(3))
+
 
 class TestQuantileFamilyDeviance:
     def test_deviance_positive(self):
@@ -100,6 +105,21 @@ class TestQuantileFamilyDeviance:
         np.testing.assert_allclose(
             qf.deviance(y, mu, weights=w), 2.0 * qf.deviance(y, mu), rtol=1e-10
         )
+
+    def test_unit_deviance_sums_to_deviance(self):
+        qf = QuantileFamily(tau=0.3, sigma=0.5)
+        y = np.array([1.0, 2.0, 3.0, 4.0])
+        mu = np.array([1.1, 1.9, 3.2, 3.9])
+        np.testing.assert_allclose(
+            np.sum(qf.unit_deviance(y, mu)), qf.deviance(y, mu), rtol=1e-10
+        )
+
+    def test_unit_deviance_matches_elf_loss(self):
+        qf = QuantileFamily(tau=0.7, sigma=1.0)
+        y = np.array([1.0, 2.0, 3.0])
+        mu = np.array([1.1, 1.9, 3.2])
+        expected = 2.0 * _elf_loss(y - mu, tau=0.7, sigma=1.0)
+        np.testing.assert_allclose(qf.unit_deviance(y, mu), expected)
 
 
 class TestQuantileFamilyIRLS:
@@ -144,3 +164,19 @@ class TestQuantileFamilyOther:
         y = qf.simulate(mu, 1.0, rng)
         assert y.shape == (100,)
         assert np.isfinite(y).all()
+
+    def test_log_likelihood_weighted(self):
+        qf = QuantileFamily(tau=0.4, sigma=1.0)
+        y = np.array([1.0, 2.0, 3.0, 4.0])
+        mu = np.array([1.1, 1.9, 3.2, 3.9])
+        w = np.array([2.0, 2.0, 2.0, 2.0])
+        ll_unweighted = qf.log_likelihood(y, mu, scale=1.0)
+        ll_weighted = qf.log_likelihood(y, mu, scale=1.0, weights=w)
+        np.testing.assert_allclose(ll_weighted, 2.0 * ll_unweighted, rtol=1e-10)
+
+    def test_initialize_copies_y(self):
+        qf = QuantileFamily()
+        y = np.array([1.0, 2.0, 3.0])
+        mu0 = qf.initialize(y)
+        np.testing.assert_array_equal(mu0, y)
+        assert mu0 is not y

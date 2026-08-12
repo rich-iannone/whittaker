@@ -170,6 +170,14 @@ class TestPSplineFit:
         with pytest.raises(ValueError, match="identical"):
             PSpline(k=5, m=1).fit(np.ones(10))
 
+    def test_m_mutated_after_construction_raises_on_fit(self) -> None:
+        # The constructor validates m < k, but fit() re-checks it in case the
+        # attribute is mutated afterwards (e.g. by user code or deserialization).
+        ps = PSpline(k=5, m=2)
+        ps.m = 5
+        with pytest.raises(ValueError, match="must be less than k"):
+            ps.fit(_make_x())
+
     def test_column_vector_accepted(self) -> None:
         x = _make_x(30)[:, np.newaxis]
         assert PSpline(k=8).fit(x).is_fitted

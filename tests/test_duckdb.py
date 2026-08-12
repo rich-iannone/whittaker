@@ -7,7 +7,8 @@ import pytest
 
 duckdb = pytest.importorskip("duckdb")
 
-from whittaker.duckdb import DuckDBGAM, _count_rows, _normalize_source, _stream_as_dict
+from whittaker.duckdb import DuckDBGAM, _count_rows, _fetch_as_dict, _normalize_source, _stream_as_dict
+from whittaker.families.cox_ph import CoxPH
 from whittaker.families.poisson import Poisson
 
 
@@ -74,6 +75,13 @@ class TestHelpers:
 
     def test_stream_as_dict(self, conn_with_sin_data):
         data = _stream_as_dict(conn_with_sin_data, "SELECT * FROM sin_data", chunk_size=100)
+        assert "x" in data
+        assert "y" in data
+        assert len(data["x"]) == 500
+        assert len(data["y"]) == 500
+
+    def test_fetch_as_dict(self, conn_with_sin_data):
+        data = _fetch_as_dict(conn_with_sin_data, "SELECT * FROM sin_data")
         assert "x" in data
         assert "y" in data
         assert len(data["x"]) == 500
@@ -152,6 +160,28 @@ class TestDuckDBGAMPredictions:
 
         pred = model.predict({"x": np.array([0.0, 1.5, 3.0])})
         assert np.all(pred.values > 0)
+
+    def test_family_with_set_data(self):
+        """CoxPH.set_data() must be called by DuckDBGAM.fit() (has_attr `set_data` branch)."""
+        rng = np.random.default_rng(23)
+        n = 300
+        x = rng.normal(0, 1, n)
+        eta_true = 0.8 * x
+        time = rng.exponential(1.0 / np.exp(eta_true))
+        censor_time = rng.exponential(5.0, n)
+        event = (time <= censor_time).astype(float)
+        time = np.minimum(time, censor_time)
+
+        conn = duckdb.connect()
+        conn.execute("CREATE TABLE cox_data (x DOUBLE, y DOUBLE, event DOUBLE)")
+        for xi, yi, ei in zip(x, time, event):
+            conn.execute(
+                "INSERT INTO cox_data VALUES (?, ?, ?)", [float(xi), float(yi), float(ei)]
+            )
+
+        model = DuckDBGAM("y ~ s(x)", family=CoxPH(status="event"))
+        model.fit("cox_data", conn)
+        assert model.is_fitted
 
 
 class TestDuckDBGAMSummary:

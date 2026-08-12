@@ -54,6 +54,14 @@ class TestNegativeBinomialFamily:
         mu = np.array([0.5, 1.5, 2.0, 4.0, 8.0])
         assert_allclose(np.sum(self.fam.unit_deviance(y, mu)), self.fam.deviance(y, mu))
 
+    def test_deviance_weighted(self) -> None:
+        y = np.array([0.0, 1.0, 3.0, 5.0, 10.0])
+        mu = np.array([0.5, 1.5, 2.0, 4.0, 8.0])
+        w = np.array([2.0, 2.0, 2.0, 2.0, 2.0])
+        assert_allclose(
+            self.fam.deviance(y, mu, weights=w), 2.0 * self.fam.deviance(y, mu)
+        )
+
     def test_scale_known_true(self) -> None:
         assert self.fam.scale_known is True
 
@@ -74,6 +82,14 @@ class TestNegativeBinomialFamily:
         ll_bad = self.fam.log_likelihood(y, np.full_like(y, 3.0), scale=1.0)
         assert ll_good > ll_bad
 
+    def test_log_likelihood_weighted(self) -> None:
+        y = np.array([0.0, 1.0, 2.0, 5.0])
+        mu = np.array([1.0, 1.5, 2.5, 4.0])
+        w = np.array([2.0, 2.0, 2.0, 2.0])
+        ll_unweighted = self.fam.log_likelihood(y, mu, scale=1.0)
+        ll_weighted = self.fam.log_likelihood(y, mu, scale=1.0, weights=w)
+        assert_allclose(ll_weighted, 2.0 * ll_unweighted)
+
     def test_theta_property(self) -> None:
         fam = NegativeBinomial(theta=5.0)
         assert fam.theta == 5.0
@@ -88,6 +104,14 @@ class TestNegativeBinomialFamily:
         fam = NegativeBinomial(theta=1.0)
         with pytest.raises(ValueError, match="positive"):
             fam.theta = 0.0
+
+    def test_simulate_shape_and_finite(self) -> None:
+        rng = np.random.default_rng(42)
+        mu = np.array([1.0, 5.0, 10.0, 20.0])
+        y = self.fam.simulate(mu, scale=1.0, rng=rng)
+        assert y.shape == mu.shape
+        assert np.isfinite(y).all()
+        assert np.all(y >= 0)
 
     def test_repr(self) -> None:
         fam = NegativeBinomial(theta=3.5)

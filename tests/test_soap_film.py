@@ -9,6 +9,7 @@ from whittaker.formula.terms import Formula, SmoothTerm
 from whittaker.gam import GAM
 from whittaker.smooths.soap_film import (
     SoapFilm,
+    _boundary_distance,
     _point_in_polygon,
     _points_in_domain,
 )
@@ -54,6 +55,30 @@ class TestPointInPolygon:
         bnd = _square_with_hole()
         assert _points_in_domain(np.array([[0.1, 0.1]]), bnd)[0] is np.True_
         assert _points_in_domain(np.array([[0.5, 0.5]]), bnd)[0] is np.False_
+
+    def test_domain_point_outside_outer_boundary(self):
+        # Point clearly outside the outer boundary polygon; exercises the
+        # `continue` branch in `_points_in_domain` before hole-checking happens.
+        bnd = _square_with_hole()
+        mask = _points_in_domain(np.array([[2.0, 2.0]]), bnd)
+        assert mask[0] is np.False_
+
+
+class TestBoundaryDistance:
+    def test_distance_outside_square(self):
+        square = [np.array([[0, 0], [1, 0], [1, 1], [0, 1]], dtype=float)]
+        d = _boundary_distance(np.array([2.0, 0.5]), square)
+        assert np.isclose(d, 1.0)
+
+    def test_distance_inside_square(self):
+        square = [np.array([[0, 0], [1, 0], [1, 1], [0, 1]], dtype=float)]
+        d = _boundary_distance(np.array([0.5, 0.5]), square)
+        assert np.isclose(d, 0.5)
+
+    def test_distance_on_boundary_is_zero(self):
+        square = [np.array([[0, 0], [1, 0], [1, 1], [0, 1]], dtype=float)]
+        d = _boundary_distance(np.array([0.0, 0.5]), square)
+        assert np.isclose(d, 0.0)
 
 
 # ---------------------------------------------------------------------------
@@ -135,6 +160,59 @@ class TestSoapFilmBasis:
         assert not basis.is_fitted
         basis.fit(x)
         assert basis.is_fitted
+
+    def test_repr(self):
+        rng = np.random.default_rng(23)
+        x = rng.uniform(0.05, 0.95, (100, 2))
+        basis = SoapFilm(boundary=_square_boundary(), k=6)
+        basis.fit(x)
+        r = repr(basis)
+        assert "SoapFilm" in r
+        assert str(basis.n_basis) in r
+
+    def test_basis_matrix_point_outside_triangulation(self):
+        # A point far outside the fitted domain should fall back to a nearest-knot
+        # one-hot indicator (find_simplex returns -1 for it).
+        rng = np.random.default_rng(23)
+        x = rng.uniform(0.05, 0.95, (100, 2))
+        basis = SoapFilm(boundary=_square_boundary(), k=8)
+        basis.fit(x)
+        far = np.array([[10.0, 10.0]])
+        B = basis.basis_matrix(far)
+        assert B.shape == (1, basis.n_basis)
+        assert np.count_nonzero(B[0]) == 1
+        assert np.isclose(B[0].sum(), 1.0)
+        # Nearest knot to (10, 10) should be the knot with the largest coordinates.
+        nearest = np.argmin(np.linalg.norm(basis._knots - far[0], axis=1))
+        assert B[0, nearest] == 1.0
+
+    def test_duplicate_boundary_points_deduplicated(self):
+        # A boundary loop with a repeated vertex introduces a zero-length segment
+        # whose start point and midpoint coincide with an existing sample point,
+        # which should be filtered out as a duplicate after rounding.
+        outer = np.array(
+            [[0.0, 0.0], [0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]],
+            dtype=float,
+        )
+        knots = np.array(
+            [
+                [0.25, 0.25],
+                [0.75, 0.25],
+                [0.25, 0.75],
+                [0.75, 0.75],
+                [0.5, 0.5],
+            ]
+        )
+        rng = np.random.default_rng(23)
+        x = rng.uniform(0.05, 0.95, (100, 2))
+        basis = SoapFilm(boundary=[outer], knots=knots, k=5)
+        basis.fit(x)
+        n_boundary_pts = basis._all_pts.shape[0] - basis._n_interior
+        # 5 edges * 2 sample points each = 10 raw samples, minus at least one
+        # duplicate introduced by the repeated vertex.
+        assert n_boundary_pts < 10
+        B = basis.basis_matrix(x)
+        assert np.all(np.isfinite(B))
 
 
 # ---------------------------------------------------------------------------

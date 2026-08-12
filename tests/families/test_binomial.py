@@ -81,6 +81,17 @@ class TestDeviance:
         mu_bad = np.array([0.5, 0.5, 0.5, 0.5])
         assert g.deviance(y, mu_bad) > g.deviance(y, mu_good)
 
+    def test_deviance_with_weights(self) -> None:
+        g = Binomial()
+        y = np.array([1.0, 1.0, 0.0, 0.0])
+        mu = np.array([0.9, 0.8, 0.2, 0.1])
+        weights = np.array([1.0, 2.0, 3.0, 0.5])
+        unweighted = g.unit_deviance(y, mu)
+        expected = float(np.sum(weights * unweighted))
+        actual = g.deviance(y, mu, weights=weights)
+        np.testing.assert_allclose(actual, expected)
+        assert actual != g.deviance(y, mu)
+
 
 class TestLogLikelihood:
     def test_log_likelihood_negative(self) -> None:
@@ -95,6 +106,15 @@ class TestLogLikelihood:
         ll_good = g.log_likelihood(y, np.array([0.9, 0.1]), 1.0)
         ll_bad = g.log_likelihood(y, np.array([0.5, 0.5]), 1.0)
         assert ll_good > ll_bad
+
+    def test_log_likelihood_with_weights(self) -> None:
+        g = Binomial()
+        y = np.array([1.0, 0.0, 1.0])
+        mu = np.array([0.8, 0.3, 0.6])
+        weights = np.array([1.0, 2.0, 0.5])
+        unweighted_ll = g.log_likelihood(y, mu, 1.0)
+        weighted_ll = g.log_likelihood(y, mu, 1.0, weights=weights)
+        assert weighted_ll != unweighted_ll
 
 
 class TestInitialize:

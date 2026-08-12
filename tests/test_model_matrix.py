@@ -7,17 +7,32 @@ import pytest
 from numpy.testing import assert_allclose
 
 from whittaker.formula.parser import parse
-from whittaker.formula.terms import SmoothTerm
+from whittaker.formula.terms import Formula, SmoothTerm
 from whittaker.model_matrix import (
     ModelMatrix,
     _apply_constraint,
     _apply_constraint_to_penalty,
+    _extract_by_column,
     _extract_column,
     _resolve_basis,
+    _resolve_fs_basis,
+    _resolve_t2_basis,
+    _resolve_tensor_basis,
+    _resolve_tensor_interaction_basis,
     build_model_matrix,
     predict_matrix,
+    predict_offset,
 )
-from whittaker.smooths import CRS, TPRS, PSpline
+from whittaker.smooths import (
+    CRS,
+    TPRS,
+    AdaptiveTPRS,
+    FactorSmoothBasis,
+    PSpline,
+    TensorInteractionBasis,
+    TensorProductBasis,
+    TensorProductBasisT2,
+)
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -495,3 +510,288 @@ class TestNumericalSmooth:
             roughnesses.append(roughness)
 
         assert roughnesses[0] > roughnesses[1] > roughnesses[2]
+
+
+# ---------------------------------------------------------------------------
+# _resolve_basis — extra branches (ad n_penalties)
+# ---------------------------------------------------------------------------
+
+
+class TestResolveBasisExtra:
+    def test_ad_with_n_penalties(self) -> None:
+        term = SmoothTerm(variables=("x",), bs="ad", k=12, extra={"m": 2, "n_penalties": 3})
+        basis = _resolve_basis(term)
+        assert isinstance(basis, AdaptiveTPRS)
+        assert basis._n_penalties == 3
+
+
+# ---------------------------------------------------------------------------
+# _resolve_fs_basis
+# ---------------------------------------------------------------------------
+
+
+class TestResolveFsBasis:
+    def test_fs_basis_with_m_kwarg(self) -> None:
+        term = SmoothTerm(
+            variables=("x", "g"), smooth_type="s", bs="fs", k=8, extra={"xt": "tp", "m": 2}
+        )
+        basis = _resolve_fs_basis(term)
+        assert isinstance(basis, FactorSmoothBasis)
+        assert basis._marginal_kwargs.get("m") == 2
+
+    def test_fs_basis_requires_two_variables(self) -> None:
+        term = SmoothTerm(variables=("x",), smooth_type="s", bs="fs")
+        with pytest.raises(ValueError, match="requires at least 2 variables"):
+            _resolve_fs_basis(term)
+
+    def test_fs_basis_via_resolve_basis_dispatch(self) -> None:
+        term = SmoothTerm(variables=("x", "g"), smooth_type="s", bs="fs")
+        basis = _resolve_basis(term)
+        assert isinstance(basis, FactorSmoothBasis)
+
+
+# ---------------------------------------------------------------------------
+# _resolve_tensor_basis (te)
+# ---------------------------------------------------------------------------
+
+
+class TestResolveTensorBasis:
+    def test_requires_two_variables(self) -> None:
+        term = SmoothTerm(variables=("x1",), smooth_type="te")
+        with pytest.raises(ValueError, match=r"te\(\) requires at least 2"):
+            _resolve_tensor_basis(term)
+
+    def test_k_list_length_mismatch_raises(self) -> None:
+        term = SmoothTerm(
+            variables=("x1", "x2", "x3"), smooth_type="te", extra={"k": [5, 6]}
+        )
+        with pytest.raises(ValueError, match="Length of k must match"):
+            _resolve_tensor_basis(term)
+
+    def test_k_scalar_in_extra(self) -> None:
+        term = SmoothTerm(variables=("x1", "x2"), smooth_type="te", extra={"k": 7})
+        basis = _resolve_tensor_basis(term)
+        assert isinstance(basis, TensorProductBasis)
+        assert len(basis.marginals) == 2
+
+    def test_bs_list_valid(self) -> None:
+        term = SmoothTerm(
+            variables=("x1", "x2"), smooth_type="te", extra={"bs": ["cr", "ps"]}
+        )
+        basis = _resolve_tensor_basis(term)
+        assert isinstance(basis, TensorProductBasis)
+        assert isinstance(basis.marginals[0], CRS)
+        assert isinstance(basis.marginals[1], PSpline)
+
+    def test_bs_list_length_mismatch_raises(self) -> None:
+        term = SmoothTerm(
+            variables=("x1", "x2", "x3"), smooth_type="te", extra={"bs": ["cr", "ps"]}
+        )
+        with pytest.raises(ValueError, match="Length of bs must match"):
+            _resolve_tensor_basis(term)
+
+    def test_bs_scalar_in_extra(self) -> None:
+        term = SmoothTerm(variables=("x1", "x2"), smooth_type="te", extra={"bs": "cr"})
+        basis = _resolve_tensor_basis(term)
+        assert isinstance(basis, TensorProductBasis)
+        assert isinstance(basis.marginals[0], CRS)
+        assert isinstance(basis.marginals[1], CRS)
+
+
+# ---------------------------------------------------------------------------
+# _resolve_tensor_interaction_basis (ti)
+# ---------------------------------------------------------------------------
+
+
+class TestResolveTensorInteractionBasis:
+    def test_requires_two_variables(self) -> None:
+        term = SmoothTerm(variables=("x1",), smooth_type="ti")
+        with pytest.raises(ValueError, match=r"ti\(\) requires at least 2"):
+            _resolve_tensor_interaction_basis(term)
+
+    def test_k_list_length_mismatch_raises(self) -> None:
+        term = SmoothTerm(
+            variables=("x1", "x2", "x3"), smooth_type="ti", extra={"k": [5, 6]}
+        )
+        with pytest.raises(ValueError, match="Length of k must match"):
+            _resolve_tensor_interaction_basis(term)
+
+    def test_k_scalar_in_extra(self) -> None:
+        term = SmoothTerm(variables=("x1", "x2"), smooth_type="ti", extra={"k": 7})
+        basis = _resolve_tensor_interaction_basis(term)
+        assert isinstance(basis, TensorInteractionBasis)
+
+    def test_bs_list_valid(self) -> None:
+        term = SmoothTerm(
+            variables=("x1", "x2"), smooth_type="ti", extra={"bs": ["cr", "ps"]}
+        )
+        basis = _resolve_tensor_interaction_basis(term)
+        assert isinstance(basis, TensorInteractionBasis)
+        assert isinstance(basis.marginals[0], CRS)
+        assert isinstance(basis.marginals[1], PSpline)
+
+    def test_bs_list_length_mismatch_raises(self) -> None:
+        term = SmoothTerm(
+            variables=("x1", "x2", "x3"), smooth_type="ti", extra={"bs": ["cr", "ps"]}
+        )
+        with pytest.raises(ValueError, match="Length of bs must match"):
+            _resolve_tensor_interaction_basis(term)
+
+    def test_bs_scalar_in_extra(self) -> None:
+        term = SmoothTerm(variables=("x1", "x2"), smooth_type="ti", extra={"bs": "cr"})
+        basis = _resolve_tensor_interaction_basis(term)
+        assert isinstance(basis, TensorInteractionBasis)
+        assert isinstance(basis.marginals[0], CRS)
+        assert isinstance(basis.marginals[1], CRS)
+
+
+# ---------------------------------------------------------------------------
+# _resolve_t2_basis (t2)
+# ---------------------------------------------------------------------------
+
+
+class TestResolveT2Basis:
+    def test_requires_two_variables(self) -> None:
+        term = SmoothTerm(variables=("x1",), smooth_type="t2")
+        with pytest.raises(ValueError, match=r"t2\(\) requires at least 2"):
+            _resolve_t2_basis(term)
+
+    def test_k_list_length_mismatch_raises(self) -> None:
+        term = SmoothTerm(
+            variables=("x1", "x2", "x3"), smooth_type="t2", extra={"k": [5, 6]}
+        )
+        with pytest.raises(ValueError, match="Length of k must match"):
+            _resolve_t2_basis(term)
+
+    def test_k_scalar_in_extra(self) -> None:
+        term = SmoothTerm(variables=("x1", "x2"), smooth_type="t2", extra={"k": 7})
+        basis = _resolve_t2_basis(term)
+        assert isinstance(basis, TensorProductBasisT2)
+
+    def test_bs_list_valid(self) -> None:
+        term = SmoothTerm(
+            variables=("x1", "x2"), smooth_type="t2", extra={"bs": ["cr", "ps"]}
+        )
+        basis = _resolve_t2_basis(term)
+        assert isinstance(basis, TensorProductBasisT2)
+        assert isinstance(basis.marginals[0], CRS)
+        assert isinstance(basis.marginals[1], PSpline)
+
+    def test_bs_list_length_mismatch_raises(self) -> None:
+        term = SmoothTerm(
+            variables=("x1", "x2", "x3"), smooth_type="t2", extra={"bs": ["cr", "ps"]}
+        )
+        with pytest.raises(ValueError, match="Length of bs must match"):
+            _resolve_t2_basis(term)
+
+    def test_bs_scalar_in_extra(self) -> None:
+        term = SmoothTerm(variables=("x1", "x2"), smooth_type="t2", extra={"bs": "cr"})
+        basis = _resolve_t2_basis(term)
+        assert isinstance(basis, TensorProductBasisT2)
+        assert isinstance(basis.marginals[0], CRS)
+        assert isinstance(basis.marginals[1], CRS)
+
+
+# ---------------------------------------------------------------------------
+# _extract_by_column / _extract_column — edge cases
+# ---------------------------------------------------------------------------
+
+
+class TestExtractColumnEdgeCases:
+    def test_extract_by_column_missing_raises(self) -> None:
+        with pytest.raises(KeyError, match="Column 'z' required"):
+            _extract_by_column({"x": np.array(["a", "b"])}, "z")
+
+    def test_extract_by_column_non_1d_raises(self) -> None:
+        data = {"x": np.zeros((3, 2))}
+        with pytest.raises(ValueError, match="must be 1-D"):
+            _extract_by_column(data, "x")
+
+    def test_extract_column_non_1d_raises(self) -> None:
+        data = {"x": np.zeros((3, 2))}
+        with pytest.raises(ValueError, match="must be 1-D"):
+            _extract_column(data, "x")
+
+
+# ---------------------------------------------------------------------------
+# build_model_matrix — multiple offset terms
+# ---------------------------------------------------------------------------
+
+
+class TestMultipleOffsets:
+    def test_two_offset_terms_are_summed(self) -> None:
+        formula = parse("y ~ s(x) + offset(x) + offset(x1)")
+        data = _simple_data()
+        data["x1"] = data["x"] * 2.0
+        result = build_model_matrix(formula, data)
+        assert result.offset is not None
+        assert_allclose(result.offset, data["x"] + data["x1"])
+
+
+# ---------------------------------------------------------------------------
+# build_model_matrix — no model columns at all
+# ---------------------------------------------------------------------------
+
+
+class TestNoModelColumns:
+    def test_formula_with_no_columns_raises(self) -> None:
+        formula = Formula(response="y", terms=[], intercept=False)
+        data = {"y": np.zeros(5)}
+        with pytest.raises(ValueError, match="produces no model columns"):
+            build_model_matrix(formula, data)
+
+
+# ---------------------------------------------------------------------------
+# predict_matrix — edge cases
+# ---------------------------------------------------------------------------
+
+
+class TestPredictMatrixEdgeCases:
+    def test_unequal_length_new_data_raises(self) -> None:
+        formula = parse("y ~ s(x, k=8)")
+        data = _simple_data()
+        model = build_model_matrix(formula, data)
+        new_data = {"x": np.zeros(10), "other": np.zeros(20)}
+        with pytest.raises(ValueError, match="same length"):
+            predict_matrix(model, new_data)
+
+    def test_interaction_term_reconstruction(self) -> None:
+        from whittaker.formula.terms import InteractionTerm
+
+        formula = Formula(
+            response="y",
+            terms=[InteractionTerm(left="x1", right="x2", full=False)],
+            intercept=True,
+        )
+        data = _multi_data(60)
+        model = build_model_matrix(formula, data)
+
+        new_data = {"x1": data["x1"], "x2": data["x2"]}
+        X_new = predict_matrix(model, new_data)
+        assert_allclose(X_new, model.X, atol=1e-10)
+        assert "x1:x2" in model.column_names
+
+
+# ---------------------------------------------------------------------------
+# predict_offset — multiple offsets summed
+# ---------------------------------------------------------------------------
+
+
+class TestPredictOffset:
+    def test_no_offset_expressions_returns_none(self) -> None:
+        formula = parse("y ~ s(x)")
+        data = _simple_data()
+        model = build_model_matrix(formula, data)
+        assert predict_offset(model, data) is None
+
+    def test_two_offsets_are_summed(self) -> None:
+        formula = parse("y ~ s(x) + offset(x) + offset(x1)")
+        data = _simple_data()
+        data["x1"] = data["x"] * 2.0
+        model = build_model_matrix(formula, data)
+
+        new_x = np.linspace(0, 1, 30)
+        new_data = {"x": new_x, "x1": new_x * 2.0}
+        offset = predict_offset(model, new_data)
+        assert offset is not None
+        assert_allclose(offset, new_x + new_x * 2.0)

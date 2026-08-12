@@ -234,6 +234,26 @@ class TestFunctionalGAMFit:
         with pytest.raises(ValueError, match="2-D"):
             model.fit({"x": np.ones(10), "y": np.ones(10)})
 
+    def test_too_few_grid_points_raises(self):
+        rng = np.random.default_rng(23)
+        n = 50
+        X_func = rng.normal(size=(n, 2))
+        y = rng.normal(size=n)
+        model = FunctionalGAM(
+            response="y",
+            functional_terms=[FunctionalTerm(name="X_func", n_basis=3)],
+        )
+        with pytest.raises(ValueError, match="at least 3 grid points"):
+            model.fit({"X_func": X_func, "y": y})
+
+    def test_fit_non_dict_data_raises(self):
+        model = FunctionalGAM(
+            response="y",
+            functional_terms=[FunctionalTerm(name="x")],
+        )
+        with pytest.raises(TypeError, match="Data must be a dict"):
+            model.fit([1, 2, 3])
+
     def test_unfitted_predict_raises(self):
         model = FunctionalGAM(
             response="y",
@@ -347,6 +367,57 @@ class TestCoefficientFunction:
         model.fit({"X_func": data["X_func"], "y": data["y"]})
         with pytest.raises(ValueError, match="not found"):
             model.coefficient_function("nonexistent")
+
+    def test_coefficient_function_with_intercept_scalar_terms(self, mixed_data):
+        """Scalar terms with the default intercept exercise the has-intercept branch of the
+        scalar penalty reconstruction used by `coefficient_function()`
+        (`_get_full_penalties`).
+        """
+        model = FunctionalGAM(
+            response="y",
+            functional_terms=[FunctionalTerm(name="spectrum", domain=(0, 1))],
+            scalar_terms="s(temp)",
+        )
+        model.fit(mixed_data)
+        cf = model.coefficient_function("spectrum")
+        assert np.all(np.isfinite(cf.values))
+        assert np.all(np.isfinite(cf.se))
+
+    def test_coefficient_function_with_no_intercept_scalar_terms(self, mixed_data):
+        """Scalar terms without an intercept (`scalar_terms="0 + ..."`) exercise the
+        no-intercept branch of the scalar penalty reconstruction used by
+        `coefficient_function()` (`_get_full_penalties`).
+        """
+        model = FunctionalGAM(
+            response="y",
+            functional_terms=[FunctionalTerm(name="spectrum", domain=(0, 1))],
+            scalar_terms="0 + s(temp)",
+        )
+        model.fit(mixed_data)
+        cf = model.coefficient_function("spectrum")
+        assert np.all(np.isfinite(cf.values))
+        assert np.all(np.isfinite(cf.se))
+
+    def test_coefficient_function_singular_matrix_falls_back_to_pinv(
+        self, scalar_on_function_data, monkeypatch
+    ):
+        """If the reconstructed information matrix is singular, `coefficient_function()`
+        falls back from `np.linalg.inv` to `np.linalg.pinv`.
+        """
+        data = scalar_on_function_data
+        model = FunctionalGAM(
+            response="y",
+            functional_terms=[FunctionalTerm(name="X_func", domain=(0, 1))],
+        )
+        model.fit({"X_func": data["X_func"], "y": data["y"]})
+
+        def _raise_linalg_error(a):
+            raise np.linalg.LinAlgError("forced singular matrix for test")
+
+        monkeypatch.setattr(np.linalg, "inv", _raise_linalg_error)
+        cf = model.coefficient_function("X_func")
+        assert np.all(np.isfinite(cf.values))
+        assert np.all(np.isfinite(cf.se))
 
     def test_fourier_coefficient_function(self, scalar_on_function_data):
         data = scalar_on_function_data

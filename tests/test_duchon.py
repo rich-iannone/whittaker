@@ -101,6 +101,29 @@ class TestDuchonSplineBasis:
         with pytest.raises(ValueError, match="too small"):
             basis.fit(np.linspace(0, 1, 100))
 
+    def test_m_list_wrong_length_raises(self):
+        with pytest.raises(ValueError, match="two-element"):
+            DuchonSpline(k=5, m=[1.0, 2, 3])
+
+    def test_k_below_minimum_raises(self):
+        with pytest.raises(ValueError, match="at least 2"):
+            DuchonSpline(k=1)
+
+    def test_n_smaller_than_k_raises(self):
+        basis = DuchonSpline(k=10, m=1)
+        with pytest.raises(ValueError, match="Reduce k"):
+            basis.fit(np.linspace(0, 1, 5))
+
+    def test_basis_matrix_dimension_mismatch_raises(self):
+        basis = DuchonSpline(k=5, m=1).fit(np.random.default_rng(0).uniform(0, 1, (50, 2)))
+        with pytest.raises(ValueError, match="Expected 2 covariate"):
+            basis.basis_matrix(np.linspace(0, 1, 20))
+
+    def test_repr(self):
+        basis = DuchonSpline(k=7, m=2)
+        assert "DuchonSpline" in repr(basis)
+        assert "k=7" in repr(basis)
+
     def test_recovers_tprs_for_matching_params(self):
         from whittaker.smooths.tprs import TPRS
 

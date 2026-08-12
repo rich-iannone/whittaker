@@ -8,7 +8,12 @@ from numpy.testing import assert_allclose
 
 from whittaker.smooths.cubic import CRS
 from whittaker.smooths.pspline import PSpline
-from whittaker.smooths.tensor import TensorProductBasis, _row_tensor_product
+from whittaker.smooths.tensor import (
+    TensorInteractionBasis,
+    TensorProductBasis,
+    _row_tensor_product,
+)
+from whittaker.smooths.tprs import TPRS
 
 RNG = np.random.default_rng(23)
 
@@ -116,6 +121,27 @@ class TestTensorProductBasis:
         assert C is not None
         assert C.shape == (1, 25)
 
+    def test_identifiability_constraints_none_when_no_marginal_exposes_training_data(
+        self,
+    ) -> None:
+        # PSpline exposes neither `_x_train` nor `_knots`, so `n_train` can never be
+        # recovered and identifiability_constraints() must bail out early with None.
+        tp = TensorProductBasis([PSpline(k=5), PSpline(k=5)])
+        x = np.column_stack([np.linspace(0, 1, 30)] * 2)
+        tp.fit(x)
+        assert tp.identifiability_constraints() is None
+
+    def test_identifiability_constraints_none_when_later_marginal_lacks_training_data(
+        self,
+    ) -> None:
+        # TPRS exposes `_x_train` so n_train is recoverable from the first marginal, but
+        # the second marginal (PSpline) exposes neither attribute, so the constraint
+        # cannot be built and None must be returned.
+        tp = TensorProductBasis([TPRS(k=5), PSpline(k=5)])
+        x = np.column_stack([np.linspace(0, 1, 30)] * 2)
+        tp.fit(x)
+        assert tp.identifiability_constraints() is None
+
     def test_unfitted_raises(self) -> None:
         tp = TensorProductBasis([CRS(k=5), CRS(k=5)])
         with pytest.raises(RuntimeError, match="fitted"):
@@ -163,3 +189,14 @@ class TestTensorProductBasis:
         B_new = tp.basis_matrix(x_new)
         assert B_new.shape == (3, 25)
         assert np.all(np.isfinite(B_new))
+
+
+class TestTensorInteractionBasisIdentifiabilityConstraints:
+    def test_uses_knots_branch_then_bails_on_missing_attrs(self) -> None:
+        # CRS exposes `_knots` (not `_x_train`), exercising the `elif hasattr(m,
+        # "_knots")` branch; PSpline exposes neither attribute, exercising the
+        # final `else: return None` branch of identifiability_constraints().
+        ti = TensorInteractionBasis([CRS(k=5), PSpline(k=5)])
+        x = np.column_stack([np.linspace(0, 1, 30)] * 2)
+        ti.fit(x)
+        assert ti.identifiability_constraints() is None

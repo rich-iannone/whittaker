@@ -217,6 +217,23 @@ class TestCATE:
         assert np.all(np.isfinite(result.cate))
         assert np.all(np.isfinite(result.se))
 
+    def test_cate_too_few_observations_raises(self):
+        """With too few total observations, fewer than 20 pseudo-outcomes are ever available,
+        so `_fit_cate` bails out and leaves `_cate_model` as `None`; calling `.cate()` should
+        then raise instead of using a nonexistent model."""
+        rng = np.random.default_rng(0)
+        n = 15
+        x1 = np.linspace(0, 2 * np.pi, n)
+        x2 = rng.uniform(0, 1, n)
+        d = rng.binomial(1, 0.5, n).astype(float)
+        y = 2.0 * d + np.sin(x1) + rng.normal(0, 0.2, n)
+        data = {"x1": x1, "x2": x2, "d": d, "y": y}
+
+        model = CausalGAM("y", "d", ["x1", "x2"], method="interactive", n_folds=3)
+        model.fit(data, seed=23)
+        with pytest.raises(RuntimeError, match="too few valid"):
+            model.cate()
+
 
 class TestResiduals:
     def test_residuals_shape(self, linear_treatment_data):

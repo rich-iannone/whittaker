@@ -7,6 +7,7 @@ import pytest
 
 pl = pytest.importorskip("polars")
 
+from whittaker.families.cox_ph import CoxPH
 from whittaker.families.poisson import Poisson
 from whittaker.polars_streaming import PolarsGAM, _count_lazy, _to_lazy
 
@@ -66,6 +67,18 @@ class TestHelpers:
     def test_to_lazy_from_csv(self, sin_df, tmp_path):
         path = tmp_path / "data.csv"
         sin_df.write_csv(str(path))
+        lf = _to_lazy(str(path))
+        assert isinstance(lf, pl.LazyFrame)
+
+    def test_to_lazy_from_ipc(self, sin_df, tmp_path):
+        path = tmp_path / "data.ipc"
+        sin_df.write_ipc(str(path))
+        lf = _to_lazy(str(path))
+        assert isinstance(lf, pl.LazyFrame)
+
+    def test_to_lazy_from_ndjson(self, sin_df, tmp_path):
+        path = tmp_path / "data.ndjson"
+        sin_df.write_ndjson(str(path))
         lf = _to_lazy(str(path))
         assert isinstance(lf, pl.LazyFrame)
 
@@ -156,6 +169,22 @@ class TestPolarsGAMPredictions:
 
         pred = model.predict({"x": np.array([0.0, 1.5, 3.0])})
         assert np.all(pred.values > 0)
+
+    def test_family_with_set_data(self):
+        """CoxPH.set_data() must be called by PolarsGAM.fit() (has_attr `set_data` branch)."""
+        rng = np.random.default_rng(23)
+        n = 300
+        x = rng.normal(0, 1, n)
+        eta_true = 0.8 * x
+        time = rng.exponential(1.0 / np.exp(eta_true))
+        censor_time = rng.exponential(5.0, n)
+        event = (time <= censor_time).astype(float)
+        time = np.minimum(time, censor_time)
+
+        df = pl.DataFrame({"x": x, "y": time, "event": event})
+        model = PolarsGAM("y ~ s(x)", family=CoxPH(status="event"))
+        model.fit(df.lazy())
+        assert model.is_fitted
 
 
 class TestPolarsGAMSummary:

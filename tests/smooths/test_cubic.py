@@ -157,6 +157,15 @@ class TestCRSFit:
         with pytest.raises(ValueError, match="univariate"):
             CRS(k=8).fit(x)
 
+    def test_tied_quantile_knots_fall_back_to_linspace(self) -> None:
+        # Heavily repeated values push several quantiles to the same value,
+        # so quantile-based knots contain ties and the fit must fall back
+        # to an evenly-spaced linspace over the data range.
+        x = np.concatenate([np.zeros(50), np.linspace(0.0, 1.0, 10)])
+        basis = CRS(k=8).fit(x)
+        assert len(np.unique(basis.knots)) == 8
+        assert_allclose(basis.knots, np.linspace(x.min(), x.max(), 8))
+
 
 # ---------------------------------------------------------------------------
 # CRS.basis_matrix

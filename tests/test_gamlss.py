@@ -195,6 +195,23 @@ class TestGAMLSSPrediction:
         pred = model.predict(heteroscedastic_data)
         assert pred.se is None
 
+    def test_predict_with_offset(self):
+        rng = np.random.default_rng(23)
+        n = 200
+        x = rng.uniform(0, 2 * np.pi, n)
+        off = rng.normal(0, 0.1, n)
+        y = np.sin(x) + off + rng.normal(0, 0.3, n)
+        data = {"x": x, "off": off, "y": y}
+
+        model = GAMLSS(
+            formulas={"mu": "y ~ s(x) + offset(off)", "sigma": "y ~ 1"},
+            family=GaussianLS(),
+        )
+        model.fit(data, method="REML")
+        pred = model.predict(data, parameter="mu")
+        assert np.all(np.isfinite(pred))
+        assert pred.shape == (n,)
+
 
 # ---------------------------------------------------------------------------
 # Properties
@@ -265,6 +282,23 @@ class TestGAMLSSProperties:
         model.fit(heteroscedastic_data, method="REML")
         mu_fv = model.fitted_values("mu")
         assert isinstance(mu_fv, np.ndarray)
+
+    def test_family_property(self, heteroscedastic_data):
+        family = GaussianLS()
+        model = GAMLSS(
+            formulas={"mu": "y ~ s(x)", "sigma": "y ~ s(x)"},
+            family=family,
+        )
+        model.fit(heteroscedastic_data, method="REML")
+        assert model.family is family
+
+    def test_n_iter_positive(self, heteroscedastic_data):
+        model = GAMLSS(
+            formulas={"mu": "y ~ s(x)", "sigma": "y ~ s(x)"},
+            family=GaussianLS(),
+        )
+        model.fit(heteroscedastic_data, method="REML")
+        assert model.n_iter >= 1
 
 
 # ---------------------------------------------------------------------------

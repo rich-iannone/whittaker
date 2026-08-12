@@ -159,6 +159,11 @@ class TestCheck:
         charts = model.check(plots=["qq", "histogram"])
         assert len(charts) == 2
 
+    def test_unknown_plot_name_raises(self) -> None:
+        model = _fitted_gaussian()
+        with pytest.raises(ValueError, match="Unknown check plot"):
+            model.check(plots=["bogus"])
+
 
 # ---------------------------------------------------------------------------
 # 2-D partial effects (te / ti)
@@ -282,3 +287,68 @@ class TestPartialEffects2D:
         color_enc = effect_spec.get("encoding", {}).get("color", {})
         scale = color_enc.get("scale", {})
         assert scale.get("domainMid") == 0
+
+    def test_near_zero_effect_falls_back_to_unit_domain(self) -> None:
+        """When a 2-D smooth is shrunk essentially to zero, `eff_max` is clamped to 1.0
+        rather than left at ~0 (which would otherwise produce a degenerate color scale).
+        """
+        rng = np.random.default_rng(23)
+        n = 200
+        x1 = rng.uniform(size=n)
+        x2 = rng.uniform(size=n)
+        y = rng.normal(size=n)
+
+        model = GAM("y ~ te(x1, x2, k=5)")
+        model.fit({"y": y, "x1": x1, "x2": x2}, select=True)
+        n_pen = len(model._model_matrix.penalties)
+        model.fit(
+            {"y": y, "x1": x1, "x2": x2},
+            select=True,
+            smoothing_params=[1e14] * n_pen,
+        )
+        spec = model.plot().to_dict()
+        effect_spec = spec["hconcat"][0]
+        color_enc = effect_spec.get("encoding", {}).get("color", {})
+        scale = color_enc.get("scale", {})
+        assert scale.get("domain") == [-1.0, 1.0]
+
+    def test_bivariate_tprs_smooth(self) -> None:
+        """A bivariate `s(x1, x2)` term (isotropic TPRS) uses a non-tensor basis, exercising
+        the `_smooth_grid_2d` fallback branch for non tensor-product/interaction bases.
+        """
+        rng = np.random.default_rng(23)
+        n = 200
+        x1 = rng.uniform(size=n)
+        x2 = rng.uniform(size=n)
+        y = np.sin(3 * x1) * np.cos(3 * x2) + 0.1 * rng.standard_normal(n)
+
+        model = GAM("y ~ s(x1, x2, k=15)").fit({"y": y, "x1": x1, "x2": x2})
+        chart = model.plot()
+        assert isinstance(chart, alt.HConcatChart)
+        assert chart.to_dict() is not None
+
+
+class TestSmoothTitleByVariable:
+    def test_factor_by_title(self) -> None:
+        """Factor `by=` smooths produce one panel per level, titled with the by-level."""
+        rng = np.random.default_rng(23)
+        n = 200
+        x = np.linspace(0, 1, n)
+        group = rng.choice(["a", "b"], n)
+        y = x + rng.normal(0, 0.1, n)
+
+        model = GAM("y ~ s(x, k=6, by='group')").fit({"y": y, "x": x, "group": group})
+        chart = model.plot()
+        assert chart.to_dict() is not None
+
+    def test_continuous_by_title(self) -> None:
+        """Continuous `by=` smooths keep a single panel, titled with the by-variable name."""
+        rng = np.random.default_rng(23)
+        n = 200
+        x = np.linspace(0, 1, n)
+        z = rng.uniform(0, 2, n)
+        y = x * z + rng.normal(0, 0.1, n)
+
+        model = GAM("y ~ s(x, k=6, by='z')").fit({"y": y, "x": x, "z": z})
+        chart = model.plot()
+        assert chart.to_dict() is not None

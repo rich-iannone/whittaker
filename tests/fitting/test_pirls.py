@@ -7,7 +7,9 @@ import pytest
 from numpy.testing import assert_allclose
 
 from whittaker.families.binomial import Binomial
+from whittaker.families.negative_binomial import NegativeBinomial
 from whittaker.families.poisson import Poisson
+from whittaker.fitting import pirls as pirls_mod
 from whittaker.fitting.pirls import (
     FitResult,
     _gcv_score,
@@ -34,9 +36,10 @@ def _sin_data(n: int = 200) -> dict[str, np.ndarray]:
 
 
 def _linear_data(n: int = 200) -> dict[str, np.ndarray]:
+    rng = np.random.default_rng(99)
     x = np.linspace(0, 1, n)
     return {
-        "y": 3.0 * x + 1.0 + RNG.normal(0, 0.1, n),
+        "y": 3.0 * x + 1.0 + rng.normal(0, 0.1, n),
         "x": x,
     }
 
@@ -714,3 +717,108 @@ class TestREML:
         fd_grad = (val_plus - val) / eps
 
         assert_allclose(grad[0], fd_grad, rtol=1e-3)
+
+
+# ---------------------------------------------------------------------------
+# pirls_fit — ML smoothing parameter selection
+# ---------------------------------------------------------------------------
+
+
+class TestML:
+    def test_ml_selects_positive_sp(self) -> None:
+        data = _sin_data()
+        formula = parse("y ~ s(x, k=10)")
+        mm = build_model_matrix(formula, data)
+        result = pirls_fit(mm, method="ML")
+        assert all(sp > 0 for sp in result.smoothing_params)
+
+    def test_ml_converges_gaussian(self) -> None:
+        data = _sin_data()
+        formula = parse("y ~ s(x, k=10)")
+        mm = build_model_matrix(formula, data)
+        result = pirls_fit(mm, method="ML")
+        assert result.converged
+
+    def test_ml_no_penalties_gives_empty_sp(self) -> None:
+        """Exercises `_select_smoothing_params_ml`'s early return when n_sp == 0."""
+        formula = parse("y ~ x")
+        data = _sin_data()
+        mm = build_model_matrix(formula, data)
+        result = pirls_fit(mm, method="ML")
+        assert result.smoothing_params == []
+
+
+# ---------------------------------------------------------------------------
+# _reml_objective — numerical edge cases
+# ---------------------------------------------------------------------------
+
+
+class TestReMLObjectiveEdgeCases:
+    def test_singular_a_matrix_returns_large_penalty(self) -> None:
+        """A negative-definite penalty can make `A` non-positive-definite; the Cholesky
+        factorization then raises `LinAlgError`, which should be caught and turned into a
+        large finite objective value rather than propagating."""
+        X = np.zeros((3, 3))
+        y = np.array([1.0, 2.0, 3.0])
+        penalties = [-np.eye(3)]
+        log_sp = np.array([0.0])
+
+        val, grad = _reml_objective(
+            log_sp, X, y, penalties, [3], 0, scale_known=True, scale=1.0
+        )
+        assert val == 1e20
+        assert_allclose(grad, np.zeros_like(log_sp))
+
+    def test_ml_xtx_cholesky_failure_falls_back_to_zero(self, monkeypatch) -> None:
+        """When the extra Cholesky factorization used for the ML log-determinant term fails,
+        the code should catch `LinAlgError` and treat `log_det_XtX` as 0 instead of raising."""
+        orig_cho_factor = pirls_mod.cho_factor
+        calls = {"n": 0}
+
+        def fake_cho_factor(A, *args, **kwargs):
+            calls["n"] += 1
+            if calls["n"] == 2:
+                raise np.linalg.LinAlgError("forced failure")
+            return orig_cho_factor(A, *args, **kwargs)
+
+        monkeypatch.setattr(pirls_mod, "cho_factor", fake_cho_factor)
+
+        rng = np.random.default_rng(0)
+        X = rng.standard_normal((10, 3))
+        y = rng.standard_normal(10)
+        penalties = [np.eye(3)]
+        log_sp = np.array([0.0])
+
+        val, grad = _reml_objective(
+            log_sp, X, y, penalties, [3], 0, scale_known=True, scale=1.0, ml=True
+        )
+        assert calls["n"] == 2
+        assert np.isfinite(val)
+
+
+# ---------------------------------------------------------------------------
+# pirls_fit — Negative Binomial outer-loop non-convergence
+# ---------------------------------------------------------------------------
+
+
+class TestNegativeBinomialOuterLoop:
+    def test_outer_loop_exhausts_without_theta_convergence(self, monkeypatch) -> None:
+        """If theta never stabilizes, the outer `for _outer in range(max_outer)` loop should
+        run to completion and fall through to its `else` clause instead of breaking early."""
+
+        def never_converging_theta(y, mu, theta_old):
+            return theta_old * 2.0
+
+        monkeypatch.setattr(pirls_mod, "_estimate_nb_theta", never_converging_theta)
+
+        rng = np.random.default_rng(23)
+        n = 100
+        x = np.linspace(0, 2 * np.pi, n)
+        mu_true = np.exp(0.5 + 0.3 * np.sin(x))
+        y = rng.poisson(mu_true).astype(float)
+
+        formula = parse("y ~ s(x, k=8)")
+        mm = build_model_matrix(formula, {"y": y, "x": x})
+        result = pirls_mod.pirls_fit(mm, NegativeBinomial(theta=1.0))
+
+        assert np.all(np.isfinite(result.fitted_values))

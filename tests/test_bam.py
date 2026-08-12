@@ -10,6 +10,7 @@ from whittaker.families.binomial import Binomial
 from whittaker.families.poisson import Poisson
 from whittaker.fitting.bam import _discretize_1d, _discretize_nd
 from whittaker.formula.parser import parse
+from whittaker.formula.terms import SmoothTerm
 from whittaker.gam import GAM
 
 
@@ -230,3 +231,236 @@ class TestBigGAMParametric:
         assert model.is_fitted
         pred = model.predict(data)
         assert np.corrcoef(y, pred.values)[0, 1] > 0.9
+
+
+class TestBuildDiscretizedErrors:
+    def test_unequal_lengths_raises(self):
+        formula = parse("y ~ s(x)")
+        with pytest.raises(ValueError, match="same length"):
+            build_discretized_model_matrix(formula, {"y": np.zeros(10), "x": np.zeros(20)})
+
+    def test_unsupported_smooth_type_raises(self):
+        formula = parse("y ~ s(x1, k=5)")
+        formula.terms[0] = SmoothTerm(variables=("x1",), smooth_type="xx", bs="cr", k=5, extra={})
+        rng = np.random.default_rng(0)
+        data = {"y": rng.normal(size=100), "x1": rng.normal(size=100)}
+        with pytest.raises(NotImplementedError, match="not supported in BigGAM"):
+            build_discretized_model_matrix(formula, data)
+
+    def test_factor_smooth_interaction_raises(self):
+        rng = np.random.default_rng(0)
+        n = 100
+        x1 = rng.normal(size=n)
+        group = rng.choice(["a", "b", "c"], size=n)
+        formula = parse("y ~ s(x1, group, bs='fs')")
+        data = {"y": rng.normal(size=n), "x1": x1, "group": group}
+        with pytest.raises(NotImplementedError, match="Factor smooth interactions"):
+            build_discretized_model_matrix(formula, data)
+
+
+class TestBuildDiscretizedParametricTerms:
+    def test_full_interaction_term(self):
+        rng = np.random.default_rng(0)
+        n = 200
+        x1 = rng.normal(size=n)
+        x2 = rng.normal(size=n)
+        y = x1 * x2 + rng.normal(0, 0.1, n)
+        formula = parse("y ~ x1 * x2")
+        dm = build_discretized_model_matrix(formula, {"y": y, "x1": x1, "x2": x2})
+        assert dm.column_names == ["(Intercept)", "x1", "x2", "x1:x2"]
+        assert dm.n_parametric == 3
+
+    def test_offset_term(self):
+        rng = np.random.default_rng(0)
+        n = 200
+        x1 = np.linspace(0, 2 * np.pi, n)
+        off = rng.normal(size=n)
+        y = np.sin(x1) + off + rng.normal(0, 0.1, n)
+        formula = parse("y ~ s(x1) + offset(off)")
+        dm = build_discretized_model_matrix(formula, {"y": y, "x1": x1, "off": off})
+        assert dm.offset is not None
+        assert dm.offset_expressions == ["off"]
+        np.testing.assert_allclose(dm.offset, off)
+
+
+class TestBuildDiscretizedTensorSmooths:
+    @pytest.fixture()
+    def tensor_data(self):
+        rng = np.random.default_rng(0)
+        n = 300
+        x1 = rng.uniform(0, 2 * np.pi, n)
+        x2 = rng.uniform(0, 2 * np.pi, n)
+        y = np.sin(x1) + np.cos(x2) + rng.normal(0, 0.2, n)
+        return {"y": y, "x1": x1, "x2": x2}
+
+    @pytest.mark.parametrize("smooth_type", ["te", "ti", "t2"])
+    def test_tensor_smooth_types_build(self, tensor_data, smooth_type):
+        formula = parse(f"y ~ {smooth_type}(x1, x2, k=5)")
+        dm = build_discretized_model_matrix(formula, tensor_data)
+        assert dm.n_cols > 1
+        assert len(dm.blocks) == 1
+
+    def test_tensor_smooth_fits(self, tensor_data):
+        model = BigGAM("y ~ te(x1, x2, k=5)")
+        model.fit(tensor_data)
+        assert model.is_fitted
+
+
+class TestBuildDiscretizedMultivariateSmooth:
+    def test_multivariate_isotropic_smooth(self):
+        rng = np.random.default_rng(0)
+        n = 300
+        x1 = rng.uniform(0, 1, n)
+        x2 = rng.uniform(0, 1, n)
+        y = np.sin(2 * np.pi * x1) * x2 + rng.normal(0, 0.1, n)
+        formula = parse("y ~ s(x1, x2, k=10)")
+        dm = build_discretized_model_matrix(formula, {"y": y, "x1": x1, "x2": x2})
+        assert dm.n_cols > 1
+        assert len(dm.blocks) == 1
+
+
+class TestBuildDiscretizedRandomEffect:
+    def test_random_effect_basis_builds(self):
+        rng = np.random.default_rng(0)
+        n = 200
+        group = rng.integers(0, 5, n).astype(str)
+        y = rng.normal(size=n)
+        formula = parse("y ~ s(group, bs='re')")
+        dm = build_discretized_model_matrix(formula, {"y": y, "group": group})
+        assert len(dm.blocks) == 1
+        assert dm.blocks[0].unique_basis.shape[0] > 0
+        np.testing.assert_array_equal(dm.blocks[0].indices, np.arange(n))
+
+    def test_random_effect_basis_fits(self):
+        rng = np.random.default_rng(0)
+        n = 300
+        group = rng.integers(0, 6, n).astype(str)
+        group_effects = {str(g): rng.normal(0, 1.0) for g in range(6)}
+        y = np.array([group_effects[g] for g in group]) + rng.normal(0, 0.2, n)
+        model = BigGAM("y ~ s(group, bs='re')")
+        model.fit({"y": y, "group": group})
+        assert model.is_fitted
+
+
+class TestBuildDiscretizedSelect:
+    def test_select_adds_null_space_penalty(self):
+        rng = np.random.default_rng(0)
+        n = 200
+        x = np.linspace(0, 1, n)
+        y = x + rng.normal(0, 0.1, n)
+        formula = parse("y ~ s(x, k=8)")
+        data = {"y": y, "x": x}
+        dm_plain = build_discretized_model_matrix(formula, data, select=False)
+        dm_select = build_discretized_model_matrix(formula, data, select=True)
+        assert len(dm_select.penalties) > len(dm_plain.penalties)
+
+    def test_select_fits(self):
+        rng = np.random.default_rng(0)
+        n = 200
+        x = np.linspace(0, 1, n)
+        y = x + rng.normal(0, 0.1, n)
+        model = BigGAM("y ~ s(x, k=8)")
+        model.fit({"y": y, "x": x}, select=True)
+        assert model.is_fitted
+
+
+class TestBuildDiscretizedByVariable:
+    def test_factor_by_creates_one_block_per_level(self):
+        rng = np.random.default_rng(0)
+        n = 300
+        x1 = np.linspace(0, 2 * np.pi, n)
+        grp = rng.choice(["a", "b"], size=n)
+        y = np.sin(x1) + rng.normal(0, 0.2, n)
+        formula = parse("y ~ s(x1, by=grp, k=8)")
+        dm = build_discretized_model_matrix(formula, {"y": y, "x1": x1, "grp": grp})
+        assert [info.by_level for info in dm.smooth_infos] == ["a", "b"]
+        assert len(dm.blocks) == 2
+
+    def test_numeric_by_creates_one_block(self):
+        rng = np.random.default_rng(0)
+        n = 300
+        x1 = np.linspace(0, 2 * np.pi, n)
+        z = rng.normal(size=n)
+        y = np.sin(x1) * z + rng.normal(0, 0.2, n)
+        formula = parse("y ~ s(x1, by=z, k=8)")
+        dm = build_discretized_model_matrix(formula, {"y": y, "x1": x1, "z": z})
+        assert len(dm.blocks) == 1
+        assert dm.smooth_infos[0].by_var == "z"
+        assert dm.blocks[0].by_weights is not None
+
+    def test_by_variable_model_fits(self):
+        rng = np.random.default_rng(0)
+        n = 400
+        x1 = np.linspace(0, 2 * np.pi, n)
+        grp = rng.choice(["a", "b"], size=n)
+        y = np.sin(x1) + rng.normal(0, 0.2, n)
+        model = BigGAM("y ~ s(x1, by=grp, k=8)")
+        model.fit({"y": y, "x1": x1, "grp": grp})
+        assert model.is_fitted
+
+
+class TestBigGAMFitWeights:
+    @pytest.fixture()
+    def sin_data(self):
+        rng = np.random.default_rng(23)
+        n = 500
+        x = np.linspace(0, 2 * np.pi, n)
+        y = np.sin(x) + rng.normal(0, 0.2, n)
+        return {"x": x, "y": y}
+
+    def test_wrong_shape_weights_raises(self, sin_data):
+        model = BigGAM("y ~ s(x)")
+        with pytest.raises(ValueError, match="weights must be a 1-D array"):
+            model.fit(sin_data, weights=np.ones(10))
+
+    def test_non_positive_weights_raises(self, sin_data):
+        model = BigGAM("y ~ s(x)")
+        with pytest.raises(ValueError, match="All weights must be positive"):
+            model.fit(sin_data, weights=-np.ones(len(sin_data["x"])))
+
+    def test_positive_weights_fit_succeeds(self, sin_data):
+        model = BigGAM("y ~ s(x)")
+        model.fit(sin_data, weights=np.ones(len(sin_data["x"])))
+        assert model.is_fitted
+
+
+class TestBigGAMSmoothTests:
+    def test_smooth_tests_by_level_labels(self):
+        rng = np.random.default_rng(23)
+        n = 400
+        x1 = np.linspace(0, 2 * np.pi, n)
+        grp = rng.choice(["a", "b"], size=n)
+        y = np.sin(x1) + rng.normal(0, 0.2, n)
+        model = BigGAM("y ~ s(x1, by=grp, k=8)")
+        model.fit({"y": y, "x1": x1, "grp": grp})
+        tests = model.smooth_tests()
+        labels = {t.term_label for t in tests}
+        assert any(":a" in label for label in labels)
+        assert any(":b" in label for label in labels)
+
+    def test_smooth_tests_uses_prior_weights_when_irls_weights_absent(self):
+        """For a Gaussian fit with explicit prior weights, `fit.weights` (the IRLS working
+        weights) stays `None`, so `smooth_tests()` should fall back to `fit.prior_weights`."""
+        rng = np.random.default_rng(23)
+        n = 400
+        x = np.linspace(0, 2 * np.pi, n)
+        y = np.sin(x) + rng.normal(0, 0.2, n)
+        model = BigGAM("y ~ s(x)")
+        model.fit({"y": y, "x": x}, weights=np.ones(n))
+        assert model._fit_result.weights is None
+        assert model._fit_result.prior_weights is not None
+        tests = model.smooth_tests()
+        assert len(tests) == 1
+        assert np.isfinite(tests[0].p_value)
+
+    def test_smooth_tests_significant_vs_noise(self):
+        rng = np.random.default_rng(23)
+        n = 500
+        x1 = np.linspace(0, 2 * np.pi, n)
+        x2 = rng.uniform(0, 1, n)
+        y = np.sin(x1) + rng.normal(0, 0.3, n)
+        model = BigGAM("y ~ s(x1, k=10) + s(x2, k=10)")
+        model.fit({"y": y, "x1": x1, "x2": x2})
+        tests = model.smooth_tests()
+        assert tests[0].p_value < 0.01
+        assert tests[1].p_value > 0.05

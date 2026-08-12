@@ -104,6 +104,26 @@ class TestGaussianProcessBasis:
         with pytest.raises(ValueError, match="Unknown covariance"):
             GaussianProcess(k=5, cov="invalid")
 
+    def test_near_zero_range_falls_back_to_unit_rho(self):
+        # A vanishingly small covariate range drives the automatic length-scale
+        # estimate below machine epsilon, forcing the rho=1.0 fallback.
+        x = np.linspace(0.0, 8e-16, 20)
+        basis = GaussianProcess(k=5).fit(x)
+        assert basis._rho == 1.0
+
+    def test_basis_matrix_dimension_mismatch_raises(self):
+        rng = np.random.default_rng(23)
+        x = rng.uniform(0, 1, (50, 2))
+        basis = GaussianProcess(k=5).fit(x)
+        with pytest.raises(ValueError, match="Expected 2 covariate"):
+            basis.basis_matrix(np.linspace(0, 1, 20))
+
+    def test_repr(self):
+        basis = GaussianProcess(k=6, cov="matern32")
+        text = repr(basis)
+        assert "GaussianProcess" in text
+        assert "k=6" in text
+
 
 # ---------------------------------------------------------------------------
 # GAM integration tests

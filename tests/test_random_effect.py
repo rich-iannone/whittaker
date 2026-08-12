@@ -121,6 +121,18 @@ class TestRandomEffectBasis:
         with pytest.raises(RuntimeError, match="fitted"):
             basis.basis_matrix(np.array(["A", "B"]))
 
+    def test_n_basis_before_fit_raises(self):
+        basis = RandomEffectBasis()
+        with pytest.raises(RuntimeError, match="not available until fit"):
+            basis.n_basis
+
+    def test_k_property_before_and_after_fit(self):
+        basis = RandomEffectBasis(k=2)
+        assert basis.k == 2
+        x = np.array(["A", "B", "C"] * 3)
+        basis.fit(x)
+        assert basis.k == basis.n_basis == 2
+
     def test_2d_column_vector(self):
         x = np.array(["A", "B", "C", "A"]).reshape(-1, 1)
         basis = RandomEffectBasis().fit(x)

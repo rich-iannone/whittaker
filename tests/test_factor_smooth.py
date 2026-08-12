@@ -156,6 +156,12 @@ class TestFactorSmoothBasis:
         with pytest.raises(ValueError, match="Unknown marginal basis"):
             FactorSmoothBasis(k=5, xt="xx")
 
+    def test_mismatched_lengths_raises(self):
+        x = np.linspace(0, 1, 10)
+        fac = np.repeat(["A", "B"], 4)  # length 8, mismatched with x (length 10)
+        with pytest.raises(ValueError, match="same length"):
+            FactorSmoothBasis(k=5).fit(x, fac)
+
     def test_single_level_raises(self):
         x = np.linspace(0, 1, 10)
         fac = np.array(["A"] * 10)
@@ -181,6 +187,57 @@ class TestFactorSmoothBasis:
         fac = np.repeat([1, 2, 3], 10)
         basis = FactorSmoothBasis(k=5).fit(x, fac)
         assert basis.n_levels == 3
+
+    def test_penalty_matrix_returns_wiggliness_penalty(self):
+        x = np.linspace(0, 1, 30)
+        fac = np.repeat(["A", "B", "C"], 10)
+        basis = FactorSmoothBasis(k=5).fit(x, fac)
+        np.testing.assert_array_equal(basis.penalty_matrix(), basis.penalty_matrices()[0])
+
+    def test_n_basis_before_fit_raises(self):
+        basis = FactorSmoothBasis(k=5)
+        with pytest.raises(RuntimeError, match="fit"):
+            _ = basis.n_basis
+
+    def test_k_property_before_and_after_fit(self):
+        basis = FactorSmoothBasis(k=5)
+        assert basis.k == 5  # requested value, before fit()
+        x = np.linspace(0, 1, 30)
+        fac = np.repeat(["A", "B", "C"], 10)
+        basis.fit(x, fac)
+        assert basis.k == 5  # fitted marginal dimension, after fit()
+
+    def test_k_property_deferred_default_before_fit(self):
+        basis = FactorSmoothBasis(k=-1)
+        assert basis.k == -1  # deferred to marginal default, unresolved before fit()
+
+    def test_x_numeric_accepts_column_vector(self):
+        x = np.linspace(0, 1, 30).reshape(-1, 1)
+        fac = np.repeat(["A", "B", "C"], 10)
+        basis = FactorSmoothBasis(k=5).fit(x, fac)
+        assert basis.n_basis == 15
+        B = basis.basis_matrix(x, fac)
+        assert B.shape == (30, 15)
+
+    def test_x_numeric_rejects_multi_column_array(self):
+        x = np.column_stack([np.linspace(0, 1, 30), np.linspace(0, 1, 30)])
+        fac = np.repeat(["A", "B", "C"], 10)
+        with pytest.raises(ValueError, match="Expected 1-D numeric array"):
+            FactorSmoothBasis(k=5).fit(x, fac)
+
+    def test_factor_accepts_column_vector(self):
+        x = np.linspace(0, 1, 30)
+        fac = np.repeat(["A", "B", "C"], 10).reshape(-1, 1)
+        basis = FactorSmoothBasis(k=5).fit(x, fac)
+        assert basis.n_levels == 3
+
+    def test_factor_rejects_multi_column_array(self):
+        x = np.linspace(0, 1, 30)
+        fac = np.column_stack(
+            [np.repeat(["A", "B", "C"], 10), np.repeat(["X", "Y", "Z"], 10)]
+        )
+        with pytest.raises(ValueError, match="Expected 1-D factor array"):
+            FactorSmoothBasis(k=5).fit(x, fac)
 
 
 # ---------------------------------------------------------------------------

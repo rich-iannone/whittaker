@@ -107,6 +107,28 @@ class TestCyclicCRS:
         knots = basis.knots
         assert len(knots) == 8
 
+    def test_tied_quantile_knots_fall_back_to_linspace(self) -> None:
+        # Heavy ties push several quantiles to the same value, forcing the
+        # fit to fall back to an evenly-spaced linspace over the data range.
+        x = np.concatenate([np.zeros(45), np.linspace(0.0, 1.0, 10)])
+        basis = CyclicCRS(k=8).fit(x)
+        assert len(np.unique(basis.knots)) == 8
+        assert_allclose(basis.knots, np.linspace(x.min(), x.max(), 8))
+
+    def test_as_1d_invalid_shape_raises(self) -> None:
+        rng = np.random.default_rng(23)
+        x = rng.uniform(size=50)
+        basis = CyclicCRS(k=8).fit(x)
+        with pytest.raises(ValueError, match="univariate"):
+            basis.basis_matrix(np.ones((10, 2)))
+
+    def test_as_1d_column_vector_accepted(self) -> None:
+        rng = np.random.default_rng(23)
+        x = rng.uniform(size=50)
+        basis = CyclicCRS(k=8).fit(x)
+        B = basis.basis_matrix(x[:10, np.newaxis])
+        assert B.shape == (10, basis.n_basis)
+
 
 # ---------------------------------------------------------------------------
 # CyclicPSpline unit tests
@@ -226,6 +248,32 @@ class TestCyclicPSpline:
         C = basis.identifiability_constraints()
         assert C is not None
         assert C.shape == (1, 10)
+
+    def test_degree_too_small_raises(self) -> None:
+        with pytest.raises(ValueError, match="degree must be at least 1"):
+            CyclicPSpline(k=10, degree=0)
+
+    def test_m_too_small_raises(self) -> None:
+        with pytest.raises(ValueError, match="Penalty order m must be at least 1"):
+            CyclicPSpline(k=10, m=0)
+
+    def test_too_few_observations_raises(self) -> None:
+        with pytest.raises(ValueError, match="smaller than k"):
+            CyclicPSpline(k=10).fit(np.array([1.0, 2.0, 3.0]))
+
+    def test_as_1d_invalid_shape_raises(self) -> None:
+        rng = np.random.default_rng(23)
+        x = rng.uniform(size=50)
+        basis = CyclicPSpline(k=10).fit(x)
+        with pytest.raises(ValueError, match="univariate"):
+            basis.basis_matrix(np.ones((10, 2)))
+
+    def test_as_1d_column_vector_accepted(self) -> None:
+        rng = np.random.default_rng(23)
+        x = rng.uniform(size=50)
+        basis = CyclicPSpline(k=10).fit(x)
+        B = basis.basis_matrix(x[:10, np.newaxis])
+        assert B.shape == (10, basis.n_basis)
 
 
 # ---------------------------------------------------------------------------

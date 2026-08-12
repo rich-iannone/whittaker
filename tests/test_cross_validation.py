@@ -75,3 +75,18 @@ class TestCrossValidate:
     def test_fold_scores_all_finite(self, gaussian_data):
         result = cross_validate("y ~ s(x)", gaussian_data, n_folds=3, seed=23)
         assert np.all(np.isfinite(result.cv_scores))
+
+    def test_n_folds_exceeding_n_obs_skips_empty_folds(self):
+        """When n_folds exceeds the number of observations, some fold ids never get assigned
+        any test points; those folds must be skipped rather than crashing on an empty test
+        set."""
+        rng = np.random.default_rng(23)
+        n = 30
+        x = np.linspace(0, 2 * np.pi, n)
+        y = np.sin(x) + rng.normal(0, 0.3, n)
+
+        result = cross_validate("y ~ s(x, k=5)", {"x": x, "y": y}, n_folds=40, seed=23)
+
+        assert result.n_folds == 40
+        assert np.isfinite(result.cv_score)
+        assert np.any(result.cv_scores == 0.0)

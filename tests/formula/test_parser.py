@@ -286,3 +286,49 @@ class TestErrorMessages:
     def test_syntax_error_in_rhs(self) -> None:
         with pytest.raises(ValueError, match="Unsupported formula term"):
             parse("y ~ s(x1) ++ s(x2)")
+
+    def test_actual_syntax_error_in_rhs(self) -> None:
+        # A trailing binary operator is a genuine Python SyntaxError, not just an
+        # unsupported-but-parseable construct.
+        with pytest.raises(ValueError, match="Syntax error"):
+            parse("y ~ s(x1) +")
+
+    def test_invalid_numeric_constant_raises(self) -> None:
+        with pytest.raises(ValueError, match="Only 0, 1, or -1"):
+            parse("y ~ 2")
+
+    def test_negated_linear_term_raises(self) -> None:
+        with pytest.raises(ValueError, match="Cannot negate a linear term"):
+            parse("y ~ 1 - x1")
+
+    def test_negated_smooth_term_raises(self) -> None:
+        with pytest.raises(ValueError, match="Cannot negate a smooth term"):
+            parse("y ~ 1 - s(x1)")
+
+    def test_negated_interaction_term_raises(self) -> None:
+        with pytest.raises(ValueError, match="Cannot negate an interaction term"):
+            parse("y ~ 1 - x1 * x2")
+
+    def test_unsupported_callable_raises(self) -> None:
+        with pytest.raises(ValueError, match="Unsupported callable"):
+            parse("y ~ s(x1)(x2)")
+
+    def test_kwargs_expansion_raises(self) -> None:
+        with pytest.raises(ValueError, match=r"\*\*kwargs expansion is not supported"):
+            parse("y ~ s(x1, **extra)")
+
+    def test_bs_non_string_raises(self) -> None:
+        with pytest.raises(ValueError, match="bs= must be a string"):
+            parse("y ~ s(x1, bs=5)")
+
+    def test_k_wrong_type_raises(self) -> None:
+        with pytest.raises(ValueError, match="k= must be an integer or a list of integers"):
+            parse("y ~ s(x1, k='a')")
+
+    def test_by_non_string_raises(self) -> None:
+        with pytest.raises(ValueError, match="by= must be a column name"):
+            parse("y ~ s(x1, by=5)")
+
+    def test_kwarg_value_not_evaluable_raises(self) -> None:
+        with pytest.raises(ValueError, match="Could not evaluate keyword argument"):
+            parse("y ~ s(x1, xt=x2 + 1)")

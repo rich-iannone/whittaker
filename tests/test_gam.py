@@ -617,3 +617,104 @@ class TestTensorProductGAM:
         model = GAM("y ~ te(x1, x2, k=4)", family=Poisson()).fit({"y": y, "x1": x1, "x2": x2})
         assert model.is_fitted
         assert np.all(model.fitted_values > 0)
+
+
+# ---------------------------------------------------------------------------
+# TweedieEstimated profile-likelihood fallback
+# ---------------------------------------------------------------------------
+
+
+class TestTweedieProfileFallback:
+    def _tweedie_data(self, n: int = 200) -> dict[str, np.ndarray]:
+        rng = np.random.default_rng(23)
+        x = np.linspace(0, 4, n)
+        mu = np.exp(0.5 + 0.3 * np.sin(x))
+        lam = mu**0.5
+        n_events = rng.poisson(lam)
+        y = np.zeros(n)
+        for i in range(n):
+            if n_events[i] > 0:
+                y[i] = np.sum(rng.gamma(2.0, mu[i] / 2.0, size=n_events[i]))
+        return {"x": x, "y": y}
+
+    def test_all_grid_candidates_fail_falls_back_to_median_p(self, monkeypatch) -> None:
+        """When every grid candidate raises, the loop's except-continue (406-407) runs for
+        each candidate, best_result stays None, and the fallback branch (414-415) refits at
+        the median grid value using the real solver."""
+        import whittaker.gam as gam_module
+        from whittaker.families.tweedie_estimated import TweedieEstimated
+        from whittaker.fitting.pirls import pirls_fit as real_pirls_fit
+
+        family = TweedieEstimated(n_grid=5)
+        n_grid_calls = family._n_grid
+
+        calls = {"n": 0}
+
+        def flaky_pirls_fit(*args, **kwargs):
+            calls["n"] += 1
+            if calls["n"] <= n_grid_calls:
+                raise RuntimeError("forced failure for grid search")
+            return real_pirls_fit(*args, **kwargs)
+
+        monkeypatch.setattr(gam_module, "pirls_fit", flaky_pirls_fit)
+
+        data = self._tweedie_data()
+        model = GAM("y ~ s(x)", family=family)
+        model.fit(data)
+
+        assert model.is_fitted
+        assert calls["n"] == n_grid_calls + 1
+        assert family.p_estimated
+
+
+# ---------------------------------------------------------------------------
+# Simultaneous confidence bands, deviance explained, and check() fallback
+# ---------------------------------------------------------------------------
+
+
+class TestSimultaneousCIByTerm:
+    def test_by_term_label_includes_level(self) -> None:
+        rng = np.random.default_rng(0)
+        n = 200
+        x = rng.uniform(0, 2 * np.pi, n)
+        g = rng.choice(["a", "b"], n)
+        y = np.sin(x) + (g == "b") * 0.5 + rng.normal(0, 0.2, n)
+        data = {"x": x, "g": g, "y": y}
+
+        model = GAM("y ~ s(x, by=g)").fit(data)
+
+        band_a = model.simultaneous_ci(data, term=0, n_sim=200, seed=0)
+        band_b = model.simultaneous_ci(data, term=1, n_sim=200, seed=0)
+
+        assert band_a["term_label"] == "s(x, by='g'):a"
+        assert band_b["term_label"] == "s(x, by='g'):b"
+
+
+class TestDevianceExplainedDegenerate:
+    def test_zero_when_null_deviance_nonpositive(self) -> None:
+        n = 50
+        x = np.linspace(0, 1, n)
+        y = np.full(n, 3.0)
+
+        model = GAM("y ~ s(x)").fit({"x": x, "y": y})
+
+        assert model.null_deviance <= 0
+        assert model.deviance_explained == 0.0
+
+
+class TestCheckDisplayFallback:
+    def test_ipython_display_import_error_is_swallowed(self, monkeypatch) -> None:
+        import sys
+
+        rng = np.random.default_rng(0)
+        n = 100
+        x = np.sort(rng.uniform(0, 10, n))
+        y = np.sin(x) + rng.normal(scale=0.2, size=n)
+
+        model = GAM("y ~ s(x)").fit({"x": x, "y": y})
+
+        monkeypatch.setitem(sys.modules, "IPython", None)
+        monkeypatch.setitem(sys.modules, "IPython.display", None)
+
+        charts = model.check(plots=["qq"])
+        assert len(charts) == 1

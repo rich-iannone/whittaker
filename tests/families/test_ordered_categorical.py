@@ -59,6 +59,55 @@ class TestOrderedCategoricalFamily:
         fam = OrderedCategorical(n_categories=3)
         assert fam.scale_known is True
 
+    def test_link_derivative_returns_ones(self):
+        fam = OrderedCategorical(n_categories=3)
+        mu = np.array([0.1, 0.2, 0.3])
+        result = fam.link_derivative(mu)
+        np.testing.assert_array_equal(result, np.ones_like(mu))
+
+    def test_variance_returns_ones(self):
+        fam = OrderedCategorical(n_categories=3)
+        mu = np.array([0.1, 0.2, 0.3])
+        result = fam.variance(mu)
+        np.testing.assert_array_equal(result, np.ones_like(mu))
+
+    def test_irls_update_initializes_cutpoints_when_none(self):
+        fam = OrderedCategorical(n_categories=3)
+        assert fam.cutpoints is None
+        y = np.array([1, 2, 3, 1, 2, 3, 1, 2, 3, 1], dtype=float)
+        eta = np.zeros_like(y)
+        z, w = fam.irls_update(y, eta, eta)
+        assert fam.cutpoints is not None
+        assert z.shape == y.shape
+        assert w.shape == y.shape
+
+    def test_deviance_before_fit_returns_length(self):
+        fam = OrderedCategorical(n_categories=3)
+        y = np.array([1, 2, 3, 1, 2], dtype=float)
+        assert fam.deviance(y, np.zeros_like(y)) == float(len(y))
+
+    def test_unit_deviance_before_fit_returns_ones(self):
+        fam = OrderedCategorical(n_categories=3)
+        y = np.array([1, 2, 3, 1, 2], dtype=float)
+        result = fam.unit_deviance(y, np.zeros_like(y))
+        np.testing.assert_array_equal(result, np.ones_like(y))
+
+    def test_unit_deviance_after_fit_sums_to_deviance(self):
+        fam = OrderedCategorical(n_categories=3)
+        y = np.array([1, 2, 3, 1, 2, 3, 1, 2, 3, 1], dtype=float)
+        fam._cutpoints = fam._init_cutpoints(y)
+        eta = np.linspace(-1, 1, len(y))
+        total = fam.deviance(y, eta)
+        per_obs = fam.unit_deviance(y, eta)
+        assert per_obs.shape == y.shape
+        np.testing.assert_allclose(per_obs.sum(), total, rtol=1e-10)
+
+    def test_simulate_before_fit_raises(self):
+        fam = OrderedCategorical(n_categories=3)
+        rng = np.random.default_rng(0)
+        with pytest.raises(RuntimeError, match="fitted before simulation"):
+            fam.simulate(np.zeros(5), 1.0, rng)
+
 
 class TestOrderedCategoricalGAM:
     @pytest.fixture()

@@ -141,6 +141,69 @@ class TestMRFBasis:
         expected_diag = [1, 2, 2, 2, 1]
         np.testing.assert_array_equal(np.diag(L), expected_diag)
 
+    def test_k_less_than_2_raises(self):
+        nb = _triangle_neighborhood()
+        basis = MRFBasis(k=1, neighborhood=nb)
+        x = np.array(["A", "B", "C"])
+        with pytest.raises(ValueError, match="at least 2"):
+            basis.fit(x)
+
+    def test_single_level_raises(self):
+        nb = _triangle_neighborhood()
+        basis = MRFBasis(neighborhood=nb)
+        x = np.array(["A", "A", "A"])
+        with pytest.raises(ValueError, match="at least 2 unique levels"):
+            basis.fit(x)
+
+    def test_non_square_adjacency_raises(self):
+        A = np.zeros((2, 3))
+        basis = MRFBasis(neighborhood=A)
+        x = np.array(["A", "B", "C"])
+        with pytest.raises(ValueError, match="must be square"):
+            basis.fit(x)
+
+    def test_adjacency_wrong_size_raises(self):
+        A = np.zeros((2, 2))
+        basis = MRFBasis(neighborhood=A)
+        x = np.array(["A", "B", "C"])
+        with pytest.raises(ValueError, match="unique levels"):
+            basis.fit(x)
+
+    def test_invalid_neighborhood_type_raises(self):
+        basis = MRFBasis(neighborhood=["A", "B"])
+        x = np.array(["A", "B", "C"])
+        with pytest.raises(TypeError, match="dict or ndarray"):
+            basis.fit(x)
+
+    def test_n_basis_before_fit_raises(self):
+        basis = MRFBasis(neighborhood=_triangle_neighborhood())
+        with pytest.raises(RuntimeError, match="not available until fit"):
+            _ = basis.n_basis
+
+    def test_k_property_before_and_after_fit(self):
+        nb = _triangle_neighborhood()
+        basis = MRFBasis(k=-1, neighborhood=nb)
+        assert basis.k == -1
+        x = np.array(["A", "B", "C"])
+        basis.fit(x)
+        assert basis.k == 3
+
+    def test_validate_column_vector_reshaped(self):
+        nb = _triangle_neighborhood()
+        basis = MRFBasis(neighborhood=nb)
+        x = np.array(["A", "B", "C"]).reshape(-1, 1)
+        basis.fit(x)
+        assert basis.n_basis == 3
+        B = basis.basis_matrix(x)
+        assert B.shape == (3, 3)
+
+    def test_validate_multi_column_raises(self):
+        nb = _triangle_neighborhood()
+        basis = MRFBasis(neighborhood=nb)
+        x = np.array([["A", "B"], ["B", "C"], ["C", "A"]])
+        with pytest.raises(ValueError, match="1-D grouping variable"):
+            basis.fit(x)
+
 
 class TestMRFModelMatrix:
     def test_builds_with_mrf(self):

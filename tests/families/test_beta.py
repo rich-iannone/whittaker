@@ -46,6 +46,17 @@ class TestBetaFamily:
         y = np.array([0.2, 0.5, 0.8])
         np.testing.assert_allclose(fam.deviance(y, y), 0.0, atol=1e-12)
 
+    def test_deviance_with_weights(self):
+        fam = Beta()
+        y = np.array([0.2, 0.5, 0.8])
+        mu = np.array([0.3, 0.4, 0.6])
+        weights = np.array([1.0, 2.0, 3.0])
+        unweighted = fam.unit_deviance(y, mu)
+        expected = float(np.sum(weights * unweighted))
+        actual = fam.deviance(y, mu, weights=weights)
+        np.testing.assert_allclose(actual, expected)
+        assert actual != fam.deviance(y, mu)
+
     def test_log_likelihood_vs_scipy(self):
         fam = Beta(phi=10.0)
         mu = np.array([0.3, 0.5, 0.7])
@@ -55,6 +66,15 @@ class TestBetaFamily:
         expected = float(np.sum(stats.beta.logpdf(y, a, b)))
         actual = fam.log_likelihood(y, mu, scale=0.1)
         np.testing.assert_allclose(actual, expected, rtol=1e-10)
+
+    def test_log_likelihood_with_weights(self):
+        fam = Beta(phi=10.0)
+        mu = np.array([0.3, 0.5, 0.7])
+        y = np.array([0.25, 0.55, 0.65])
+        weights = np.array([1.0, 2.0, 0.5])
+        unweighted_ll = fam.log_likelihood(y, mu, scale=0.1)
+        weighted_ll = fam.log_likelihood(y, mu, scale=0.1, weights=weights)
+        assert weighted_ll != unweighted_ll
 
     def test_scale_known_with_fixed_phi(self):
         fam = Beta(phi=5.0)

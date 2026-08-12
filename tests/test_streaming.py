@@ -2,9 +2,14 @@
 
 from __future__ import annotations
 
+import sys
+
 import numpy as np
 import pytest
 
+import whittaker.streaming as streaming_module
+from whittaker.families.poisson import Poisson
+from whittaker.formula.parser import parse
 from whittaker.gam import GAM
 from whittaker.streaming import StreamingGAM, StreamingSnapshot
 
@@ -48,6 +53,21 @@ class TestStreamingGAMInit:
             StreamingGAM("y ~ s(x)", decay=0.0)
         with pytest.raises(ValueError, match="decay must be in"):
             StreamingGAM("y ~ s(x)", decay=1.5)
+
+    def test_accepts_pre_parsed_formula(self):
+        """Passing an already-parsed `Formula` (instead of a string) is accepted directly."""
+        formula = parse("y ~ s(x)")
+        model = StreamingGAM(formula)
+        assert model.formula is formula
+
+    def test_formula_property(self):
+        model = StreamingGAM("y ~ s(x)")
+        assert model.formula.response == "y"
+
+    def test_family_property(self):
+        family = Poisson()
+        model = StreamingGAM("y ~ s(x)", family=family)
+        assert model.family is family
 
 
 class TestPartialFit:
@@ -118,6 +138,82 @@ class TestSolve:
             model.partial_fit(batch)
         model.solve()
         assert model.scale > 0
+
+    def test_scale_fixed_at_one_for_scale_known_family(self):
+        """Families with a known scale (e.g. Poisson) keep `scale == 1.0` rather than
+        estimating it from the accumulated deviance."""
+        rng = np.random.default_rng(23)
+        n = 300
+        x = np.linspace(0, 2 * np.pi, n)
+        mu = np.exp(0.3 * np.sin(x))
+        y = rng.poisson(mu).astype(float)
+
+        model = StreamingGAM("y ~ s(x)", family=Poisson())
+        batch_size = 100
+        for i in range(0, n, batch_size):
+            model.partial_fit({"x": x[i : i + batch_size], "y": y[i : i + batch_size]})
+        model.solve()
+        assert model.scale == 1.0
+
+    def test_reestimate_with_no_smooth_terms(self):
+        """With no smooth terms (no penalties), GCV re-estimation is a no-op that returns an
+        empty smoothing-parameter list."""
+        rng = np.random.default_rng(23)
+        n = 100
+        x = np.linspace(0, 1, n)
+        y = 2 * x + rng.normal(0, 0.1, n)
+
+        model = StreamingGAM("y ~ x")
+        model.partial_fit({"x": x, "y": y})
+        model.solve(reestimate_smoothing=True)
+        assert model.smoothing_params == []
+
+    def test_reestimate_handles_singular_trial_matrix(self):
+        """If a smoothing-parameter trial value produces a non-positive-definite matrix
+        during the GCV line search, `_estimate_smoothing_gcv` catches the `LinAlgError` and
+        treats that trial as having an infinite GCV score, rather than propagating.
+        """
+        orig_cho_factor = streaming_module.cho_factor
+
+        def flaky_cho_factor(a, *args, **kwargs):
+            caller = sys._getframe(1).f_code.co_name
+            if caller == "gcv_for_j":
+                raise np.linalg.LinAlgError("forced singular matrix for test")
+            return orig_cho_factor(a, *args, **kwargs)
+
+        rng = np.random.default_rng(1)
+        n = 10
+        x = np.linspace(0, 1, n)
+        y = np.sin(2 * np.pi * x) + rng.normal(0, 0.01, n)
+
+        model = StreamingGAM("y ~ s(x, k=8)")
+        model.partial_fit({"x": x, "y": y})
+
+        streaming_module.cho_factor = flaky_cho_factor
+        try:
+            model.solve(reestimate_smoothing=True)
+        finally:
+            streaming_module.cho_factor = orig_cho_factor
+
+        assert model.is_solved
+        assert len(model.smoothing_params) == 1
+
+    def test_reestimate_near_saturated_model(self):
+        """When the number of basis coefficients approaches the number of observations, the
+        GCV denominator `(1 - hat_tr/n)**2` can underflow toward zero for near-zero trial
+        smoothing parameters; that trial is scored as having an infinite GCV rather than
+        dividing by (near) zero.
+        """
+        rng = np.random.default_rng(1)
+        n = 10
+        x = np.linspace(0, 1, n)
+        y = np.sin(2 * np.pi * x) + rng.normal(0, 0.01, n)
+
+        model = StreamingGAM(f"y ~ s(x, k={n})")
+        model.partial_fit({"x": x, "y": y})
+        model.solve(reestimate_smoothing=True)
+        assert model.is_solved
+        assert np.isfinite(model.smoothing_params[0])
 
 
 class TestPredict:
@@ -316,6 +412,20 @@ class TestSummary:
         r = repr(model)
         assert "fitted" in r
         assert "n=300" in r
+
+    def test_repr_initialised_but_not_solved(self, sin_batches):
+        """With fixed `smoothing_params`, the pilot fit is skipped, so a model that has
+        ingested a batch via `partial_fit()` but not yet called `solve()` is "initialised"
+        without being "solved" — a distinct `__repr__` status from both "unfitted" and
+        "fitted".
+        """
+        model = StreamingGAM("y ~ s(x)", smoothing_params=[1.0])
+        model.partial_fit(sin_batches[0])
+        assert model.is_initialised
+        assert not model.is_solved
+        r = repr(model)
+        assert "initialised" in r
+        assert "fitted" not in r
 
 
 class TestFixedSmoothingParams:

@@ -6,6 +6,7 @@ import numpy as np
 
 from whittaker.gam import GAM
 from whittaker.smooths.monotone import (
+    ConvexPSpline,
     MonotonePSpline,
     _pava,
     project_convex,
@@ -74,6 +75,29 @@ class TestMonotonePSplineBasis:
         basis = MonotonePSpline(k=10, decreasing=True)
         assert basis.decreasing
         assert basis.constraint_direction == -1
+
+
+class TestConvexPSplineBasis:
+    def test_inherits_pspline(self):
+        basis = ConvexPSpline(k=10)
+        x = np.linspace(0, 1, 50)
+        basis.fit(x)
+        B = basis.basis_matrix(x)
+        assert B.shape == (50, 10)
+        S = basis.penalty_matrix()
+        assert S.shape == (10, 10)
+
+    def test_convex_constraint_direction(self):
+        basis = ConvexPSpline(k=10)
+        assert not basis.concave
+        assert basis.constraint_direction == 1
+        assert basis.constraint_order == 2
+
+    def test_concave_constraint_direction(self):
+        basis = ConvexPSpline(k=10, concave=True)
+        assert basis.concave
+        assert basis.constraint_direction == -1
+        assert basis.constraint_order == 2
 
 
 class TestMonotoneGAM:

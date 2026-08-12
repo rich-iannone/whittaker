@@ -5,6 +5,8 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
+from whittaker.formula.parser import parse
+from whittaker.gam import PredictionResult
 from whittaker.quantile_gam import (
     QuantileGAM,
     _check_non_crossing,
@@ -128,6 +130,23 @@ class TestQuantileGAMInit:
         assert "QuantileGAM" in repr(model)
         assert "unfitted" in repr(model)
 
+    def test_formula_object_init(self):
+        parsed = parse("y ~ s(x)")
+        model = QuantileGAM(parsed, quantiles=[0.1, 0.9])
+        assert model.formula is parsed
+
+    def test_formula_property(self):
+        model = QuantileGAM("y ~ s(x)")
+        assert model.formula.response == "y"
+
+    def test_sigma_property(self):
+        model = QuantileGAM("y ~ s(x)", sigma=0.25)
+        assert model.sigma == 0.25
+
+    def test_non_crossing_property(self):
+        model = QuantileGAM("y ~ s(x)", non_crossing=False)
+        assert model.non_crossing is False
+
 
 class TestQuantileGAMFit:
     def test_fit_basic(self, symmetric_data):
@@ -153,6 +172,58 @@ class TestQuantileGAMFit:
         model = QuantileGAM("y ~ s(x)")
         with pytest.raises(RuntimeError, match="not been fitted"):
             model.predict({"x": np.array([1.0])})
+
+
+class TestQuantileGAMFitCorrection:
+    def test_fit_triggers_crossing_correction(self):
+        # Tightly spaced quantiles on a small, noisy dataset are prone to
+        # crossing on at least one non-crossing iteration, exercising the
+        # isotonic-projection correction/refit branch inside fit().
+        rng = np.random.default_rng(7)
+        n = 40
+        x = rng.uniform(0, 2 * np.pi, n)
+        y = np.sin(x) + rng.normal(0, 1.5, n)
+        data = {"x": x, "y": y}
+
+        model = QuantileGAM(
+            "y ~ s(x)",
+            quantiles=[0.3, 0.4, 0.5, 0.6, 0.7],
+            sigma=0.05,
+            non_crossing=True,
+        )
+        model.fit(data, max_iter=3)
+        assert model.is_fitted
+        # After fitting, the training-data fitted values must respect ordering.
+        preds = model.predict(data)
+        for i in range(len(model.quantiles) - 1):
+            lo = model.quantiles[i]
+            hi = model.quantiles[i + 1]
+            assert np.all(preds[lo].values <= preds[hi].values + 1e-8)
+
+
+    def test_fit_triggers_crossing_correction_with_offset(self):
+        # Same as above but with an offset() term present, so that the
+        # correction/refit branch's offset-subtraction line is exercised too.
+        rng = np.random.default_rng(7)
+        n = 40
+        x = rng.uniform(0, 2 * np.pi, n)
+        off = rng.normal(0, 0.1, n)
+        y = np.sin(x) + off + rng.normal(0, 1.5, n)
+        data = {"x": x, "off": off, "y": y}
+
+        model = QuantileGAM(
+            "y ~ s(x) + offset(off)",
+            quantiles=[0.3, 0.4, 0.5, 0.6, 0.7],
+            sigma=0.05,
+            non_crossing=True,
+        )
+        model.fit(data, max_iter=3)
+        assert model.is_fitted
+        preds = model.predict(data)
+        for i in range(len(model.quantiles) - 1):
+            lo = model.quantiles[i]
+            hi = model.quantiles[i + 1]
+            assert np.all(preds[lo].values <= preds[hi].values + 1e-8)
 
 
 class TestQuantileGAMPredict:
@@ -192,6 +263,29 @@ class TestQuantileGAMPredict:
         vals_90 = preds[0.9].values
         assert np.all(vals_10 <= vals_50 + 1e-10)
         assert np.all(vals_50 <= vals_90 + 1e-10)
+
+    def test_non_crossing_corrects_predict(self, monkeypatch, symmetric_data):
+        # Force each per-quantile GAM's predict() to return deliberately crossing
+        # values, so QuantileGAM.predict() must invoke the isotonic-projection
+        # correction branch.
+        model = QuantileGAM("y ~ s(x)", quantiles=[0.1, 0.5, 0.9], non_crossing=True)
+        model.fit(symmetric_data)
+
+        n = 5
+        crossing_vals = {0.1: 5.0, 0.5: 3.0, 0.9: 1.0}
+        for tau, sub_model in model._models.items():
+            vals = np.full(n, crossing_vals[tau])
+
+            def _predict(new_data, se=False, _vals=vals):
+                return PredictionResult(values=_vals, se=None, linear_predictor=_vals)
+
+            monkeypatch.setattr(sub_model, "predict", _predict)
+
+        preds = model.predict({"x": np.linspace(0, 1, n)})
+        for i in range(len(model.quantiles) - 1):
+            lo = model.quantiles[i]
+            hi = model.quantiles[i + 1]
+            assert np.all(preds[lo].values <= preds[hi].values + 1e-8)
 
     def test_non_crossing_on_new_data(self, symmetric_data):
         model = QuantileGAM("y ~ s(x)", quantiles=[0.1, 0.25, 0.5, 0.75, 0.9], non_crossing=True)
@@ -243,6 +337,12 @@ class TestPredictInterval:
         with pytest.raises(ValueError, match="not fitted"):
             model.predict_interval(symmetric_data, lower_tau=0.25)
 
+    def test_invalid_upper_tau_raises(self, symmetric_data):
+        model = QuantileGAM("y ~ s(x)", quantiles=[0.1, 0.9])
+        model.fit(symmetric_data)
+        with pytest.raises(ValueError, match="not fitted"):
+            model.predict_interval(symmetric_data, upper_tau=0.75)
+
 
 class TestCoverage:
     def test_reasonable_coverage(self, symmetric_data):
@@ -273,6 +373,25 @@ class TestCrossingFraction:
         frac = model.crossing_fraction()
         assert isinstance(frac, float)
         assert 0.0 <= frac <= 1.0
+
+    def test_crossing_fraction_counts_violations(self, monkeypatch, symmetric_data):
+        # Force each per-quantile GAM's predict() to return deliberately crossing
+        # values so crossing_fraction() must count at least one violation.
+        model = QuantileGAM("y ~ s(x)", quantiles=[0.1, 0.5, 0.9], non_crossing=False)
+        model.fit(symmetric_data)
+
+        n = len(symmetric_data["x"])
+        crossing_vals = {0.1: 5.0, 0.5: 3.0, 0.9: 1.0}
+        for tau, sub_model in model._models.items():
+            vals = np.full(n, crossing_vals[tau])
+
+            def _predict(data, se=False, _vals=vals):
+                return PredictionResult(values=_vals, se=None, linear_predictor=_vals)
+
+            monkeypatch.setattr(sub_model, "predict", _predict)
+
+        frac = model.crossing_fraction()
+        assert frac == 1.0
 
 
 class TestSummary:

@@ -190,6 +190,10 @@ class TestTPRSFit1D:
         basis = TPRS(k=8).fit(_make_1d())
         assert basis.null_space_dimension() == 2  # M = d + 1 = 2
 
+    def test_null_space_dim_property_matches_method(self) -> None:
+        basis = TPRS(k=8).fit(_make_1d())
+        assert basis.null_space_dim == basis.null_space_dimension()
+
     def test_eigenvalues_length(self) -> None:
         k = 8
         basis = TPRS(k=k).fit(_make_1d())
