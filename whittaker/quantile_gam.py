@@ -1,4 +1,4 @@
-"""Non-crossing quantile GAM.
+r"""Non-crossing quantile GAM.
 
 Provides `QuantileGAM`, which fits multiple quantile levels simultaneously and enforces the
 non-crossing constraint: for tau_1 < tau_2 < ... < tau_k, the fitted quantile curves satisfy
@@ -27,16 +27,21 @@ from whittaker.model_matrix import ModelMatrix, build_model_matrix
 
 @dataclass
 class QuantileGAMResult:
-    """Result container for a fitted QuantileGAM.
+    r"""Result container for a fitted QuantileGAM.
+
+    Bundles the per-quantile fitted `GAM` objects and coefficient vectors produced by
+    `QuantileGAM.fit()`, keyed by the quantile level `tau` they estimate.
 
     Attributes
     ----------
     quantiles:
-        Sorted quantile levels.
+        Sorted quantile levels, each in `(0, 1)`.
     models:
-        Dict mapping tau -> fitted GAM.
+        Dict mapping `tau -> fitted GAM`, one GAM per quantile level, each fit with the
+        expectile/quantile loss family for that `tau`.
     coefficients:
-        Dict mapping tau -> coefficient vector.
+        Dict mapping `tau -> coefficient vector`, the fitted basis coefficients for each quantile's
+        model.
     """
 
     quantiles: list[float]
@@ -97,27 +102,67 @@ def _enforce_non_crossing(
 
 
 class QuantileGAM:
-    """Non-crossing quantile GAM.
+    r"""Non-crossing quantile GAM.
 
-    Fits multiple quantile levels simultaneously and enforces non-crossing
-    via isotonic projection of fitted values across quantile levels.
+    Fits a separate additive quantile regression model for each requested quantile level `tau`, and
+    enforces the natural ordering constraint that quantile curves must not cross: for
+    `tau_1 < tau_2`, the fitted curve `q_{tau_1}(x)` must lie at or below `q_{tau_2}(x)` at every
+    observed covariate combination. Ordinary quantile GAMs, fit independently for each `tau`, provide
+    no such guarantee and can produce curves that cross, especially in regions with sparse data or
+    heavy smoothing.
+
+    Use `QuantileGAM` whenever you need multiple quantiles of a conditional distribution (e.g. to
+    build a prediction interval or characterize skewness/heteroscedasticity) and want the estimated
+    quantiles to respect the required monotone ordering in `tau`.
 
     Parameters
     ----------
     formula:
-        Model formula (e.g. `"y ~ s(x)"`).
+        Model formula (e.g. `"y ~ s(x)"`), shared across all quantile levels; only the loss function
+        differs between them.
     quantiles:
-        Quantile levels to fit. Must be in `(0, 1)` and will be sorted.
+        Quantile levels to fit. Must be in `(0, 1)` and will be sorted. Defaults to
+        `[0.1, 0.25, 0.5, 0.75, 0.9]`.
     sigma:
-        ELF bandwidth for all quantiles. If `None`, uses `0.1`.
+        Bandwidth of the smoothed pinball ("extended log-F", ELF) loss used to approximate the
+        non-differentiable quantile check loss. Smaller `sigma` more closely approximates the true
+        quantile loss but can slow IRLS convergence; use `calibrate_sigma()` to select it via
+        cross-validation.
     non_crossing:
-        If `True` (default), enforce the non-crossing constraint.
+        If `True` (default), enforce the non-crossing constraint via iterative isotonic projection.
+        If `False`, quantiles are fit completely independently and may cross.
+
+    Notes
+    -----
+    Each quantile is fit by minimizing a smoothed pinball loss (the ELF loss of Fasiolo et al. 2021),
+    which approximates the quantile check function
+
+    $$\rho_\tau(u) = u \, (\tau - \mathbb{1}[u < 0])$$
+
+    with a twice-differentiable surrogate suitable for IRLS. After each round of fitting, the vector
+    of fitted quantiles at every observation, `[q_{\tau_1}(x_i), \dots, q_{\tau_k}(x_i)]`, is checked
+    for monotonicity; if it is violated anywhere, the vector is projected onto the monotone
+    non-decreasing cone via the pool-adjacent-violators algorithm (PAVA), following the "stepwise
+    projection" strategy of Bondell, Reich, & Wang (2010). The projected fitted values are then used
+    to re-derive coefficients (via a least-squares refit against the corrected working response), and
+    the cycle repeats for up to `max_iter` rounds or until no crossings remain.
 
     Examples
     --------
-    >>> model = QuantileGAM("y ~ s(x)", quantiles=[0.1, 0.25, 0.5, 0.75, 0.9])
-    >>> model.fit(data)
-    >>> pred = model.predict(new_data)  # dict of tau -> predictions
+    ```{python}
+    import numpy as np
+    from whittaker.quantile_gam import QuantileGAM
+
+    rng = np.random.default_rng(0)
+    n = 500
+    x = rng.uniform(0, 1, n)
+    y = np.sin(2 * np.pi * x) + rng.normal(scale=0.2 + 0.3 * x, size=n)
+
+    model = QuantileGAM("y ~ s(x)", quantiles=[0.1, 0.25, 0.5, 0.75, 0.9])
+    model.fit({"x": x, "y": y})
+    preds = model.predict({"x": x[:5]})  # dict of tau -> PredictionResult
+    print(model.crossing_fraction())
+    ```
     """
 
     def __init__(
@@ -176,20 +221,27 @@ class QuantileGAM:
         max_iter: int = 5,
         select: bool = False,
     ) -> QuantileGAM:
-        """Fit the quantile GAM.
+        r"""Fit the quantile GAM.
+
+        Fits a separate ELF-based `GAM` for every quantile level in `self.quantiles`. When
+        `non_crossing=True`, this is repeated for up to `max_iter` rounds: after each round, the
+        fitted quantile curves are checked for crossing violations and, if found, corrected via
+        isotonic projection (see class Notes); the corrected values are used to re-derive each
+        quantile model's coefficients before the next round of refitting.
 
         Parameters
         ----------
         data:
-            Column-oriented data.
+            Column-oriented data containing the response and all covariates in `formula`.
         method:
-            Smoothing parameter selection method.
+            Smoothing parameter selection method applied to every quantile's `GAM` fit: `"GCV"`,
+            `"REML"` (default), or `"ML"`.
         max_iter:
-            Number of non-crossing projection iterations. Each iteration
-            fits all quantiles and projects to enforce ordering. Ignored
-            when `non_crossing=False`.
+            Number of non-crossing projection iterations. Each iteration fits all quantiles and
+            projects to enforce ordering. Ignored when `non_crossing=False` (in which case a single
+            independent fit per quantile is performed).
         select:
-            If `True`, enable double-penalty variable selection.
+            If `True`, enable double-penalty variable selection for each quantile's `GAM`.
 
         Returns
         -------
@@ -261,14 +313,19 @@ class QuantileGAM:
         *,
         se: bool = False,
     ) -> dict[float, PredictionResult]:
-        """Predict quantiles on new data.
+        r"""Predict quantiles on new data.
+
+        Predicts each quantile level's `GAM` independently on `new_data`, then, if
+        `non_crossing=True`, re-applies the isotonic projection across quantile levels at each new
+        observation so the returned predictions never cross, even if the fitted models happen to
+        disagree slightly on out-of-sample covariate combinations.
 
         Parameters
         ----------
         new_data:
             New covariate data.
         se:
-            If `True`, include standard errors.
+            If `True`, include standard errors for each quantile's linear predictor.
 
         Returns
         -------
