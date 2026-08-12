@@ -1,4 +1,4 @@
-"""GAMLSS fitting via the RS algorithm (Rigby & Stasinopoulos 2005)."""
+r"""GAMLSS fitting via the RS algorithm (Rigby & Stasinopoulos 2005)."""
 
 from __future__ import annotations
 
@@ -24,7 +24,27 @@ _Z_CLIP = 1e6
 
 @dataclass
 class GAMLSSParamResult:
-    """Fit result for a single distributional parameter."""
+    """Fit result for a single distributional parameter.
+
+    One `GAMLSSParamResult` is produced per parameter of the `GAMLSSFamily` (e.g. one for `mu` and
+    one for `sigma` in a location-scale model), holding that parameter's final coefficients,
+    predictor, fitted values, and smoothing diagnostics from the RS algorithm.
+
+    Attributes
+    ----------
+    coefficients:
+        Fitted coefficient vector `beta_k` for this parameter's model matrix.
+    linear_predictor:
+        Final linear predictor `eta_k = X_k @ beta_k` (plus offset, if any).
+    fitted_values:
+        Fitted values on the parameter's own scale, `theta_k = g_k^{-1}(eta_k)`.
+    smoothing_params:
+        Selected smoothing parameters, one per penalized smooth term in this parameter's formula.
+    edf:
+        Effective degrees of freedom for each smooth term.
+    edf_total:
+        Total effective degrees of freedom for this parameter (sum of `edf` plus unpenalized terms).
+    """
 
     coefficients: NDArray
     linear_predictor: NDArray
@@ -36,7 +56,35 @@ class GAMLSSParamResult:
 
 @dataclass
 class GAMLSSFitResult:
-    """Result of a GAMLSS fit."""
+    """Result of a GAMLSS fit.
+
+    Aggregates per-parameter results (`params`) together with fit-level statistics computed from
+    the joint log-likelihood across all parameters.
+
+    Attributes
+    ----------
+    params:
+        Dict mapping parameter name to its `GAMLSSParamResult`.
+    log_likelihood:
+        Final joint log-likelihood of the response under the fitted distribution.
+    global_deviance:
+        `-2 * log_likelihood`, the GAMLSS analogue of deviance, summed across all observations and
+        aggregated over all distributional parameters.
+    n_iter:
+        Number of outer RS iterations performed.
+    converged:
+        Whether the RS algorithm converged (relative change in log-likelihood below `tol`) before
+        exhausting `max_outer` iterations.
+    aic:
+        Akaike information criterion, `global_deviance + 2 * edf_total_all`, where `edf_total_all`
+        sums the effective degrees of freedom across all parameters.
+    bic:
+        Bayesian information criterion, `global_deviance + log(n) * edf_total_all`.
+    n_obs:
+        Number of observations.
+    response:
+        The response vector used for fitting.
+    """
 
     params: dict[str, GAMLSSParamResult]
     log_likelihood: float
@@ -130,7 +178,55 @@ def gamlss_fit(
     max_inner: int = 20,
     tol: float = 1e-6,
 ) -> GAMLSSFitResult:
-    """Fit a GAMLSS model using the RS algorithm."""
+    r"""Fit a GAMLSS model using the RS algorithm.
+
+    Implements the outer loop of the Rigby & Stasinopoulos (2005) fitting algorithm for
+    Generalized Additive Models for Location, Scale, and Shape. Each distributional parameter
+    `theta_k` has its own model matrix, penalties, and link function `g_k`. On each outer
+    iteration, the algorithm cycles through the parameters in `family.parameter_names` order and,
+    for each one, forms working responses and IRLS weights from the family's score and Fisher
+    information with respect to that parameter (via `_compute_zw`), holding all other parameters
+    fixed at their current fitted values:
+
+    $$z_k = \eta_k + \frac{\ell'_k}{\ell''_k} \, g_k'(\theta_k), \qquad
+    w_k = -\ell''_k \, / \, g_k'(\theta_k)^2$$
+
+    where `\ell'_k` and `\ell''_k` are the first and second derivatives of the per-observation
+    log-likelihood with respect to `theta_k`. A penalized weighted least squares problem is then
+    solved for `beta_k` (re-selecting smoothing parameters at each inner iteration if the parameter
+    has penalized smooth terms), and the process repeats for up to `max_inner` iterations or until
+    the relative change in `beta_k` is below `tol`. After all parameters have been updated once, the
+    joint log-likelihood is recomputed; the outer loop stops when its relative change is below `tol`
+    or after `max_outer` iterations.
+
+    Parameters
+    ----------
+    models:
+        Dict mapping each parameter name to its `ModelMatrix` (design matrix, penalties, and smooth
+        term metadata), one per parameter in `family.parameter_names`.
+    family:
+        A `GAMLSSFamily` supplying the link functions, their derivatives, the log-likelihood, and
+        the score/information functions (`dl_dtheta`, `d2l_dtheta2`) needed to form IRLS working
+        weights for each parameter.
+    y:
+        Response vector, shared across all parameters.
+    method:
+        Smoothing parameter selection method used for every parameter's smooth terms: `"GCV"`
+        (default), `"REML"`, or `"ML"`.
+    max_outer:
+        Maximum number of outer RS iterations (passes over all parameters).
+    max_inner:
+        Maximum inner IRLS iterations per parameter within a single outer step.
+    tol:
+        Relative convergence tolerance, used both for the inner coefficient updates and for the
+        outer log-likelihood change.
+
+    Returns
+    -------
+    GAMLSSFitResult
+        The fitted per-parameter results together with joint log-likelihood, global deviance, AIC,
+        BIC, and convergence diagnostics.
+    """
     method_upper = method.upper()
     if method_upper not in ("GCV", "REML", "ML"):
         raise ValueError(f"method must be 'GCV', 'REML', or 'ML', got {method!r}.")
