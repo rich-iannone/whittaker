@@ -27,8 +27,9 @@ import whittaker as wk
 # The data dictionary: one key per column, one array per key
 data = {
     "x1": np.linspace(0, 2 * np.pi, 100),
-    "x2": np.random.default_rng(42).uniform(0, 1, 100),
-    "y": np.sin(np.linspace(0, 2 * np.pi, 100)) + np.random.default_rng(42).normal(0, 0.3, 100),
+    "x2": np.random.default_rng(23).uniform(0, 1, 100),
+    "y": np.sin(np.linspace(0, 2 * np.pi, 100))
+    + np.random.default_rng(23).normal(0, 0.3, 100),
 }
 
 # Fit a model (the formula references keys from the dictionary)
@@ -51,10 +52,13 @@ Whittaker.
 import polars as pl
 
 # Create a Polars DataFrame
-df_pl = pl.DataFrame({
-    "x": np.linspace(0, 2 * np.pi, 100),
-    "y": np.sin(np.linspace(0, 2 * np.pi, 100)) + np.random.default_rng(42).normal(0, 0.3, 100),
-})
+df_pl = pl.DataFrame(
+    {
+        "x": np.linspace(0, 2 * np.pi, 100),
+        "y": np.sin(np.linspace(0, 2 * np.pi, 100))
+        + np.random.default_rng(23).normal(0, 0.3, 100),
+    }
+)
 
 # Convert to a dict of NumPy arrays
 data_from_polars = {col: df_pl[col].to_numpy() for col in df_pl.columns}
@@ -71,10 +75,13 @@ print(f"Fitted from Polars: EDF = {model.edf_total:.1f}")
 import pandas as pd
 
 # Create a Pandas DataFrame
-df_pd = pd.DataFrame({
-    "x": np.linspace(0, 2 * np.pi, 100),
-    "y": np.sin(np.linspace(0, 2 * np.pi, 100)) + np.random.default_rng(42).normal(0, 0.3, 100),
-})
+df_pd = pd.DataFrame(
+    {
+        "x": np.linspace(0, 2 * np.pi, 100),
+        "y": np.sin(np.linspace(0, 2 * np.pi, 100))
+        + np.random.default_rng(23).normal(0, 0.3, 100),
+    }
+)
 
 # Convert to a dict of NumPy arrays
 data_from_pandas = {col: df_pd[col].to_numpy() for col in df_pd.columns}
@@ -135,7 +142,7 @@ line = alt.Chart({"values": plot_data}).mark_line(
 ).encode(x="x:Q", y="fit:Q")
 
 (band + pts + line).properties(
-    width=500, height=300, title="Predictions from the fitted GAM"
+    width="container", height=300, title="Predictions from the fitted GAM"
 )
 ```
 
@@ -146,7 +153,7 @@ will raise an error at fit time. Remove or impute missing values before fitting.
 
 ```{python}
 # Example: cleaning missing values before fitting
-rng = np.random.default_rng(42)
+rng = np.random.default_rng(23)
 x_with_nans = np.array([1.0, 2.0, np.nan, 4.0, 5.0, np.nan, 7.0, 8.0, 9.0, 10.0])
 y_with_nans = np.sin(x_with_nans)
 
@@ -171,7 +178,7 @@ encode categorical variables as numeric indicators before passing them to Whitta
 # Integer data is converted to float automatically
 data_int = {
     "x": np.arange(50),
-    "y": np.random.default_rng(42).poisson(3, 50).astype(float),
+    "y": np.random.default_rng(23).poisson(3, 50).astype(float),
 }
 
 model = wk.GAM("y ~ s(x)", family=wk.Poisson())
@@ -187,13 +194,13 @@ functional domain.
 
 ```{python}
 # Functional covariate: each row is a curve observed at 50 grid points
-rng = np.random.default_rng(42)
+rng = np.random.default_rng(23)
 n, T = 100, 50
 X_func = rng.normal(0, 1, (n, T)).cumsum(axis=1) / np.sqrt(T)
 
 # The data dict can mix 1-D (scalar) and 2-D (functional) arrays
 data_func = {
-    "curves": X_func,        # shape (100, 50), functional covariate
+    "curves": X_func,  # shape (100, 50), functional covariate
     "y": rng.normal(0, 1, n),  # shape (100,), scalar response
 }
 
