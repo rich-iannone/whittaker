@@ -20,7 +20,7 @@ implementation.
 - **Works with your dataframe library**: Pandas, Polars, PyArrow, or any
   [Narwhals](https://narwhals-dev.github.io/narwhals/)-compatible frame.
 - **Full smooth catalog**: thin plate regression splines, cubic splines, P-splines, tensor products,
-cyclic splines, random effects, factor smooths, and more (matching mgcv's complete offering).
+cyclic splines, random effects, factor smooths, and more.
 - **Principled smoothness selection**: REML by default, with GCV, ML, and fREML as alternatives.
 - **Beautiful diagnostics**: `model.check()` and `model.plot()` produce interactive Altair charts
 right in your notebook.
@@ -49,7 +49,7 @@ predict on new observations.
 import numpy as np
 import whittaker as wk
 
-rng = np.random.default_rng(42)
+rng = np.random.default_rng(23)
 x = np.linspace(0, 2 * np.pi, 200)
 y = np.sin(x) + rng.normal(0, 0.3, 200)
 
@@ -61,7 +61,7 @@ print(model.summary())
 **Step 2: Check basis dimension adequacy**
 
 ```{python}
-print(model.check())
+model.check();
 ```
 
 **Step 3: Predict with standard errors and visualize the fit**
@@ -93,7 +93,7 @@ pts = alt.Chart({"values": obs_data}).mark_circle(
     size=15, opacity=0.3, color="steelblue"
 ).encode(x="x:Q", y="y:Q")
 
-(band + pts + line).properties(width=550, height=300, title="Fitted GAM with 95% confidence band")
+(band + pts + line).properties(width="container", height=300, title="Fitted GAM with 95% confidence band")
 ```
 
 **Step 4: Try a non-Gaussian family with multiple predictors**
