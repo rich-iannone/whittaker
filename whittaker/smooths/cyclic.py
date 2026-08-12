@@ -127,11 +127,17 @@ def _cyclic_diff_matrix(k: int, m: int) -> NDArray:
 
 
 class CyclicCRS(SmoothBasis):
-    """Cyclic Cubic Regression Spline (periodic natural cubic spline).
+    r"""Cyclic Cubic Regression Spline (periodic natural cubic spline).
 
-    Equivalent to mgcv's `bs="cc"` basis. The spline is periodic over the range of the training
-    data: f(x_min) = f(x_max), f'(x_min) = f'(x_max), and f''(x_min) = f''(x_max). Values outside
-    the training range are mapped into the periodic domain via modular arithmetic.
+    A cyclic (periodic) cubic regression spline is the natural extension of `CRS` to covariates
+    that wrap around, such as time of day, day of year, or wind direction, where the value and
+    slope at the end of the range must match the value and slope at the start. Equivalent to mgcv's
+    `bs="cc"` basis. The spline is periodic over the range of the training data:
+    `f(x_min) = f(x_max)`, `f'(x_min) = f'(x_max)`, and `f''(x_min) = f''(x_max)`. Values outside
+    the training range are mapped into the periodic domain via modular arithmetic, so predictions
+    remain well-defined for any `x`. Choose `CyclicCRS` (rather than plain `CRS`) whenever the
+    covariate is inherently circular; using a non-cyclic basis on such data would otherwise produce
+    an artificial discontinuity at the wrap-around point.
 
     The cyclic constraint absorbs one degree of freedom, so k knots produce k-1 basis functions. The
     penalty null space is 1-dimensional (constant functions only as linear functions are no longer
@@ -140,7 +146,52 @@ class CyclicCRS(SmoothBasis):
     Parameters
     ----------
     k:
-        Number of knots. Must be >= 4 (yielding >= 3 basis functions). The default is `10`.
+        Number of knots placed around the periodic domain. Must be at least `4`, which yields at
+        least `3` basis functions (`n_basis = k - 1`) after the cyclic constraint removes one degree
+        of freedom. As with `CRS`, larger `k` gives more local flexibility, with overall smoothness
+        controlled by the penalty and `lambda` rather than by `k` alone. The default is `10`.
+
+    Notes
+    -----
+    Knots are placed at evenly-spaced quantiles of the training data (falling back to an
+    evenly-spaced grid when quantile ties would produce duplicates), exactly as in `CRS`, but the
+    second-derivative relationship between the coefficient vector and the knot second derivatives
+    is built on a *circular* tridiagonal system: `_build_cyclic_Q()` and `_build_cyclic_R()`
+    construct the periodic analogues of `CRS`'s `Q` and `R` matrices, wrapping the sub/super-diagonal
+    entries around modulo `m = k - 1` (the number of free coefficients once `f(x_min) = f(x_max)` is
+    imposed). Concretely, the periodic constraint identifies knot `t_{k-1}` with `t_0`, so
+    `\boldsymbol{\beta}` has only `m = k - 1` free entries, and second derivatives satisfy
+    `\mathbf{R}_c \mathbf{d} = \mathbf{Q}_c^\top \boldsymbol{\beta}` with `Q_c`, `R_c` both
+    `m \times m` and *circulant-tridiagonal* (each row's neighbors wrap around index `m`). Unlike
+    `CRS`, there are no natural boundary conditions — periodicity itself replaces them — so the
+    penalty null space drops from dimension 2 (constant and linear) to dimension 1 (constant only):
+    a periodic function cannot be a nonzero linear function of `x`, since a nonzero slope is
+    incompatible with `f(x_min) = f(x_max)`.
+
+    The penalty is the same quadratic form as in `CRS`, computed from the circular matrices,
+
+    $$
+    \mathbf{S} = \mathbf{Q}_c \mathbf{R}_c^{-1} \mathbf{Q}_c^\top,
+    $$
+
+    an `m \times m` (`m = k - 1`) positive semi-definite matrix of rank `m - 1`, whose one-dimensional
+    null space is the constant sequence. At evaluation time, `basis_matrix()` maps any `x` into the
+    periodic domain `[x_min, x_max)` via `knots[0] + (x - knots[0]) % period` before evaluating the
+    same piecewise-cubic construction as `CRS`, so extrapolation is not linear (as in `CRS`) but
+    exactly periodic.
+
+    Examples
+    --------
+    ```{python}
+    import numpy as np
+    from whittaker.smooths import CyclicCRS
+
+    x = np.linspace(0, 2 * np.pi, 100)
+    basis = CyclicCRS(k=10).fit(x)
+    B = basis.basis_matrix(x)
+    S = basis.penalty_matrix()
+    B.shape, S.shape
+    ```
     """
 
     def __init__(self, k: int = 10) -> None:
@@ -158,6 +209,27 @@ class CyclicCRS(SmoothBasis):
         self._period: float
 
     def fit(self, x: NDArray) -> CyclicCRS:
+        """Fit the cyclic CRS to training data `x`.
+
+        Places `k` knots at evenly-spaced quantiles of `x` (spanning one full period), then
+        pre-computes the circular second-derivative operator and penalty matrix.
+
+        Parameters
+        ----------
+        x:
+            1-D training covariate, shape `(n,)` or `(n, 1)`. The period is inferred as
+            `x.max() - x.min()`.
+
+        Returns
+        -------
+        CyclicCRS
+            Returns `self` for method chaining.
+
+        Raises
+        ------
+        ValueError
+            If `n < k`, or if `x` is not 1-D / `(n, 1)`.
+        """
         x1d = self._as_1d(x)
         n = len(x1d)
 
@@ -191,28 +263,77 @@ class CyclicCRS(SmoothBasis):
         return self
 
     def basis_matrix(self, x: NDArray) -> NDArray:
+        """Evaluate the cyclic CRS basis at `x`.
+
+        Any `x` outside the training range is first mapped into the periodic domain
+        `[x_min, x_max)` via modular arithmetic, so the returned basis values are exactly periodic
+        with period `x_max - x_min`.
+
+        Parameters
+        ----------
+        x:
+            1-D evaluation points, shape `(n,)` or `(n, 1)`.
+
+        Returns
+        -------
+        NDArray
+            Design matrix of shape `(n, k - 1)`.
+        """
         self._check_fitted()
         x1d = self._as_1d(x)
         return _cyclic_crs_basis_matrix(x1d, self._knots, self._h, self._A, self._period)
 
     def penalty_matrix(self) -> NDArray:
+        """Return the `(k - 1) x (k - 1)` cyclic penalty matrix `S = Q_c R_c^{-1} Q_c'`.
+
+        `S` is positive semi-definite with rank `k - 2`. Its one-dimensional null space is spanned
+        by the constant function (linear functions are no longer unpenalized under periodicity).
+
+        Returns
+        -------
+        NDArray
+            Shape `(k - 1, k - 1)`.
+        """
         self._check_fitted()
         return self._S.copy()
 
     def null_space_dimension(self) -> int:
+        """Return the dimension of the penalty null space.
+
+        Always `1` for a cyclic CRS: only constant functions have zero penalty, since a nonzero
+        linear term would violate the periodicity constraint `f(x_min) = f(x_max)`.
+
+        Returns
+        -------
+        int
+            Always `1`.
+        """
         return 1
 
     def identifiability_constraints(self) -> NDArray | None:
+        """Return the sum-to-zero constraint row for the intercept.
+
+        Evaluates the fitted basis at the free knots (excluding the duplicated wrap-around knot)
+        and averages each column, giving a `(1, k - 1)` row `C` such that `C @ beta == 0`
+        constrains the smooth to have mean zero over the training data.
+
+        Returns
+        -------
+        NDArray
+            Shape `(1, k - 1)` constraint matrix.
+        """
         self._check_fitted()
         B_train = self.basis_matrix(self._knots[:-1])
         return B_train.mean(axis=0, keepdims=True)
 
     @property
     def n_basis(self) -> int:
+        """Total number of basis functions, `k - 1` after the cyclic constraint."""
         return self.k - 1
 
     @property
     def knots(self) -> NDArray:
+        """Knot locations set during `fit()`, length `k`."""
         self._check_fitted()
         return self._knots.copy()
 
@@ -235,11 +356,19 @@ class CyclicCRS(SmoothBasis):
 
 
 class CyclicPSpline(SmoothBasis):
-    """Cyclic P-Spline (periodic B-spline basis with circular difference penalty).
+    r"""Cyclic P-Spline (periodic B-spline basis with circular difference penalty).
 
+    A cyclic P-spline is the periodic counterpart of `PSpline`: a B-spline basis whose knots and
+    coefficients wrap around a circle, combined with a *circular* finite-difference penalty that
+    also wraps around, so smoothness is enforced across the boundary rather than just within it.
     Equivalent to mgcv's `bs="cp"` basis. The B-spline basis is constructed to be periodic over the
-    training data range, so f(x_min) = f(x_max). Values outside the training range are mapped into
-    the periodic domain.
+    training data range, so `f(x_min) = f(x_max)` and, because the penalty ties coefficients across
+    the wrap point, the fit avoids any artificial kink at the seam. Values outside the training
+    range are mapped into the periodic domain via modular arithmetic. Prefer `CyclicPSpline` over
+    `CyclicCRS` for the same reasons `PSpline` is often preferred over `CRS`: cheaper construction,
+    equally-spaced (rather than quantile) knots, and a sparse banded penalty that scales well to
+    larger `k`; prefer `CyclicCRS` when knot-based interpretability or an integrated-derivative
+    penalty is wanted.
 
     The circular difference penalty penalizes the m-th differences of adjacent coefficients with
     wrap-around at the boundaries. The penalty null space is 1-dimensional (constant functions
@@ -248,11 +377,56 @@ class CyclicPSpline(SmoothBasis):
     Parameters
     ----------
     k:
-        Number of basis functions. Must be >= degree + 1. The default is `10`.
+        Number of periodic B-spline basis functions. Must satisfy `k >= degree + 1`. Larger `k`
+        gives more local flexibility around the cycle; overall smoothness is governed by the
+        penalty and `lambda`. The default is `10`.
     degree:
-        B-spline polynomial degree. The default is `3` (cubic).
+        Polynomial degree of each B-spline piece. `degree=3` (cubic) is conventional; lower degrees
+        give coarser, more locally-supported bases. The default is `3` (cubic).
     m:
-        Order of the circular difference penalty. The default is `2`.
+        Order of the circular difference penalty applied to adjacent coefficients, with
+        wrap-around so that the coefficients at the end of the cycle are treated as adjacent to
+        those at the start. `m=2` (the default) penalizes circular second differences, the
+        periodic analogue of curvature. The default is `2`.
+
+    Notes
+    -----
+    `_periodic_bspline_knots()` builds a periodic knot vector by taking `k` equally-spaced knots
+    spanning one period `[x_min, x_max)` and extending them periodically by `degree` knots on each
+    side, so that the B-spline basis functions near the boundary have support that wraps smoothly
+    around the cycle. `basis_matrix()` evaluates the (non-periodic) B-spline design on this extended
+    knot vector and then folds the trailing `degree` "wrapped" columns back onto the leading
+    `degree` columns (`B[:, :degree] += B_full[:, k:]`), so the returned matrix has exactly `k`
+    periodic basis functions.
+
+    The penalty replaces the ordinary finite-difference matrix used by `PSpline` with a *circular*
+    difference matrix `\mathbf{D}_m` (built by `_cyclic_diff_matrix()` via repeated
+    left-multiplication by the circular first-difference operator `D_1[i, i] = -1`,
+    `D_1[i, (i+1) \bmod k] = 1`), giving a square `k \times k` penalty
+
+    $$
+    \mathbf{S} = \mathbf{D}_m^\top \mathbf{D}_m,
+    $$
+
+    positive semi-definite with rank `k - 1`. Its one-dimensional null space is the constant
+    coefficient sequence: because the difference operator wraps around, no nonconstant polynomial
+    sequence in the coefficient index can have zero circular difference (unlike the non-cyclic
+    `PSpline`, where degree-`< m` polynomial sequences are all unpenalized). As with `PSpline`, the
+    penalty is banded/sparse (with corner entries from the wrap-around) and cheap to factorize even
+    for large `k`.
+
+    Examples
+    --------
+    ```{python}
+    import numpy as np
+    from whittaker.smooths import CyclicPSpline
+
+    x = np.linspace(0, 2 * np.pi, 100)
+    basis = CyclicPSpline(k=10).fit(x)
+    B = basis.basis_matrix(x)
+    S = basis.penalty_matrix()
+    B.shape, S.shape
+    ```
     """
 
     def __init__(self, k: int = 10, degree: int = 3, m: int = 2) -> None:
@@ -280,6 +454,27 @@ class CyclicPSpline(SmoothBasis):
         self._S: NDArray
 
     def fit(self, x: NDArray) -> CyclicPSpline:
+        """Fit the cyclic P-spline to training data `x`.
+
+        Determines the period from the data range, builds the periodic knot vector, and
+        pre-computes the circular difference penalty matrix.
+
+        Parameters
+        ----------
+        x:
+            1-D training covariate, shape `(n,)` or `(n, 1)`. The period is inferred as
+            `x.max() - x.min()`.
+
+        Returns
+        -------
+        CyclicPSpline
+            Returns `self` for method chaining.
+
+        Raises
+        ------
+        ValueError
+            If `n < k`, if all values of `x` are identical, or if `x` is not 1-D / `(n, 1)`.
+        """
         x1d = self._as_1d(x)
         n = len(x1d)
 
@@ -306,6 +501,23 @@ class CyclicPSpline(SmoothBasis):
         return self
 
     def basis_matrix(self, x: NDArray) -> NDArray:
+        """Evaluate the periodic B-spline basis at `x`.
+
+        Any `x` outside the training range is first mapped into the periodic domain
+        `[x_min, x_max)` via modular arithmetic. The trailing `degree` columns of the raw B-spline
+        design (from the periodic knot extension) are folded back onto the leading `degree`
+        columns so the result has exactly `k` periodic basis functions.
+
+        Parameters
+        ----------
+        x:
+            1-D evaluation points, shape `(n,)` or `(n, 1)`.
+
+        Returns
+        -------
+        NDArray
+            Design matrix of shape `(n, k)`.
+        """
         self._check_fitted()
         x1d = self._as_1d(x)
 
@@ -324,13 +536,46 @@ class CyclicPSpline(SmoothBasis):
         return B
 
     def penalty_matrix(self) -> NDArray:
+        """Return the `k x k` circular penalty matrix `S = D_m' D_m`.
+
+        `S` is positive semi-definite with rank `k - 1`. Its one-dimensional null space is spanned
+        by the constant coefficient sequence; unlike the non-cyclic `PSpline`, no nonconstant
+        polynomial sequence in the coefficient index is unpenalized because the difference operator
+        wraps around the boundary.
+
+        Returns
+        -------
+        NDArray
+            Shape `(k, k)`.
+        """
         self._check_fitted()
         return self._S.copy()
 
     def null_space_dimension(self) -> int:
+        """Return the dimension of the penalty null space.
+
+        Always `1` for a cyclic P-spline: only the constant coefficient sequence has zero circular
+        difference.
+
+        Returns
+        -------
+        int
+            Always `1`.
+        """
         return 1
 
     def identifiability_constraints(self) -> NDArray | None:
+        """Return the sum-to-zero constraint row for the intercept.
+
+        Evaluates the basis on a fine equally-spaced grid spanning one period and averages each
+        column, giving a `(1, k)` row `C` such that `C @ beta == 0` constrains the smooth to have
+        mean zero over the training range.
+
+        Returns
+        -------
+        NDArray
+            Shape `(1, k)` constraint matrix.
+        """
         self._check_fitted()
         x_ref = np.linspace(self._x_min, self._x_max, max(self.k * 5, 100), endpoint=False)
         B_ref = self.basis_matrix(x_ref)
@@ -338,6 +583,7 @@ class CyclicPSpline(SmoothBasis):
 
     @property
     def n_basis(self) -> int:
+        """Total number of periodic basis functions `k`."""
         return self.k
 
     @staticmethod
