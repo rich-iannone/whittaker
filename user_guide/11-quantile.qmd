@@ -133,7 +133,7 @@ q_lines = alt.Chart({"values": fan_records}).mark_line(strokeWidth=2).encode(
 ```
 
 The fan of curves widens as $x$ increases, faithfully tracking the growing variance. The solid red
-line is the median ($\tau = 0.5$); the dashed curves are the 10th/90th and 25th/75th percentiles.
+line is the median ($\tau = 0.5$). The dashed curves are the 10th/90th and 25th/75th percentiles.
 
 ## The ELF loss function
 
