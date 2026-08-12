@@ -189,18 +189,47 @@ class MultiResponseGAM:
 
     @property
     def responses(self) -> list[str]:
+        """List of response variable names, in the order passed to the constructor.
+
+        Returns
+        -------
+        list[str]
+            Copy of the response names; mutating the returned list does not affect the model.
+        """
         return list(self._responses)
 
     @property
     def n_responses(self) -> int:
+        """Number of response variables modeled jointly.
+
+        Returns
+        -------
+        int
+            Equal to `len(self.responses)`.
+        """
         return len(self._responses)
 
     @property
     def correlation(self) -> str:
+        """Residual correlation structure used when fitting.
+
+        Returns
+        -------
+        str
+            Either `"independent"` or `"unstructured"`, as passed to the constructor.
+        """
         return self._correlation
 
     @property
     def is_fitted(self) -> bool:
+        """Whether `fit()` has been called successfully.
+
+        Returns
+        -------
+        bool
+            `True` once the per-response GAMs (and, if applicable, the residual correlation)
+            have been fit; `False` beforehand.
+        """
         return self._fitted
 
     def fit(
@@ -390,7 +419,17 @@ class MultiResponseGAM:
         return {resp: self._models[resp].deviance for resp in self._responses}
 
     def summary(self) -> str:
-        """Text summary of the multi-response GAM."""
+        """Build a text summary of the fitted multi-response GAM.
+
+        Reports the response names, shared formula, family, correlation structure, and
+        per-response fit statistics (EDF, deviance, scale). When `correlation="unstructured"`,
+        also lists the estimated pairwise residual correlations between responses.
+
+        Returns
+        -------
+        str
+            Multi-line summary text.
+        """
         self._check_fitted()
         lines = [
             "MultiResponseGAM summary",
