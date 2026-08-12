@@ -31,7 +31,7 @@ import numpy as np
 import whittaker as wk
 
 # Generate data from a noisy sine curve
-rng = np.random.default_rng(42)
+rng = np.random.default_rng(23)
 n = 200
 x = np.linspace(0, 2 * np.pi, n)
 y = np.sin(x) + rng.normal(0, 0.3, n)
@@ -277,7 +277,7 @@ true_line = alt.Chart({"values": true_data}).mark_line(
 ).encode(x="x:Q", y="true:Q")
 
 (band + points + line + true_line).properties(
-    width=550, height=320,
+    width="container", height=320,
     title="Gaussian GAM with 95% confidence band"
 )
 ```
@@ -297,7 +297,7 @@ response.
 
 ```{python}
 # Fit a model with two smooth terms
-rng = np.random.default_rng(42)
+rng = np.random.default_rng(23)
 n = 300
 x1 = np.linspace(0, 2 * np.pi, n)
 x2 = rng.uniform(0, 1, n)
@@ -373,7 +373,7 @@ for label in term_preds.labels:
     ).encode(y=alt.datum(0))
 
     chart = (band + line + zero).properties(
-        width=280, height=220, title=label
+        width="container", height=220, title=label
     )
     charts.append(chart)
 
@@ -439,7 +439,7 @@ exponentiated: $\hat\mu = \exp(\hat\eta)$.
 
 ```{python}
 # Generate Poisson count data
-rng = np.random.default_rng(42)
+rng = np.random.default_rng(23)
 n = 300
 x = np.linspace(0, 2 * np.pi, n)
 true_rate = np.exp(0.5 + 0.8 * np.sin(x))
@@ -482,7 +482,7 @@ line_true = alt.Chart({"values": fit_pois}).mark_line(
 ).encode(x="x:Q", y="true:Q")
 
 (pts_pois + line_fit + line_true).properties(
-    width=500, height=300, title="Poisson GAM: fitted rate (orange) vs. true rate (dashed)"
+    width="container", height=300, title="Poisson GAM: fitted rate (orange) vs. true rate (dashed)"
 )
 ```
 
@@ -515,7 +515,7 @@ For binary outcomes with a logit link, response-scale predictions are probabilit
 
 ```{python}
 # Generate binary data
-rng = np.random.default_rng(42)
+rng = np.random.default_rng(23)
 n = 400
 x = np.sort(rng.uniform(-3, 3, n))
 prob = 1 / (1 + np.exp(-(0.5 + 1.5 * np.sin(x))))
@@ -527,8 +527,12 @@ model_bin.fit({"x": x, "y": y_bin}, method="REML")
 
 # Predictions are probabilities
 preds_bin = model_bin.predict({"x": x_grid}, se=True)
-print(f"Probability range: [{preds_bin.values.min():.3f}, {preds_bin.values.max():.3f}]")
-print(f"Log-odds range: [{preds_bin.linear_predictor.min():.3f}, {preds_bin.linear_predictor.max():.3f}]")
+print(
+    f"Probability range: [{preds_bin.values.min():.3f}, {preds_bin.values.max():.3f}]"
+)
+print(
+    f"Log-odds range: [{preds_bin.linear_predictor.min():.3f}, {preds_bin.linear_predictor.max():.3f}]"
+)
 ```
 
 ```{python}
@@ -554,7 +558,7 @@ line_true_bin = alt.Chart({"values": fit_bin}).mark_line(
 ).encode(x="x:Q", y="true:Q")
 
 (pts_bin + line_bin + line_true_bin).properties(
-    width=500, height=300, title="Binomial GAM: fitted probability (orange) vs. true (dashed)"
+    width="container", height=300, title="Binomial GAM: fitted probability (orange) vs. true (dashed)"
 )
 ```
 
@@ -635,7 +639,7 @@ band = alt.Chart({"values": fit_data}).mark_area(
 ).encode(x="x1:Q", y="lower:Q", y2="upper:Q")
 
 (band + points + line).properties(
-    width=550, height=320,
+    width="container", height=320,
     title="Predictions at mean(x2) with 95% CI"
 )
 ```
@@ -679,7 +683,7 @@ zero_t = alt.Chart({"values": [{}]}).mark_rule(
 ).encode(y=alt.datum(0))
 
 (band_t + line_t + zero_t).properties(
-    width=550, height=320,
+    width="container", height=320,
     title=f"Term contribution: {label_x1}"
 )
 ```
