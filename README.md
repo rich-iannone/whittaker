@@ -74,7 +74,7 @@ import numpy as np
 import whittaker as wk
 
 # Generate some data
-rng = np.random.default_rng(42)
+rng = np.random.default_rng(23)
 x = np.linspace(0, 2 * np.pi, 200)
 y = np.sin(x) + rng.normal(0, 0.3, 200)
 
@@ -103,7 +103,7 @@ import numpy as np
 import whittaker as wk
 
 # Simulate Poisson count data with two smooth effects
-rng = np.random.default_rng(42)
+rng = np.random.default_rng(23)
 n = 500
 x1 = rng.uniform(0, 2 * np.pi, n)
 x2 = rng.uniform(0, 1, n)
