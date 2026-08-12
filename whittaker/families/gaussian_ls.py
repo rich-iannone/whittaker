@@ -1,4 +1,4 @@
-"""Gaussian location-scale GAMLSS family."""
+r"""Gaussian location-scale GAMLSS family."""
 
 from __future__ import annotations
 
@@ -9,10 +9,68 @@ from whittaker.families.gamlss_base import GAMLSSFamily
 
 
 class GaussianLS(GAMLSSFamily):
-    """Gaussian location-scale family for GAMLSS.
+    r"""Gaussian location-scale family for GAMLSS.
 
-    Models both the mean (mu) and the standard deviation (sigma) as functions of covariates. Uses
-    identity link for mu and log link for sigma.
+    `GaussianLS` extends the plain `Gaussian` family to allow both the mean `mu` and the
+    standard deviation `sigma` to vary smoothly with covariates, rather than assuming constant
+    variance. Use it when a continuous, approximately symmetric response shows
+    heteroscedasticity — for example, when the spread of measurements grows or shrinks over the
+    range of a predictor — and you want the model to capture that varying spread rather than
+    average it away. Each parameter has its own additive predictor and its own link function:
+    `mu` uses the identity link (as in `Gaussian`), and `sigma` uses the log link, which keeps
+    the fitted standard deviation positive.
+
+    Parameters
+    ----------
+    None
+        `GaussianLS` takes no constructor arguments; both `mu` and `sigma` are modeled entirely
+        through the formulas supplied to `GAMLSS`.
+
+    Notes
+    -----
+    The two parameters use distinct link functions:
+
+    $$
+    g_{\mu}(\mu) = \mu \qquad \text{(identity)}, \qquad
+    g_{\sigma}(\sigma) = \log(\sigma).
+    $$
+
+    The response density is the ordinary Gaussian density evaluated at the fitted, observation-
+    specific `mu` and `sigma`:
+
+    $$
+    f(y \mid \mu, \sigma) = \frac{1}{\sigma\sqrt{2\pi}} \exp\!\left(-\frac{(y-\mu)^2}{2\sigma^2}\right),
+    $$
+
+    so the log-likelihood contribution for a single observation is
+    $\ell_i = -\log\sigma_i - \tfrac{1}{2}\log(2\pi) - \tfrac{1}{2}\left(\frac{y_i - \mu_i}{\sigma_i}\right)^2$.
+    Unlike `Gaussian`, there is no separate scale parameter to estimate: `sigma` itself is the
+    quantity being modeled by its own smooth predictor.
+
+    Examples
+    --------
+    Fit a GAMLSS with a smoothly varying mean and standard deviation:
+
+    ```{python}
+    import numpy as np
+    import whittaker as wk
+
+    rng = np.random.default_rng(0)
+    n = 300
+    x = np.linspace(0, 2 * np.pi, n)
+    mu = np.sin(x)
+    sigma = 0.2 + 0.3 * np.abs(np.cos(x))
+    y = rng.normal(mu, sigma)
+
+    data = {"x": x, "y": y}
+
+    model = wk.GAMLSS(
+        formulas={"mu": "y ~ s(x)", "sigma": "y ~ s(x)"},
+        family=wk.GaussianLS(),
+    )
+    model.fit(data)
+    print(model.summary())
+    ```
     """
 
     @property
