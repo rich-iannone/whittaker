@@ -182,45 +182,134 @@ class StreamingGAM:
 
     @property
     def formula(self) -> Formula:
+        """Parsed model formula this streaming GAM was constructed with.
+
+        The formula (response, smooth and parametric terms) is fixed for the lifetime of
+        the model; it determines the basis structure built from the first `partial_fit()`
+        batch.
+
+        Returns
+        -------
+        Formula
+        """
         return self._formula
 
     @property
     def family(self) -> Family:
+        """Response distribution family used for the link function and variance model.
+
+        Returns
+        -------
+        Family
+        """
         return self._family
 
     @property
     def is_initialised(self) -> bool:
+        """Whether the model structure has been built from a pilot batch.
+
+        Becomes `True` after the first `partial_fit()` call, once the model matrix,
+        basis dimensions, and penalties have been established.
+
+        Returns
+        -------
+        bool
+        """
         return self._initialised
 
     @property
     def is_solved(self) -> bool:
+        """Whether coefficients are available from an initial fit or a `solve()` call.
+
+        `predict()`, `coefficients`, and other solved-state accessors raise `RuntimeError`
+        when this is `False`.
+
+        Returns
+        -------
+        bool
+        """
         return self._solved
 
     @property
     def n_obs(self) -> int:
+        """Accumulated observation count across all ingested batches.
+
+        Under sliding-window mode (`decay < 1.0`), this count is itself decayed at each
+        `partial_fit()` call, so it reflects an effective rather than a raw cumulative
+        count.
+
+        Returns
+        -------
+        int
+        """
         return self._n_obs
 
     @property
     def n_batches(self) -> int:
+        """Total number of batches passed to `partial_fit()` so far.
+
+        Unlike `n_obs`, this count is never decayed.
+
+        Returns
+        -------
+        int
+        """
         return self._n_batches
 
     @property
     def coefficients(self) -> NDArray:
+        """Current coefficient vector from the most recent `solve()` (or the pilot fit).
+
+        Returns a copy, so mutating the returned array does not affect the model.
+
+        Returns
+        -------
+        NDArray
+            Length-`p` array of basis coefficients.
+        """
         self._check_solved()
         return self._coefficients.copy()
 
     @property
     def edf_total(self) -> float:
+        """Total effective degrees of freedom from the most recent `solve()`.
+
+        Computed as the trace of the hat matrix implied by the accumulated `X'WX` and the
+        current smoothing parameters.
+
+        Returns
+        -------
+        float
+        """
         self._check_solved()
         return self._edf_total
 
     @property
     def scale(self) -> float:
+        """Estimated dispersion (scale) parameter from the most recent `solve()`.
+
+        For families with a known scale (e.g. Poisson, binomial), this is fixed at `1.0`;
+        otherwise it is estimated from the accumulated deviance and `edf_total`.
+
+        Returns
+        -------
+        float
+        """
         self._check_solved()
         return self._scale
 
     @property
     def smoothing_params(self) -> list[float]:
+        """Smoothing parameters currently in use, one per penalized smooth term.
+
+        These come from the constructor's `smoothing_params` argument if fixed, or from the
+        pilot fit / most recent `solve(reestimate_smoothing=True)` call otherwise. Returns a
+        copy, so mutating the returned list does not affect the model.
+
+        Returns
+        -------
+        list[float]
+        """
         self._check_solved()
         return list(self._smoothing_params)
 
@@ -504,7 +593,17 @@ class StreamingGAM:
         return list(self._history)
 
     def summary(self) -> str:
-        """Text summary of the streaming GAM."""
+        """Build a human-readable text summary of the streaming GAM's current state.
+
+        Reports the formula, family, decay factor, accumulated observation and batch
+        counts, total EDF, scale, and accumulated deviance, followed by a per-smooth-term
+        EDF breakdown and the number of `solve()` snapshots recorded so far.
+
+        Returns
+        -------
+        str
+            Multi-line summary text.
+        """
         self._check_solved()
         lines = [
             "StreamingGAM summary",
