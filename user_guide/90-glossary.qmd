@@ -13,6 +13,16 @@ Additive model
   of each covariate can be estimated and visualized separately. See also **generalized additive
   model**.
 
+Adaptive smooth (`bs="ad"`)
+: A **thin plate regression spline** whose smoothness is allowed to vary spatially along the
+  covariate axis. Instead of a single smoothing parameter $\lambda$, `AdaptiveTPRS` decomposes
+  the ordinary TPRS penalty matrix into its eigenvectors and assigns each (or a contiguous block
+  of eigenvectors) its own $\lambda$. Regions where the true function varies rapidly receive less
+  smoothing, while flatter regions are smoothed more heavily. The number of separate penalty
+  components is controlled by `n_penalties`. Prefer over plain TPRS when there is a priori
+  reason to expect the required smoothness to vary across the covariate range. Specified with
+  `bs="ad"` in the formula. Available via `AdaptiveTPRS`. See also **TPRS**.
+
 Basis dimension (`k`)
 : The number of basis functions used to represent a smooth term before penalization. It sets
   an upper bound on the flexibility of the smooth: higher `k` allows more complex shapes, but
@@ -68,6 +78,14 @@ CausalGAM
   partial out confounders, producing debiased estimates of the **ATE** or **CATE**. Available
   via `CausalGAM`.
 
+Coefficient function ($\beta(t)$)
+: In **functional GAM**, the smooth function that weights each location $t$ along the domain of
+  a functional covariate in its contribution to the scalar response:
+  $\text{effect}_i = \int X_i(t)\,\beta(t)\,\mathrm{d}t$. The coefficient function is estimated
+  as a penalized expansion in a B-spline or Fourier basis and is returned by
+  `FunctionalGAM.coefficient_function()` as a `CoefficientFunction` object with pointwise
+  confidence bands. See also **functional GAM**, **FunctionalTerm**.
+
 Concavity constraint
 : A shape constraint that forces a smooth to curve downward (i.e., $f''(x) \le 0$). Useful
   for modeling diminishing returns. Specified with `bs="cv"` in the formula. See also
@@ -94,11 +112,37 @@ Conformal prediction
   guarantees. Whittaker implements three conformal methods: **split conformal** (`"split"`),
   **CV+** (`"cv+"`), and **jackknife+** (`"jackknife+"`). The intervals adapt to local
   variance without distributional assumptions. Available via `ConformalPredictor`.
-
+Conformity score
+: A measure of how unusual a calibration observation is relative to the fitted model, used in
+  **conformal prediction**. The simplest conformity score is the absolute residual
+  $s_i = |y_i - \hat\mu_i|$. The empirical quantile of the calibration scores determines the
+  half-width of prediction intervals for new observations: a larger score means the model
+  predicted that point poorly and the resulting interval will be wider. See also **conformal
+  prediction**, **marginal coverage**.
 Convexity constraint
 : A shape constraint that forces a smooth to curve upward (i.e., $f''(x) \ge 0$). Useful for
   modeling U-shaped cost curves or economies of scale. Specified with `bs="cx"` in the formula.
   See also **shape constraint**, **concavity constraint**.
+
+Cox proportional hazards (`CoxPH`)
+: A semiparametric model for time-to-event (survival) data that models the hazard as
+  $h(t \mid x) = h_0(t)\,e^{\eta(x)}$, where $h_0(t)$ is an unspecified baseline hazard and
+  $\eta$ is the (possibly smooth) linear predictor. Fitting maximizes the Cox partial
+  log-likelihood, which conditions on the **risk set** at each event time and does not require
+  estimating $h_0(t)$. Right-**censored** observations (event time unknown but bounded below)
+  are handled naturally. The `ties=` argument selects the Breslow or Efron approximation for
+  tied event times. Available via `CoxPH(status="event")` as a family in `GAM`. See also
+  **family**.
+
+Cross-fitting
+: A procedure used in **double machine learning** to avoid overfitting bias when estimating
+  causal effects. The data are partitioned into $K$ folds. For each fold, **nuisance functions**
+  (outcome and treatment models) are trained on the remaining $K-1$ folds, and residuals are
+  computed on the held-out fold. This ensures the residuals used to estimate the treatment
+  effect are independent of the nuisance fits. Combined with **Neyman orthogonality**,
+  cross-fitting makes the treatment effect estimator root-$n$ consistent despite using
+  regularized nuisance GAMs. Used internally by `CausalGAM`. See also **double machine
+  learning**.
 
 Cross-validation (CV)
 : A resampling procedure for estimating out-of-sample model performance. The data are split
@@ -134,6 +178,13 @@ Deviance
   of squares to non-Gaussian families and is the quantity minimized during **P-IRLS** fitting.
   The **deviance explained** (analogous to $R^2$) is $1 - D / D_\text{null}$.
 
+Deviance explained
+: The proportion of the **null deviance** accounted for by the fitted model:
+  $1 - D_\text{model}/D_\text{null}$. Analogous to $R^2$ in linear regression, ranging from 0
+  (no improvement over an intercept-only model) to 1 (perfect fit on the deviance scale).
+  Accessed via `model.deviance_explained` and reported in `model.summary()`. See also
+  **null deviance**, **deviance**.
+
 Deviance residuals
 : Residuals based on the contribution of each observation to the total deviance:
   $r_i^D = \text{sign}(y_i - \hat\mu_i) \sqrt{d_i}$, where $d_i$ is the unit deviance.
@@ -156,7 +207,14 @@ Double penalty (smooth selection)
   allowing the entire term to be shrunk to zero (effectively removed from the model). Activated
   with `select=True` in `model.fit()`. Terms that do not contribute receive near-zero
   **effective degrees of freedom**.
-
+Duchon spline (`bs="ds"`)
+: A generalization of the **thin plate regression spline** that provides explicit control over
+  both the polynomial null-space order $m$ and the radial exponent $s$ of the kernel (the
+  standard TPRS is the special case $s = 1$). Smaller values of $s$ give a less smooth, more
+  locally adaptive kernel at the cost of a larger polynomial null space. Useful when the default
+  TPRS penalty becomes numerically awkward in higher dimensions or when the analyst wants direct
+  control over the smoothness-exponent trade-off. Specified with `bs="ds"` and optional
+  `m=[s, m_order]` in the formula. Available via `DuchonSpline`.
 DuckDBGAM
 : A scalable GAM backend that streams data from DuckDB tables or SQL queries via Arrow. Ideal
   when the data lives in a database or when SQL-based filtering and transformation are needed
@@ -242,6 +300,16 @@ GaussianLS (Gaussian location-scale)
   smooth functions of covariates. Useful when variance changes with the predictors
   (heteroscedasticity). Available via `GaussianLS()`.
 
+Gaussian process smooth (`bs="gp"`)
+: A smooth basis built from the leading eigenfunctions of a covariance (kernel) matrix
+  evaluated at the training points. The inverse eigenvalues serve directly as the penalty,
+  encoding prior beliefs about the correlation structure of the unknown function rather than
+  imposing a derivative-based bending-energy penalty. Available covariance functions:
+  `"matern32"` (default, once-differentiable), `"matern52"` (twice-differentiable),
+  `"exp"` (exponential/rough), and `"sqexp"` (squared-exponential, infinitely smooth). Well
+  suited to spatial covariates where smoothness reflects physical correlation. Specified with
+  `bs="gp"` in the formula. Available via `GaussianProcess`.
+
 GCV (Generalized Cross-Validation)
 : A smoothing parameter selection criterion that estimates leave-one-out cross-validation
   error without refitting: $\text{GCV} = n \sum (y_i - \hat\mu_i)^2 / (n - \text{EDF})^2$.
@@ -315,11 +383,27 @@ Link function
   constraints of the response distribution (e.g., the log link keeps Poisson means positive).
   Each **family** has a default (canonical) link, but alternatives are available.
 
+Marginal coverage
+: The probability that the true response falls within the prediction interval, averaged over
+  the distribution of new observations: $P(Y_{n+1} \in [L(X_{n+1}), U(X_{n+1})]) \ge 1 -
+  \alpha$. **Conformal prediction** methods provide a finite-sample marginal coverage guarantee
+  without distributional assumptions. Marginal coverage does not guarantee coverage at every
+  specific covariate value (that stronger notion is called conditional coverage). See also
+  **conformal prediction**, **conformity score**.
+
 Marginal effect
 : The change in the predicted response for a unit change in one covariate, holding all others
   fixed. For a smooth term $f(x)$, the marginal effect at a point is the derivative
   $f'(x)$. Computed by `model.derivatives()`.
-
+Markov random field (MRF) smooth (`bs="mrf"`)
+: A smooth for discrete areal data (counties, districts, grid cells) that uses one indicator
+  basis function per region and penalizes differences between neighboring regions via the graph
+  Laplacian: $\boldsymbol\beta^\top \mathbf{L}\boldsymbol\beta = \sum_{(i,j)\in\text{neighbors}}
+  (\beta_i - \beta_j)^2$. The neighborhood structure is supplied by the user as a dict mapping
+  region labels to neighbor lists, or as a symmetric adjacency matrix. Use instead of a
+  continuous 2-D smooth whenever the covariate domain is a set of discrete areas linked by
+  shared borders rather than Euclidean coordinates. Specified with `bs="mrf"` in the formula.
+  Available via `MRFBasis`. See also **graph Laplacian**.
 Mediation analysis
 : A causal analysis that decomposes the total effect of a treatment on an outcome into a
   **direct effect** (not through the mediator) and an **indirect effect** (through the
@@ -343,22 +427,75 @@ Monotonicity constraint
   (`bs="mpd"`). Enforced by projecting P-IRLS updates onto the monotone cone using the pool
   adjacent violators algorithm (**PAVA**). See also **shape constraint**.
 
+Multinomial family
+: A response family for unordered categorical data with $K \ge 2$ levels. Uses a
+  baseline-category logit model: $P(Y = k \mid \eta) \propto \exp(\alpha_k + \beta_k\eta)$,
+  with the final category as the reference ($\alpha_K = \beta_K = 0$). Unlike
+  **ordered categorical**, no assumption is made about category ordering — each non-reference
+  category has its own loading $\beta_k$ that can differ in magnitude and sign, so categories
+  can respond differently to the same covariate effect. Available via
+  `Multinomial(n_categories=K)`. For binary responses use `Binomial`; for ordinal responses
+  use `OrderedCategorical`. See also **ordered categorical**.
+
+Multi-response GAM
+: A GAM that fits multiple response variables simultaneously against a shared formula,
+  optionally estimating the residual correlation between responses. Each response has its own
+  coefficients, but corresponding smooth terms share the same basis structure. Useful when
+  several related outcomes are measured on the same units (e.g. multiple environmental metrics
+  at the same sites) and joint modeling improves efficiency or coherence. The estimated residual
+  correlation is returned by `model.residual_correlation()` as a `ResidualCorrelation` object.
+  Available via `MultiResponseGAM`.
+
 Negative Binomial family
 : A response family for overdispersed count data (variance exceeds the mean). Uses the NB2
   parameterization with variance function $V(\mu) = \mu + \mu^2/\theta$, where $\theta$
   controls overdispersion. As $\theta \to \infty$, the distribution converges to Poisson.
   Available via `NegativeBinomial()`.
-
+Neyman orthogonality
+: A property of the moment condition used in **double machine learning** that makes the
+  treatment effect estimate insensitive to first-order errors in the **nuisance functions**.
+  Specifically, the derivative of the identifying equation with respect to the nuisance
+  parameters is zero at the truth, so that estimation error in the nuisance GAMs contributes
+  only second-order bias to the treatment effect estimate. Combined with **cross-fitting**,
+  Neyman orthogonality ensures `CausalGAM` produces a root-$n$ consistent, asymptotically
+  normal treatment effect estimate despite using regularized GAMs for the nuisance fits.
 Non-crossing constraint
 : A constraint in **quantile regression** that ensures fitted quantile curves do not cross:
   $\hat{Q}_{\tau_1}(x) \le \hat{Q}_{\tau_2}(x)$ whenever $\tau_1 < \tau_2$. Enforced by
   isotonic projection after each P-IRLS update. Activated with `non_crossing=True` in
   `QuantileGAM`.
 
+Null deviance
+: The deviance of an intercept-only model, computed as though no predictors were included:
+  $D_\text{null} = D(\mathbf{y},\, \bar\mu\,\mathbf{1})$, where $\bar\mu$ is the
+  maximum-likelihood estimate of the mean under the null (intercept-only) model. Serves as the
+  baseline for computing **deviance explained**: a larger reduction from $D_\text{null}$ to
+  $D_\text{model}$ indicates a better fit. Accessed via `model.null_deviance`. See also
+  **deviance**, **deviance explained**.
+
+Nuisance function
+: A function that must be estimated as part of a statistical procedure but is not the primary
+  object of inference. In **double machine learning** (DML), the outcome regression
+  $E[Y \mid X]$ and the treatment regression $E[T \mid X]$ are both nuisance functions: they
+  are needed to form debiased residuals for the treatment effect estimate but are not themselves
+  the causal parameters of interest. `CausalGAM` fits nuisance functions as penalized GAMs
+  using **cross-fitting** to avoid regularization bias. See also **cross-fitting**, **Neyman
+  orthogonality**.
+
 Offset
 : A term in the linear predictor with a fixed coefficient of 1, not estimated from the data.
   Offsets are used to account for known exposure or population size in rate models. Specified
   as `offset(log_exposure)` in the formula.
+
+Ordered categorical (`OrderedCategorical`)
+: A response family for ordinal data — outcomes with a natural order but no meaningful numeric
+  spacing, such as Likert scales or severity grades. Uses the proportional-odds (cumulative
+  logit) model: $\log[P(Y \le k \mid \eta)/P(Y > k \mid \eta)] = \alpha_k - \eta$, where
+  $\alpha_1 < \cdots < \alpha_{K-1}$ are estimated cutpoints and $\eta$ is the shared linear
+  predictor. The proportional-odds assumption is that a unit increase in $\eta$ shifts the
+  log-odds of being in a higher category by the same amount at every threshold. Available via
+  `OrderedCategorical(n_categories=K)`. For binary data use `Binomial`; for nominal (unordered)
+  data use `Multinomial`.
 
 P-IRLS (Penalized Iteratively Reweighted Least Squares)
 : The core fitting algorithm for GAMs. It iterates between constructing a penalized working
@@ -372,6 +509,14 @@ P-spline
   jumps, second-order (default) penalizes curvature. P-splines are computationally efficient
   because the B-spline basis and the penalty matrix are both banded. Specified with `bs="ps"`
   in the formula.
+
+Partially linear model
+: The structural form used by `CausalGAM` with `method="partial"` for estimating the average
+  treatment effect. The outcome is decomposed as $Y = \theta T + g(X) + \varepsilon$, where
+  $\theta$ is the constant treatment effect, $g(X)$ is a nonparametric smooth of the
+  confounders, and $T$ is the treatment indicator. After partialling out $g(X)$ from both $Y$
+  and $T$ via **cross-fitting**, $\theta$ is estimated by regressing the outcome residuals on
+  the treatment residuals. See also **CausalGAM**, **double machine learning**.
 
 PAVA (Pool Adjacent Violators Algorithm)
 : An algorithm for isotonic regression that enforces monotonicity by iteratively merging
@@ -391,6 +536,15 @@ Penalty matrix
   \boldsymbol\beta^\top \mathbf{S} \boldsymbol\beta$. For a second-derivative penalty,
   $\mathbf{S}$ is the integrated squared second derivative of the basis functions. Larger
   $\lambda$ values penalize wiggliness more strongly.
+
+Pinball loss (check function)
+: The standard loss function for quantile regression:
+  $\rho_\tau(u) = u(\tau - \mathbf{1}[u < 0])$, where $\tau \in (0,1)$ is the target quantile.
+  It penalizes over- and under-prediction asymmetrically: residuals above zero cost
+  $(1 - \tau)|u|$ and residuals below zero cost $\tau|u|$. The conditional $\tau$-th quantile
+  is the minimizer of the expected pinball loss. Because the pinball loss has a
+  non-differentiable kink at zero, Whittaker approximates it with the smooth **ELF** loss
+  during fitting. See also **ELF loss**, **sigma calibration**, **quantile regression**.
 
 Poisson family
 : A response family for non-negative integer counts, assuming equidispersion (variance equals
@@ -476,6 +630,17 @@ Smoothing parameter ($\lambda$)
   When $\lambda = 0$, the smooth interpolates the data (no penalty). As $\lambda \to \infty$,
   the smooth shrinks to a straight line (maximum penalty). Estimated automatically by
   **REML**, **GCV**, **ML**, or **fREML**, or set manually via `sp=` in the formula.
+
+Soap film smooth (`bs="so"`)
+: A smooth for two-dimensional spatial data over irregular domains that may contain boundaries,
+  concavities, or interior holes. Standard 2-D smooths such as **TPRS** or **tensor product
+  smooth** treat the domain as convex and can leak information across geographic barriers (e.g.
+  two points on opposite banks of a narrow bay appear close in Euclidean distance but are far
+  apart within the domain). The soap film smooth avoids this by finite-element-discretizing the
+  actual domain — expressed as a list of boundary polygons — and penalizing thin-plate bending
+  energy only over paths reachable within the domain. Suitable for coastal, riverine, or any
+  geographically constrained data. Specified with `bs="so"` and boundary polygons plus interior
+  knots supplied via `xt=` in the formula. Available via `SoapFilm`.
 
 StreamingGAM
 : A GAM variant for online learning that accumulates sufficient statistics incrementally as
