@@ -346,15 +346,35 @@ class TPRS(SmoothBasis):
         return S
 
     def null_space_dimension(self) -> int:
-        """Return M = C(m-1+d, d), the dimension of the polynomial null space."""
+        """Return the dimension of the unpenalized polynomial null space.
+
+        The TPRS penalty is exactly zero on polynomials of total degree at
+        most `m - 1`, which span an `M`-dimensional null space with
+        `M = C(m - 1 + d, d)` (the number of monomials of degree
+        `<= m - 1` in `d` variables). These occupy the first `M` columns
+        of the basis matrix.
+
+        Returns
+        -------
+        int
+            The null-space dimension `M`.
+        """
         self._check_fitted()
         return self._M
 
     def identifiability_constraints(self) -> NDArray | None:
         """Return the sum-to-zero constraint row for the intercept.
 
-        Returns a `(1, k)` matrix whose product with the coefficient vector equals zero when the
-        smooth has mean zero over the training data.
+        When a TPRS term is combined with other terms sharing an
+        intercept, it must be constrained so its contribution has zero
+        mean over the training data to remain identifiable. The
+        constraint is `C @ beta = 0` where `C` is the column mean of the
+        training basis matrix, i.e. `colMeans(B_train) @ beta = 0`.
+
+        Returns
+        -------
+        NDArray
+            Constraint matrix of shape `(1, k)`.
         """
         self._check_fitted()
         B_train = self.basis_matrix(self._x_train)
@@ -364,12 +384,22 @@ class TPRS(SmoothBasis):
 
     @property
     def n_basis(self) -> int:
-        """Total number of basis functions k."""
+        """Total number of basis functions `k`.
+
+        Equal to the `k` argument supplied at construction, i.e. the
+        combined size of the polynomial null space (`M` columns) and the
+        truncated spline part (`k - M` columns).
+        """
         return self.k
 
     @property
     def is_fitted(self) -> bool:
-        """`True` after `fit()` has been called."""
+        """`True` after `fit()` has been called.
+
+        `basis_matrix()`, `penalty_matrix()`, and the convenience
+        properties (`d`, `eigenvalues`, etc.) all require the basis to
+        have been fitted first and raise `RuntimeError` otherwise.
+        """
         return self._fitted
 
     # ------------------------------------------------------------------
@@ -378,17 +408,46 @@ class TPRS(SmoothBasis):
 
     @property
     def d(self) -> int:
-        """Covariate dimension (set during `fit()`)."""
+        """Covariate dimension inferred from the training data.
+
+        Set during `fit()` from the number of columns of the (reshaped)
+        training covariates `x`; used to validate that new data passed to
+        `basis_matrix()` has a matching number of columns.
+        """
         self._check_fitted()
         return self._d
 
     @property
     def null_space_dim(self) -> int:
-        """Alias for `null_space_dimension()`."""
+        r"""Dimension of the unpenalized null space of the TPRS penalty.
+
+        This is a convenience property equivalent to calling `null_space_dimension()`.
+        For a thin plate regression spline of order $m$ on $d$ covariates, the null
+        space has dimension $M = \binom{m + d - 1}{d}$, corresponding to the polynomial
+        terms of degree less than $m$ that are left unpenalized.
+
+        Returns
+        -------
+        int
+            Number of null-space basis functions $M$.
+        """
         return self.null_space_dimension()
 
     @property
     def eigenvalues(self) -> NDArray:
-        """Eigenvalues of the projected kernel matrix (k - M values)."""
+        """Eigenvalues of the projected thin plate spline kernel matrix.
+
+        These are the `k - M` largest eigenvalues retained from the
+        eigendecomposition performed in `fit()`; they populate the
+        diagonal of the penalized block of `penalty_matrix()` and
+        determine how strongly each retained spline basis function is
+        penalized.
+
+        Returns
+        -------
+        NDArray
+            Array of shape `(k - M,)`, sorted in descending order and
+            clamped to be non-negative.
+        """
         self._check_fitted()
         return self._eigenvalues.copy()
