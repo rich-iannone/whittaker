@@ -92,7 +92,7 @@ The `FunctionalTerm` specifies:
 
 The estimated $\hat\beta(t)$ tells you how each point along the functional domain influences the
 response. Positive values at time $t$ mean that higher values of the curve at $t$ increase the
-response; negative values mean they decrease it.
+response while negative values mean they decrease it.
 
 ```{python}
 # Extract the estimated coefficient function with confidence intervals
