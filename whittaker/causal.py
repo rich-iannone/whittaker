@@ -278,22 +278,60 @@ class CausalGAM:
 
     @property
     def outcome(self) -> str:
+        """Name of the outcome variable `Y` used when constructing this model.
+
+        Returns
+        -------
+        str
+        """
         return self._outcome
 
     @property
     def treatment(self) -> str:
+        """Name of the treatment variable `D` used when constructing this model.
+
+        Returns
+        -------
+        str
+        """
         return self._treatment
 
     @property
     def confounders(self) -> list[str]:
+        """Names of the confounder variables `X` controlled for in the nuisance GAMs.
+
+        Returns a copy, so mutating the returned list does not affect the model.
+
+        Returns
+        -------
+        list[str]
+        """
         return list(self._confounders)
 
     @property
     def method(self) -> str:
+        """Structural form used for estimation.
+
+        Either `"partially_linear"` (constant ATE) or `"interactive"` (heterogeneous
+        treatment effects, enabling `.cate()`).
+
+        Returns
+        -------
+        str
+        """
         return self._method
 
     @property
     def is_fitted(self) -> bool:
+        """Whether `fit()` has been called successfully on this model.
+
+        Most other methods (`treatment_effect()`, `cate()`, `residuals()`, `summary()`)
+        raise `RuntimeError` if this is `False`.
+
+        Returns
+        -------
+        bool
+        """
         return self._fitted
 
     def fit(
@@ -538,7 +576,18 @@ class CausalGAM:
         return self._residuals_y.copy(), self._residuals_d.copy()
 
     def summary(self) -> str:
-        """Text summary of the causal GAM."""
+        """Build a human-readable text summary of the fitted causal GAM.
+
+        Reports the outcome, treatment, confounders, estimation method, number of
+        cross-fitting folds, and the treatment effect (ATE, standard error, confidence
+        interval, and p-value) from `treatment_effect()`. If `method="interactive"` and a
+        CATE model was successfully fit, notes that `.cate()` can be used for estimates.
+
+        Returns
+        -------
+        str
+            Multi-line summary text.
+        """
         self._check_fitted()
 
         te = self.treatment_effect()
