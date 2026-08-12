@@ -273,7 +273,17 @@ class TensorProductBasis(SmoothBasis):
 
     @property
     def n_basis(self) -> int:
-        """Total number of basis functions, the product of the marginal basis dimensions."""
+        """Total number of basis functions.
+
+        Equal to the product `k_1 * k_2 * ... * k_d` of the marginal basis dimensions, since
+        every combination of one marginal basis function from each dimension contributes one
+        column of the tensor product basis matrix.
+
+        Returns
+        -------
+        int
+            Total basis dimension.
+        """
         result = 1
         for m in self._marginals:
             result *= m.n_basis
@@ -281,7 +291,16 @@ class TensorProductBasis(SmoothBasis):
 
     @property
     def marginals(self) -> list[SmoothBasis]:
-        """The list of (fitted, after `fit()`) marginal basis objects."""
+        """The list of marginal basis objects, fitted after `fit()` is called.
+
+        Each marginal is fit independently to its own covariate column; their basis matrices are
+        combined via the row-wise Kronecker product to form `basis_matrix()`.
+
+        Returns
+        -------
+        list[SmoothBasis]
+            The marginal basis instances, one per covariate dimension.
+        """
         return self._marginals
 
 
@@ -567,7 +586,18 @@ class TensorInteractionBasis(SmoothBasis):
         return penalties
 
     def null_space_dimension(self) -> int:
-        """Return `0`: every retained coefficient lies in some marginal's penalty range space."""
+        """Return the dimension of the basis's unpenalized null space.
+
+        Because every marginal contributes only its penalty range space (the null-space
+        components, such as constants and linear terms, were discarded during `fit()`), every
+        retained coefficient direction is penalized by at least one of the matrices returned by
+        `penalty_matrices()`. This is always `0` for the pure-interaction basis.
+
+        Returns
+        -------
+        int
+            Always `0`.
+        """
         return 0
 
     def identifiability_constraints(self) -> NDArray | None:
@@ -599,7 +629,17 @@ class TensorInteractionBasis(SmoothBasis):
 
     @property
     def n_basis(self) -> int:
-        """Total number of basis functions, the product of the marginal range-space dimensions."""
+        """Total number of basis functions.
+
+        Equal to the product `r_1 * r_2 * ... * r_d` of the marginal *range-space* dimensions
+        (each marginal's basis dimension minus its null-space dimension), since main-effect
+        directions are projected out before the marginals are combined.
+
+        Returns
+        -------
+        int
+            Total basis dimension.
+        """
         self._check_fitted()
         result = 1
         for d in self._range_dims:
@@ -608,5 +648,15 @@ class TensorInteractionBasis(SmoothBasis):
 
     @property
     def marginals(self) -> list[SmoothBasis]:
-        """The list of (fitted, after `fit()`) marginal basis objects."""
+        """The list of marginal basis objects, fitted after `fit()` is called.
+
+        Each marginal is fit independently to its own covariate column; its basis matrix is then
+        projected onto its own penalty range space before being combined with the others via the
+        row-wise Kronecker product to form `basis_matrix()`.
+
+        Returns
+        -------
+        list[SmoothBasis]
+            The marginal basis instances, one per covariate dimension.
+        """
         return self._marginals
