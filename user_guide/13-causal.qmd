@@ -480,7 +480,7 @@ The `n_folds` parameter controls the bias-variance trade-off in cross-fitting:
 | Folds | Training fraction | Behavior |
 |-------|-------------------|----------|
 | 2 | 50% | More bias from weaker nuisance models |
-| 5 | 80% | Good default; balances bias and variance |
+| 5 | 80% | Good default: balances bias and variance |
 | 10 | 90% | Less bias, but more computation |
 
 Five folds is the default and works well in most settings. Increase to 10 if you have a large
