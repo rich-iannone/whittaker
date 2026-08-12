@@ -61,7 +61,7 @@ import numpy as np
 import altair as alt
 
 # --- Simulate heteroscedastic data ---
-rng = np.random.default_rng(42)
+rng = np.random.default_rng(23)
 n = 400
 x = rng.uniform(0, 6, n)
 # Variance increases linearly with x
@@ -127,7 +127,7 @@ q_lines = alt.Chart({"values": fan_records}).mark_line(strokeWidth=2).encode(
 )
 
 (scatter + q_lines).properties(
-    width=550, height=320,
+    width="container", height=320,
     title="Quantile GAM fan chart: heteroscedastic data",
 )
 ```
@@ -307,7 +307,7 @@ pts = alt.Chart(
 )
 
 (g_band + q_band + pts).properties(
-    width=550, height=320,
+    width="container", height=320,
     title="80% prediction intervals: Gaussian (blue) vs. quantile (red)",
 )
 ```
