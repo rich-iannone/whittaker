@@ -1,4 +1,4 @@
-"""Streaming / online GAMs.
+r"""Streaming / online GAMs.
 
 Provides `StreamingGAM` for incremental fitting of GAMs on data that arrives in batches. Instead of
 storing the full dataset, sufficient statistics (X'WX, X'Wz, and observation count) are accumulated
@@ -33,24 +33,29 @@ from whittaker.model_matrix import ModelMatrix, build_model_matrix, predict_matr
 
 @dataclass
 class StreamingSnapshot:
-    """A snapshot of streaming GAM state at a point in time.
+    r"""A snapshot of streaming GAM state at a point in time.
+
+    Appended to `StreamingGAM`'s history every time `solve()` is called, letting you track how
+    coefficients, smoothing parameters, and fit diagnostics evolve as more batches of data arrive.
+    Retrieved via `StreamingGAM.smoothing_history()`.
 
     Attributes
     ----------
     n_obs:
-        Total observations seen so far.
+        Total (possibly decayed, under sliding-window mode) observation count at the time of this
+        `solve()` call.
     n_batches:
-        Number of batches processed.
+        Number of batches processed so far.
     coefficients:
-        Current coefficient estimates.
+        Coefficient estimates at this solve.
     smoothing_params:
-        Current smoothing parameters.
+        Smoothing parameters used for this solve.
     edf_total:
-        Total effective degrees of freedom.
+        Total effective degrees of freedom at this solve.
     scale:
-        Estimated scale parameter.
+        Estimated scale (dispersion) parameter at this solve.
     deviance:
-        Current deviance estimate.
+        Accumulated (possibly decayed) deviance at this solve.
     """
 
     n_obs: int
@@ -63,11 +68,25 @@ class StreamingSnapshot:
 
 
 class StreamingGAM:
-    """Streaming / online GAM.
+    r"""Streaming / online GAM.
 
-    Fits a GAM incrementally by accumulating sufficient statistics across data batches. The model
-    structure (formula, basis dimensions, penalties) is fixed at initialisation from a small pilot
-    batch, and subsequent `partial_fit()` calls add data without storing the raw observations.
+    Fits a GAM incrementally by accumulating weighted sufficient statistics (`X'WX` and `X'Wz`)
+    across data batches, rather than storing and re-fitting on the full dataset each time. This makes
+    it suitable for data arriving continuously or in a stream too large to hold in memory at once:
+    the memory footprint depends only on the number of basis coefficients `p` (via a `p x p` matrix),
+    not on the number of observations seen. The model structure (formula, basis dimensions,
+    penalties) is fixed at initialisation from a small pilot batch, and subsequent `partial_fit()`
+    calls add data without storing the raw observations.
+
+    Two update modes are supported: **accumulate mode** (`decay=1.0`, the default), where every
+    batch contributes equally regardless of when it arrived, and **sliding-window mode**
+    (`decay < 1.0`), where older batches' contributions to the accumulated statistics are
+    exponentially downweighted, allowing the model to adapt to a slowly drifting data-generating
+    process.
+
+    Use `StreamingGAM` for large or continuously-arriving datasets where holding the full data in
+    memory (as ordinary `GAM` does) is impractical, or where the underlying relationship may drift
+    over time and old data should be forgotten.
 
     Parameters
     ----------
@@ -77,10 +96,46 @@ class StreamingGAM:
         Response distribution family. Defaults to `Gaussian()`.
     decay:
         Exponential decay factor for sliding window. `1.0` (default) means no decay (accumulate all
-        data equally). Values less than `1.0` downweight older batches.
+        data equally). Values less than `1.0` downweight older batches' sufficient statistics by a
+        factor of `decay` every time a new batch arrives.
     smoothing_params:
-        Fixed smoothing parameters. If `None`, estimated from the pilot batch and optionally
-        re-estimated on `solve()`.
+        Fixed smoothing parameters. If `None`, estimated from the pilot batch (via a one-off
+        ordinary `GAM` fit with REML) and optionally re-estimated later via `solve(reestimate_smoothing=True)`.
+
+    Notes
+    -----
+    Each `partial_fit()` call treats the incoming batch as one step of iteratively reweighted least
+    squares: given the current coefficients, it computes working responses `z` and IRLS weights `W`
+    for the batch, forms the batch's contribution to the weighted normal equations,
+
+    $$X_{\text{batch}}' W X_{\text{batch}}, \qquad X_{\text{batch}}' W z_{\text{batch}},$$
+
+    and adds these to the running totals (after applying the decay factor, if any, to the existing
+    totals). Calling `solve()` then solves the penalized normal equations
+
+    $$\left(\sum_{\text{batches}} X'WX + S_\lambda\right) \beta = \sum_{\text{batches}} X'Wz$$
+
+    via a Cholesky factorization, where `S_\lambda = \sum_j \lambda_j S_j` is the weighted sum of
+    penalty matrices. Because only the accumulated `p x p` matrix `X'WX` and length-`p` vector `X'Wz`
+    are retained, this scales to arbitrarily many observations at fixed memory cost in `p`.
+
+    Examples
+    --------
+    ```{python}
+    import numpy as np
+    from whittaker.streaming import StreamingGAM
+
+    rng = np.random.default_rng(0)
+    model = StreamingGAM("y ~ s(x)")
+
+    for _ in range(5):
+        x = rng.uniform(0, 1, 200)
+        y = np.sin(2 * np.pi * x) + rng.normal(scale=0.2, size=200)
+        model.partial_fit({"x": x, "y": y})
+
+    model.solve()
+    print(model.summary())
+    ```
     """
 
     def __init__(
@@ -170,16 +225,20 @@ class StreamingGAM:
         return list(self._smoothing_params)
 
     def partial_fit(self, data: InputData) -> StreamingGAM:
-        """Ingest a batch of data.
+        r"""Ingest a batch of data.
 
         On the first call, builds the model matrix structure (basis dimensions, penalties, knot
-        locations) from this batch. Subsequent calls accumulate sufficient statistics using the same
-        structure.
+        locations) from this batch via a pilot `GAM` fit, and initializes the coefficients and
+        smoothing parameters from that fit (unless fixed smoothing parameters were supplied).
+        Subsequent calls reuse this fixed structure: the batch's working response and IRLS weights
+        are computed using the *current* coefficients (from the most recent `solve()`, or the pilot
+        fit), and its contribution to the running `X'WX` / `X'Wz` sufficient statistics is added
+        (after applying the decay factor to existing totals, if `decay < 1.0`).
 
         Parameters
         ----------
         data:
-            Column-oriented batch data.
+            Column-oriented batch data containing the response and all covariates in `formula`.
 
         Returns
         -------
@@ -256,13 +315,20 @@ class StreamingGAM:
         self._initialised = True
 
     def solve(self, *, reestimate_smoothing: bool = False) -> StreamingGAM:
-        """Solve for coefficients from accumulated sufficient statistics.
+        r"""Solve for coefficients from accumulated sufficient statistics.
+
+        Forms the penalized normal equations `(X'WX + S_lambda) beta = X'Wz` from the currently
+        accumulated statistics and the current smoothing parameters, and solves them via a Cholesky
+        factorization (with a small ridge added for numerical stability). Also updates effective
+        degrees of freedom, the scale estimate, and appends a `StreamingSnapshot` to the fit history.
 
         Parameters
         ----------
         reestimate_smoothing:
             If `True`, re-estimate smoothing parameters from the current sufficient statistics using
-            GCV. Default `False` uses the current (pilot or fixed) smoothing parameters.
+            a GCV line search over each smoothing parameter in turn (coordinate-wise). Default
+            `False` uses the current (pilot or fixed) smoothing parameters. Ignored (has no effect)
+            if the model was constructed with fixed `smoothing_params`.
 
         Returns
         -------
@@ -368,14 +434,19 @@ class StreamingGAM:
         return best_sp
 
     def predict(self, new_data: InputData, *, se: bool = False) -> PredictionResult:
-        """Predict on new data.
+        r"""Predict on new data.
+
+        Builds the prediction design matrix using the fixed basis structure established at
+        initialisation, and forms the linear predictor and (via the family's inverse link) fitted
+        values from the current coefficients. Requires that `solve()` has been called at least once.
 
         Parameters
         ----------
         new_data:
             Column-oriented covariate data.
         se:
-            If `True`, compute standard errors.
+            If `True`, compute standard errors on the linear predictor scale from the Bayesian
+            posterior covariance implied by the current accumulated `X'WX` and smoothing parameters.
 
         Returns
         -------
