@@ -411,12 +411,28 @@ class CRS(SmoothBasis):
 
     @property
     def n_basis(self) -> int:
-        """Total number of basis functions k."""
+        """Total number of basis functions.
+
+        Equal to `k`, the number of knots, since the CRS basis uses the
+        full set of knot-value coefficients with no dropped columns.
+
+        Returns
+        -------
+        int
+            The basis dimension `k`.
+        """
         return self.k
 
     @property
     def is_fitted(self) -> bool:
-        """`True` after `fit()` has been called."""
+        """Whether the basis has been fitted.
+
+        Returns
+        -------
+        bool
+            `True` once `fit()` has been called and the knots, second-derivative
+            operator, and penalty matrix have been computed; `False` otherwise.
+        """
         return self._fitted
 
     # ------------------------------------------------------------------
@@ -425,7 +441,17 @@ class CRS(SmoothBasis):
 
     @property
     def knots(self) -> NDArray:
-        """Knot locations set during `fit()`."""
+        """Knot locations used by the fitted basis.
+
+        These are the `k` locations, placed at evenly-spaced quantiles of the
+        training data (or an evenly-spaced grid as a fallback), at which the
+        coefficient vector `beta` gives the spline's function values.
+
+        Returns
+        -------
+        NDArray
+            Strictly increasing knot locations, shape `(k,)`.
+        """
         self._check_fitted()
         return self._knots.copy()
 
