@@ -107,9 +107,33 @@ class CoxPH(Family):
 
     @property
     def ties(self) -> str:
+        """Tie-handling method used for the partial likelihood.
+
+        Returns
+        -------
+        str
+            Either `"breslow"` or `"efron"`, as set by the `ties` constructor argument.
+        """
         return self._ties
 
     def set_data(self, data: dict[str, NDArray]) -> None:
+        """Extract the event/censoring indicator from the fitting data.
+
+        Implements the family-specific version of `Family.set_data`. Looks up the column
+        named by the `status` constructor argument in `data` and stores it as the event
+        indicator used by `irls_update`, `deviance`, and `log_likelihood` to identify
+        which observations are actual events (`1`) versus right-censored (`0`).
+
+        Parameters
+        ----------
+        data
+            Mapping of column names to arrays, as passed to `GAM.fit()`.
+
+        Raises
+        ------
+        KeyError
+            If the status column is not present in `data`.
+        """
         if self._status_col not in data:
             available = ", ".join(sorted(data))
             raise KeyError(
@@ -119,18 +143,100 @@ class CoxPH(Family):
         self._event = np.asarray(data[self._status_col], dtype=float)
 
     def link(self, mu: NDArray) -> NDArray:
+        r"""Identity link, $\eta = \mu$.
+
+        `CoxPH` does not model a conventional conditional mean; `mu` is instead
+        identified with the linear predictor `eta`, so the link function is the
+        identity.
+
+        Parameters
+        ----------
+        mu
+            Linear predictor values (treated as `mu`), shape `(n,)`.
+
+        Returns
+        -------
+        NDArray
+            The input array, unchanged.
+        """
         return mu
 
     def link_inverse(self, eta: NDArray) -> NDArray:
+        r"""Inverse identity link, $\mu = \eta$.
+
+        Since `link` is the identity, its inverse is also the identity: the linear
+        predictor is returned unchanged as `mu`.
+
+        Parameters
+        ----------
+        eta
+            Linear predictor values, shape `(n,)`.
+
+        Returns
+        -------
+        NDArray
+            The input array, unchanged.
+        """
         return eta
 
     def link_derivative(self, mu: NDArray) -> NDArray:
+        r"""Derivative of the identity link, $g'(\mu) = 1$.
+
+        Since `link` and `link_inverse` are both the identity, the derivative is
+        constant `1` everywhere.
+
+        Parameters
+        ----------
+        mu
+            Conditional mean values, shape `(n,)`.
+
+        Returns
+        -------
+        NDArray
+            Array of ones with the same shape as `mu`.
+        """
         return np.ones_like(mu)
 
     def variance(self, mu: NDArray) -> NDArray:
+        r"""Variance function $V(\mu) = 1$.
+
+        `CoxPH` fits via the Cox partial likelihood rather than a GLM variance
+        function, so this returns a constant `1` for every observation; it exists only
+        to satisfy the `Family` interface and is not used by `irls_update`, which
+        supplies its own working weights directly from the partial-likelihood Hessian.
+
+        Parameters
+        ----------
+        mu
+            Conditional mean values, shape `(n,)`.
+
+        Returns
+        -------
+        NDArray
+            Array of ones with the same shape as `mu`.
+        """
         return np.ones_like(mu)
 
     def initialize(self, y: NDArray) -> NDArray:
+        """Store the observed survival times and seed the linear predictor at zero.
+
+        Implements the family-specific version of `Family.initialize`. Records the
+        sorted order of the observed times `y` (used throughout this file to walk risk
+        sets from latest to earliest time) and starts P-IRLS from `eta = 0` for every
+        observation, i.e. an initial hazard ratio of `exp(0) = 1` relative to the
+        baseline.
+
+        Parameters
+        ----------
+        y
+            Observed survival/censoring times, shape `(n,)`.
+
+        Returns
+        -------
+        NDArray
+            Array of zeros with the same shape as `y`, used as the initial linear
+            predictor.
+        """
         self._time = np.asarray(y, dtype=float)
         self._sort_idx = np.argsort(self._time)
         return np.zeros_like(y)
@@ -183,6 +289,45 @@ class CoxPH(Family):
         return pll
 
     def irls_update(self, y: NDArray, mu: NDArray, eta: NDArray) -> tuple[NDArray, NDArray]:
+        r"""Newton step for the Cox partial likelihood, supplying custom working values.
+
+        Implements the family-specific version of `Family.irls_update`. Rather than
+        deriving the working response and weights from `link`, `link_derivative`, and
+        `variance`, this computes the gradient $U(\eta)$ and diagonal Hessian $H(\eta)$
+        of the partial log-likelihood directly (via `_breslow_grad_hess` or
+        `_efron_grad_hess`, depending on `ties`), and forms a Newton update
+
+        $$
+        z = \eta + H(\eta)^{-1} U(\eta), \qquad W = \max(H(\eta), \epsilon),
+        $$
+
+        so that a weighted least-squares fit of `z` on `W` reproduces one
+        Newton-Raphson step on the partial log-likelihood. As a side effect, also
+        refreshes the Breslow estimate of the cumulative baseline hazard via
+        `_compute_baseline_hazard`, so that `baseline_hazard()` and
+        `survival_function()` reflect the current fit.
+
+        Parameters
+        ----------
+        y
+            Observed survival/censoring times, shape `(n,)` (unused directly; times
+            were captured by `initialize`).
+        mu
+            Current fitted values, identical to `eta` for this family, shape `(n,)`.
+        eta
+            Current linear predictor values, shape `(n,)`.
+
+        Returns
+        -------
+        tuple of NDArray
+            `(z, W)`, the pseudo-response and diagonal working-weight vector, each
+            shape `(n,)`.
+
+        Raises
+        ------
+        RuntimeError
+            If called before `set_data()` has supplied the event indicator.
+        """
         if self._event is None:
             raise RuntimeError("CoxPH requires set_data() before fitting.")
 
@@ -278,24 +423,128 @@ class CoxPH(Family):
         return gradient_s, hess_diag_s
 
     def deviance(self, y: NDArray, mu: NDArray, *, weights: NDArray | None = None) -> float:
+        r"""Total deviance $D = -2\,\ell(\beta)$ based on the Cox partial log-likelihood.
+
+        Implements the family-specific version of `Family.deviance`. Since there is no
+        saturated-model decomposition for the partial likelihood, this simply returns
+        minus twice the partial log-likelihood evaluated at the current linear
+        predictor, which `GAM.summary()` reports as the model deviance.
+
+        Parameters
+        ----------
+        y
+            Observed survival/censoring times, shape `(n,)` (unused; retained for
+            interface compatibility).
+        mu
+            Current linear predictor values (`eta`), shape `(n,)`.
+        weights
+            Unused; `CoxPH` does not support prior weights.
+
+        Returns
+        -------
+        float
+            $-2\ell(\beta)$, the deviance.
+        """
         eta = mu
         pll = self._partial_log_likelihood(eta)
         return -2.0 * pll
 
     def unit_deviance(self, y: NDArray, mu: NDArray) -> NDArray:
+        """Per-observation deviance placeholder (not decomposable for a partial likelihood).
+
+        Implements the family-specific version of `Family.unit_deviance`. The Cox
+        partial log-likelihood does not decompose into independent per-observation
+        contributions the way an ordinary GLM deviance does, so this returns an array
+        of ones purely to satisfy the `Family` interface; use `deviance` or
+        `log_likelihood` for the actual fit statistics.
+
+        Parameters
+        ----------
+        y
+            Observed survival/censoring times, shape `(n,)`.
+        mu
+            Current linear predictor values, shape `(n,)`.
+
+        Returns
+        -------
+        NDArray
+            Array of ones with the same shape as `y`.
+        """
         return np.ones_like(y)
 
     def log_likelihood(
         self, y: NDArray, mu: NDArray, scale: float, *, weights: NDArray | None = None
     ) -> float:
+        r"""Cox partial log-likelihood $\ell(\beta)$ at the current linear predictor.
+
+        Implements the family-specific version of `Family.log_likelihood`. Delegates to
+        `_partial_log_likelihood`, which sums $\eta_i - \log \sum_{j \in R(t_i)} e^{\eta_j}$
+        over the observed events, using the Breslow or Efron tie-handling scheme
+        selected by `ties`.
+
+        Parameters
+        ----------
+        y
+            Observed survival/censoring times, shape `(n,)` (unused; retained for
+            interface compatibility).
+        mu
+            Current linear predictor values (`eta`), shape `(n,)`.
+        scale
+            Unused; `CoxPH` has no free dispersion parameter (see `scale_known`).
+        weights
+            Unused; `CoxPH` does not support prior weights.
+
+        Returns
+        -------
+        float
+            The partial log-likelihood $\ell(\beta)$.
+        """
         eta = mu
         return self._partial_log_likelihood(eta)
 
     @property
     def scale_known(self) -> bool:
+        """Whether the dispersion parameter is fixed rather than estimated.
+
+        Returns
+        -------
+        bool
+            Always `True`: the Cox partial likelihood has no free dispersion (scale)
+            parameter, so `GAM.fit()` does not estimate one for this family.
+        """
         return True
 
     def simulate(self, mu: NDArray, scale: float, rng: object) -> NDArray:
+        r"""Simulate survival times by inverting the fitted cumulative baseline hazard.
+
+        Implements the family-specific version of `Family.simulate`. Draws
+        $u \sim \mathrm{Uniform}(0, 1)$ for each observation and solves for the target
+        cumulative baseline hazard $H_0(t) = -\log(u) / e^{\eta}$ implied by the
+        proportional-hazards model, then looks up the smallest fitted baseline event
+        time whose cumulative baseline hazard (from `baseline_hazard()`) meets or
+        exceeds that target. Observations whose target exceeds the largest observed
+        cumulative hazard are assigned the last baseline time.
+
+        Parameters
+        ----------
+        mu
+            Current linear predictor values (`eta`), shape `(n,)`.
+        scale
+            Unused; `CoxPH` has no free dispersion parameter.
+        rng
+            A `numpy.random.Generator` instance used to draw the uniform variates.
+
+        Returns
+        -------
+        NDArray
+            Simulated survival times, shape `(n,)`.
+
+        Raises
+        ------
+        RuntimeError
+            If called before the model has been fitted (so no baseline hazard is
+            available).
+        """
         if self._baseline_cumhaz is None:
             raise RuntimeError("Model must be fitted before simulation.")
         eta = mu
@@ -347,11 +596,51 @@ class CoxPH(Family):
             self._baseline_cumhaz = np.array(cumhaz_values)
 
     def baseline_hazard(self) -> tuple[NDArray, NDArray]:
+        r"""Breslow estimate of the cumulative baseline hazard $H_0(t)$.
+
+        Returns the step-function estimate of $H_0(t) = \int_0^t h_0(u)\, du$
+        evaluated at each observed event time, computed by `_compute_baseline_hazard`
+        from the most recent linear predictor seen during fitting.
+
+        Returns
+        -------
+        tuple of NDArray
+            `(times, cumhaz)`: the sorted unique event times and the corresponding
+            cumulative baseline hazard values, each shape `(n_events,)`.
+
+        Raises
+        ------
+        RuntimeError
+            If the model has not yet been fitted, so no baseline hazard exists.
+        """
         if self._baseline_times is None or self._baseline_cumhaz is None:
             raise RuntimeError("Baseline hazard not computed. Fit the model first.")
         return self._baseline_times.copy(), self._baseline_cumhaz.copy()
 
     def survival_function(self, eta: NDArray) -> NDArray:
+        r"""Fitted survival probability $S(t \mid x) = \exp(-H_0(t)\, e^{\eta})$ at the last event time.
+
+        Combines the given linear predictor with the final value of the Breslow
+        cumulative baseline hazard (i.e. $H_0$ evaluated at the largest observed event
+        time) to give the implied survival probability for each observation at that
+        time, following the proportional-hazards relationship
+        $S(t \mid x) = S_0(t)^{\exp(\eta)}$.
+
+        Parameters
+        ----------
+        eta
+            Linear predictor values, shape `(n,)`.
+
+        Returns
+        -------
+        NDArray
+            Fitted survival probabilities at the last observed event time, shape `(n,)`.
+
+        Raises
+        ------
+        RuntimeError
+            If the model has not yet been fitted, so no baseline hazard exists.
+        """
         if self._baseline_cumhaz is None:
             raise RuntimeError("Baseline hazard not computed. Fit the model first.")
         exp_eta = np.exp(np.clip(eta, -_ETA_CLIP, _ETA_CLIP))
