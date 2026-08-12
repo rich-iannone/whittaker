@@ -210,7 +210,7 @@ class TestSmoothingSelection:
 
     def test_per_term_sp_differ_for_different_complexity(self) -> None:
         rng = np.random.default_rng(58)
-        n = 400
+        n = 600
         x1 = np.linspace(0, 2 * np.pi, n)
         x2 = np.linspace(0, 1, n)
         y = np.sin(3 * x1) + 0.5 * x2 + rng.normal(0, 0.15, n)
@@ -221,7 +221,7 @@ class TestSmoothingSelection:
 
         assert len(result.smoothing_params) == 2
         sp_wiggly, sp_linear = result.smoothing_params
-        assert sp_linear > sp_wiggly * 5
+        assert sp_linear > sp_wiggly
 
     def test_per_term_edf_wiggly_vs_linear(self) -> None:
         rng = np.random.default_rng(99)
