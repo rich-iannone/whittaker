@@ -149,7 +149,7 @@ band = alt.Chart({"values": fit_data}).mark_area(
 ).encode(x="x:Q", y="lower:Q", y2="upper:Q")
 
 (band + points + line).properties(
-    width=550, height=300,
+    width="container", height=300,
     title="Gaussian GAM: y ~ s(x)"
 )
 ```
@@ -238,7 +238,7 @@ true_line_pois = alt.Chart({"values": true_pois}).mark_line(
 ).encode(x="x:Q", y="mu:Q")
 
 (band_pois + points_pois + line_pois + true_line_pois).properties(
-    width=550, height=300,
+    width="container", height=300,
     title="Poisson GAM: count ~ s(x)"
 )
 ```
@@ -310,7 +310,7 @@ band_bin = alt.Chart({"values": fit_data_bin}).mark_area(
 ).encode(x="x:Q", y="lower:Q", y2="upper:Q")
 
 (band_bin + points_bin + line_bin).properties(
-    width=550, height=300,
+    width="container", height=300,
     title="Binomial GAM: binary outcome ~ s(x)"
 )
 ```
@@ -381,7 +381,7 @@ line_gamma = alt.Chart(
 ).mark_line(color="firebrick", strokeWidth=2).encode(x="x:Q", y="fit:Q")
 
 (points_gamma + line_gamma).properties(
-    width=500, height=300,
+    width="container", height=300,
     title="Gamma GAM: fitted mean"
 )
 ```
@@ -456,7 +456,7 @@ line_nb = alt.Chart(
 ).mark_line(color="darkorange", strokeWidth=2).encode(x="x:Q", y="fit:Q")
 
 (points_nb + line_nb).properties(
-    width=500, height=300,
+    width="container", height=300,
     title="Negative Binomial GAM: fitted rate"
 )
 ```
@@ -516,7 +516,7 @@ line_beta = alt.Chart(
 ).mark_line(color="darkviolet", strokeWidth=2).encode(x="x:Q", y="fit:Q")
 
 (points_beta + line_beta).properties(
-    width=500, height=300,
+    width="container", height=300,
     title="Beta GAM: fitted mean proportion"
 )
 ```
@@ -608,7 +608,7 @@ line_tw = alt.Chart(
 ).mark_line(color="firebrick", strokeWidth=2).encode(x="x:Q", y="fit:Q")
 
 (points_tw + line_tw).properties(
-    width=500, height=300,
+    width="container", height=300,
     title="Tweedie GAM: fitted mean with zero mass"
 )
 ```
