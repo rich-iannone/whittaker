@@ -1,4 +1,4 @@
-"""Inverse Gaussian family with log link."""
+r"""Inverse Gaussian family with log link."""
 
 from __future__ import annotations
 
@@ -11,15 +11,67 @@ _EPS = np.finfo(float).eps
 
 
 class InverseGaussian(Family):
-    """Inverse Gaussian family with log link.
+    r"""Inverse Gaussian family with log link.
 
-    For the Inverse Gaussian family:
+    The Inverse Gaussian family models strictly positive, continuous responses whose variance
+    grows even faster than in the Gamma case, producing heavier right tails. It arises naturally
+    as a first-passage-time distribution (e.g. the time for a diffusion process to reach a
+    threshold) and is a common choice for lifetime, duration, and other highly skewed positive
+    data. `InverseGaussian` is the Tweedie special case with variance power `p = 3` (compare
+    `Tweedie` and `tw()`), implemented directly here for exact deviance and log-likelihood
+    computations rather than the saddlepoint approximation used by the general `Tweedie` family.
+    The log link is used for the same reasons as in `Gamma`: it keeps fitted values positive and
+    gives coefficients a multiplicative interpretation.
 
-    - Link: g(μ) = log(μ)
-    - Variance function: V(μ) = μ³
-    - Deviance: Σ (y − μ)² / (μ² y)
+    Parameters
+    ----------
+    None
+        `InverseGaussian` takes no constructor arguments. The dispersion parameter `phi` is
+        estimated from the data during fitting (see `scale_known`).
 
-    This is the Tweedie special case with variance power p = 3.
+    Notes
+    -----
+    The link is the natural logarithm:
+
+    $$
+    g(\mu) = \log(\mu)
+    $$
+
+    The variance function grows with the cube of the mean:
+
+    $$
+    V(\mu) = \mu^{3},
+    $$
+
+    making this family appropriate when large means are associated with disproportionately
+    large variability. The deviance is
+
+    $$
+    D(y, \hat\mu) = \sum_i \frac{(y_i - \hat\mu_i)^2}{\hat\mu_i^2\, y_i} .
+    $$
+
+    Examples
+    --------
+    Fit a GAM to heavy-tailed positive data with a smooth trend:
+
+    ```{python}
+    import numpy as np
+    import whittaker as wk
+
+    rng = np.random.default_rng(0)
+    n = 200
+    x = np.linspace(0, 2 * np.pi, n)
+    mu = np.exp(1.0 + 0.4 * np.sin(x))
+    scale = 0.5
+    lam = mu / scale
+    y = rng.wald(mu, lam)
+
+    data = {"x": x, "y": y}
+
+    model = wk.GAM("y ~ s(x)", family=wk.InverseGaussian())
+    model.fit(data, method="REML")
+    print(model.summary())
+    ```
     """
 
     def link(self, mu: NDArray) -> NDArray:
