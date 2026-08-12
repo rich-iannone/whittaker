@@ -81,25 +81,111 @@ class Beta(Family):
         self._phi = phi
 
     def link(self, mu: NDArray) -> NDArray:
+        r"""Apply the logit link: $\eta = \log(\mu / (1-\mu))$.
+
+        Parameters
+        ----------
+        mu
+            Conditional mean values, shape `(n,)`; clipped to `(0, 1)` before transforming.
+
+        Returns
+        -------
+        NDArray
+            Linear predictor (log-odds) values, shape `(n,)`.
+        """
         return logit(np.clip(mu, _EPS, 1.0 - _EPS))
 
     def link_inverse(self, eta: NDArray) -> NDArray:
+        r"""Apply the inverse logit link (logistic sigmoid): $\mu = 1 / (1 + e^{-\eta})$.
+
+        Parameters
+        ----------
+        eta
+            Linear predictor (log-odds) values, shape `(n,)`.
+
+        Returns
+        -------
+        NDArray
+            Conditional mean values, shape `(n,)`, always in `(0, 1)`.
+        """
         return expit(eta)
 
     def link_derivative(self, mu: NDArray) -> NDArray:
+        r"""Derivative of the logit link: $g'(\mu) = 1 / (\mu(1-\mu))$.
+
+        Parameters
+        ----------
+        mu
+            Conditional mean values, shape `(n,)`; clipped away from `0` and `1`.
+
+        Returns
+        -------
+        NDArray
+            Derivative values, shape `(n,)`.
+        """
         mu_c = np.clip(mu, _EPS, 1.0 - _EPS)
         return 1.0 / (mu_c * (1.0 - mu_c))
 
     def variance(self, mu: NDArray) -> NDArray:
+        r"""Beta variance function: $V(\mu) = \mu(1-\mu) / (1+\phi)$ up to the `1+phi` scaling.
+
+        This method returns the mean-dependent part $\mu(1-\mu)$; the precision-dependent
+        scaling by `1/(1+phi)` is folded into the working weights elsewhere in the fitting
+        loop.
+
+        Parameters
+        ----------
+        mu
+            Conditional mean values, shape `(n,)`.
+
+        Returns
+        -------
+        NDArray
+            Variance values $\mu(1-\mu)$, shape `(n,)`.
+        """
         mu_c = np.clip(mu, _EPS, 1.0 - _EPS)
         return mu_c * (1.0 - mu_c)
 
     def unit_deviance(self, y: NDArray, mu: NDArray) -> NDArray:
+        r"""Per-observation Beta deviance contributions.
+
+        Computes a Binomial-like deviance form
+        $d_i = 2 \left[ y_i \log(y_i/\hat\mu_i) + (1-y_i)\log((1-y_i)/(1-\hat\mu_i)) \right]$,
+        used as a convenient goodness-of-fit measure on the `(0, 1)` scale.
+
+        Parameters
+        ----------
+        y
+            Observed response values in `(0, 1)`, shape `(n,)`.
+        mu
+            Fitted conditional mean values, shape `(n,)`.
+
+        Returns
+        -------
+        NDArray
+            Per-observation deviance contributions, shape `(n,)`.
+        """
         y_c = np.clip(y, _EPS, 1.0 - _EPS)
         mu_c = np.clip(mu, _EPS, 1.0 - _EPS)
         return 2.0 * (y_c * np.log(y_c / mu_c) + (1.0 - y_c) * np.log((1.0 - y_c) / (1.0 - mu_c)))
 
     def deviance(self, y: NDArray, mu: NDArray, *, weights: NDArray | None = None) -> float:
+        r"""Total Beta deviance, the (weighted) sum of `unit_deviance`.
+
+        Parameters
+        ----------
+        y
+            Observed response values in `(0, 1)`, shape `(n,)`.
+        mu
+            Fitted conditional mean values, shape `(n,)`.
+        weights
+            Optional prior weights, shape `(n,)`.
+
+        Returns
+        -------
+        float
+            The total (weighted) deviance.
+        """
         d = self.unit_deviance(y, mu)
         if weights is not None:
             d = weights * d
@@ -108,6 +194,28 @@ class Beta(Family):
     def log_likelihood(
         self, y: NDArray, mu: NDArray, scale: float, *, weights: NDArray | None = None
     ) -> float:
+        r"""Beta log-likelihood parameterized by mean `mu` and precision `phi`.
+
+        The precision used is the fixed `phi` supplied at construction if set, otherwise
+        `1 / scale`. Each observation's log-density is evaluated using shape parameters
+        $(a, b) = (\mu \phi, (1-\mu)\phi)$.
+
+        Parameters
+        ----------
+        y
+            Observed response values in `(0, 1)`, shape `(n,)`.
+        mu
+            Fitted conditional mean values, shape `(n,)`.
+        scale
+            Used to derive `phi = 1/scale` when no fixed `phi` was supplied at construction.
+        weights
+            Optional prior weights, shape `(n,)`.
+
+        Returns
+        -------
+        float
+            The total log-likelihood.
+        """
         phi = self._phi if self._phi is not None else 1.0 / max(scale, _EPS)
         mu_c = np.clip(mu, _EPS, 1.0 - _EPS)
         y_c = np.clip(y, _EPS, 1.0 - _EPS)
@@ -120,9 +228,31 @@ class Beta(Family):
 
     @property
     def scale_known(self) -> bool:
+        """Whether the precision parameter `phi` is fixed rather than estimated.
+
+        Returns `True` when a fixed `phi` was supplied at construction, and `False` when
+        `phi` is `None` and must be estimated from the data during fitting. This determines
+        whether `GAM.fit()` treats `phi` as a nuisance parameter to be estimated.
+        """
         return self._phi is not None
 
     def simulate(self, mu: NDArray, scale: float, rng: object) -> NDArray:
+        """Simulate Beta-distributed response values with mean `mu` and precision `phi`.
+
+        Parameters
+        ----------
+        mu
+            Mean (fitted values), shape `(n,)`.
+        scale
+            Used to derive `phi = 1/scale` when no fixed `phi` was supplied at construction.
+        rng
+            A `numpy.random.Generator` instance.
+
+        Returns
+        -------
+        NDArray
+            Simulated response values in `(0, 1)`, shape `(n,)`.
+        """
         phi = self._phi if self._phi is not None else 1.0 / max(scale, _EPS)
         mu_c = np.clip(mu, _EPS, 1.0 - _EPS)
         a = mu_c * phi
@@ -130,6 +260,21 @@ class Beta(Family):
         return rng.beta(a, b)
 
     def initialize(self, y: NDArray) -> NDArray:
+        """Starting values for `mu`: `y` clipped strictly inside `(0, 1)`.
+
+        Since the logit link is undefined at `0` and `1`, values are clipped to `[0.01, 0.99]`
+        to avoid infinite linear predictors on the first P-IRLS iteration.
+
+        Parameters
+        ----------
+        y
+            Observed response values in `(0, 1)`, shape `(n,)`.
+
+        Returns
+        -------
+        NDArray
+            Starting values for `mu`, shape `(n,)`.
+        """
         return np.clip(y, 0.01, 0.99)
 
     def __repr__(self) -> str:
