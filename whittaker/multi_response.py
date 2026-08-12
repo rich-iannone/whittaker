@@ -1,4 +1,4 @@
-"""Multi-response GAMs.
+r"""Multi-response GAMs.
 
 Fits multiple response variables jointly, optionally sharing smooth terms across responses and
 modeling residual correlations. Each response gets its own GAM, but shared smooths use the same
@@ -28,14 +28,19 @@ from whittaker.gam import GAM, PredictionResult
 
 @dataclass
 class MultiResponseResult:
-    """Prediction result for multiple responses.
+    r"""Prediction result for multiple responses.
+
+    Returned by `MultiResponseGAM.predict()`. Behaves like a dict keyed by response name (via
+    `__getitem__`) and iterates over response names (via `__iter__`), while retaining the ordered
+    list of responses for convenience.
 
     Attributes
     ----------
     predictions:
-        Dict mapping response name to its `PredictionResult`.
+        Dict mapping response name to its `PredictionResult` (values, optional standard errors, and
+        linear predictor) from that response's individual `GAM`.
     responses:
-        List of response names (ordered).
+        List of response names (ordered), matching the order passed to `MultiResponseGAM`.
     """
 
     predictions: dict[str, PredictionResult]
@@ -50,14 +55,20 @@ class MultiResponseResult:
 
 @dataclass
 class ResidualCorrelation:
-    """Estimated residual correlation structure.
+    r"""Estimated residual correlation structure.
+
+    Returned by `MultiResponseGAM.residual_correlation()` when the model was fit with
+    `correlation="unstructured"`. Holds the empirical residual covariance and correlation matrices
+    across the `k` jointly modeled responses, estimated from each response's fitted-model residuals.
 
     Attributes
     ----------
     covariance:
-        Residual covariance matrix (k x k) where k = number of responses.
+        Residual covariance matrix (`k x k`) where `k` = number of responses, computed as
+        `R'R / (n - 1)` where `R` is the `(n, k)` matrix of residuals (observed minus fitted, one
+        column per response).
     correlation:
-        Residual correlation matrix (k x k).
+        Residual correlation matrix (`k x k`), the covariance matrix rescaled to unit diagonal.
     responses:
         Response names (ordering matches matrix rows/columns).
     """
@@ -80,25 +91,68 @@ class ResidualCorrelation:
 
 
 class MultiResponseGAM:
-    """Multi-response GAM.
+    r"""Multi-response GAM.
 
-    Fits multiple response variables jointly. Smooth terms can be shared across responses (same
-    basis, same coefficients) or response-specific.
+    Fits multiple response variables jointly against a common set of covariates, optionally sharing
+    smooth terms (same basis and formula structure, though each response still gets its own
+    coefficients) and estimating the residual correlation between responses. Internally, each
+    response is fit as its own `GAM` using the shared formula plus any response-specific additional
+    terms; what makes this a genuinely multivariate model rather than just several independent fits
+    is the optional joint residual covariance structure, which is useful for understanding how
+    responses co-vary after accounting for the shared covariates, and for joint (GLS-style)
+    prediction via `joint_predict()`.
+
+    Use `MultiResponseGAM` when you have several related outcomes measured on the same units (e.g.
+    multiple biomarkers, or several pollutant concentrations) that likely share similar covariate
+    relationships and whose residuals may be correlated.
 
     Parameters
     ----------
     responses:
-        List of response variable names.
+        List of response variable names (at least two).
     formula:
-        Shared formula applied to all responses (e.g. `"s(x1) + s(x2)"`). The response side is
-        ignored so use `responses` to specify responses.
+        Shared formula applied to all responses (e.g. `"s(x1) + s(x2)"`). The response side (before
+        `~`, if present) is ignored; use `responses` to specify the response variables.
     response_formulas:
         Dict mapping response name to a response-specific formula string (covariates only, e.g.,
-        `{"y1": "s(x3)"}`) added on top of the shared formula.
+        `{"y1": "s(x3)"}`) added on top of the shared formula for that response only.
     family:
         Response distribution family (applied to all responses). Defaults to `Gaussian()`.
     correlation:
-        Residual correlation structure: `"independent"` (default) or `"unstructured"`.
+        Residual correlation structure: `"independent"` (default), which fits each response's `GAM`
+        independently with no cross-response covariance modeling, or `"unstructured"`, which
+        additionally estimates a full `k x k` residual covariance matrix from the fitted residuals.
+
+    Notes
+    -----
+    Under `correlation="unstructured"`, after each response's GAM is fit, the residual matrix
+    `R \in \mathbb{R}^{n \times k}` (columns are `y_j - \hat y_j` for each response `j`) is used to
+    estimate the residual covariance,
+
+    $$\hat\Sigma = \frac{R^\top R}{n - 1},$$
+
+    and the corresponding correlation matrix by rescaling to unit diagonal. This does not feed back
+    into how the individual response GAMs are fit (each is still fit marginally), but it is used by
+    `joint_predict()` to report a joint covariance alongside the stacked mean predictions, and by
+    `residual_correlation()` for diagnosing cross-response dependence.
+
+    Examples
+    --------
+    ```{python}
+    import numpy as np
+    from whittaker.multi_response import MultiResponseGAM
+
+    rng = np.random.default_rng(0)
+    n = 400
+    x = rng.uniform(0, 1, n)
+    shared = np.sin(2 * np.pi * x)
+    y1 = shared + rng.normal(scale=0.2, size=n)
+    y2 = 0.5 * shared + rng.normal(scale=0.2, size=n)
+
+    model = MultiResponseGAM(["y1", "y2"], "s(x)", correlation="unstructured")
+    model.fit({"x": x, "y1": y1, "y2": y2})
+    print(model.residual_correlation())
+    ```
     """
 
     def __init__(
@@ -156,16 +210,20 @@ class MultiResponseGAM:
         method: str = "REML",
         select: bool = False,
     ) -> MultiResponseGAM:
-        """Fit the multi-response GAM.
+        r"""Fit the multi-response GAM.
+
+        Fits one `GAM` per response, using the shared formula plus that response's entry (if any) in
+        `response_formulas`. If `correlation="unstructured"`, also estimates the residual covariance
+        and correlation matrices across responses from the fitted residuals.
 
         Parameters
         ----------
         data:
             Column-oriented data containing all response and covariate columns.
         method:
-            Smoothing parameter selection method.
+            Smoothing parameter selection method applied to every response's `GAM`.
         select:
-            Enable variable selection.
+            Enable double-penalty variable selection for every response's `GAM`.
 
         Returns
         -------
@@ -217,14 +275,17 @@ class MultiResponseGAM:
         *,
         se: bool = False,
     ) -> MultiResponseResult:
-        """Predict all responses on new data.
+        r"""Predict all responses on new data.
+
+        Predicts each response's fitted `GAM` independently on the same covariate data, packaging
+        the results into a single `MultiResponseResult`.
 
         Parameters
         ----------
         new_data:
             Column-oriented covariate data.
         se:
-            If `True`, include standard errors.
+            If `True`, include standard errors for each response's linear predictor.
 
         Returns
         -------
