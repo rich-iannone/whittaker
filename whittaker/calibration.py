@@ -1,4 +1,4 @@
-"""Sigma calibration for quantile GAMs (Fasiolo et al. 2021)."""
+r"""Sigma calibration for quantile GAMs (Fasiolo et al. 2021)."""
 
 from __future__ import annotations
 
@@ -20,12 +20,20 @@ def calibrate_sigma(
     method: str = "GCV",
     seed: int | None = None,
 ) -> float:
-    """Find the ELF bandwidth sigma that minimises out-of-sample ELF loss.
+    r"""Find the ELF bandwidth sigma that minimises out-of-sample ELF loss.
 
-    Uses K-fold cross-validation: for each candidate sigma, fits on K-1 folds, predicts on the
-    held-out fold, and evaluates the pinball loss (tau-quantile check loss). The sigma with the
-    lowest total CV loss is
-    returned.
+    The quantile family used by `QuantileGAM` and `GAM` with quantile loss replaces the
+    non-differentiable check function with a smooth "extended log-F" (ELF) surrogate controlled by a
+    bandwidth `sigma`. Too large a `sigma` over-smooths the check loss and biases the fitted
+    quantile; too small a `sigma` makes the surrogate nearly non-differentiable again and can
+    destabilize IRLS. `calibrate_sigma` selects `sigma` empirically by K-fold cross-validation: for
+    each candidate value, the model is fit on `K - 1` folds, predictions are made on the held-out
+    fold, and the true (non-smoothed) pinball loss
+
+    $$\rho_\tau(y - \hat q_\tau) = (y - \hat q_\tau)\,(\tau - \mathbb{1}[y < \hat q_\tau])$$
+
+    is accumulated across folds. The sigma minimizing total out-of-sample pinball loss is refined
+    with a second, finer grid search around the best value from the coarse grid.
 
     Parameters
     ----------
@@ -38,10 +46,12 @@ def calibrate_sigma(
     n_folds:
         Number of CV folds.
     sigma_values:
-        Candidate sigma values to evaluate.  If `None`, a log-spaced grid from
-        `0.01 * sd(y)` to `2 * sd(y)` is used.
+        Candidate sigma values to evaluate. If `None`, a log-spaced grid of 10 values from
+        `0.01 * sd(y)` to `2 * sd(y)` is used, followed by a refinement grid around the best value.
+        If an explicit grid is passed, no refinement step is performed.
     method:
-        Smoothing parameter selection method (`"GCV"`, `"REML"`, `"ML"`).
+        Smoothing parameter selection method used when fitting each candidate model (`"GCV"`,
+        `"REML"`, `"ML"`).
     seed:
         Random seed for fold assignment.
 
@@ -49,6 +59,21 @@ def calibrate_sigma(
     -------
     float
         Calibrated sigma value (the one minimising CV pinball loss).
+
+    Examples
+    --------
+    ```{python}
+    import numpy as np
+    from whittaker.calibration import calibrate_sigma
+
+    rng = np.random.default_rng(0)
+    n = 400
+    x = rng.uniform(0, 1, n)
+    y = np.sin(2 * np.pi * x) + rng.normal(scale=0.2 + 0.3 * x, size=n)
+
+    best_sigma = calibrate_sigma("y ~ s(x)", {"x": x, "y": y}, tau=0.9, n_folds=5, seed=0)
+    print(round(best_sigma, 4))
+    ```
     """
     arrays = prepare_data(data)
     rng = np.random.default_rng(seed)
