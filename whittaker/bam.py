@@ -616,9 +616,14 @@ class BigGAM(GAM):
             block = block_map.get((cs, ce))
             if block is not None:
                 X_j = self._expand_block_columns(block)
-            elif dm.parametric_cols is not None and ce <= dm.n_param_cols:
+            elif dm.parametric_cols is not None and ce <= dm.n_param_cols:  # pragma: no cover
+                # Defensive fallback: `dm.blocks` and `dm.smooth_infos` are always built as a 1:1
+                # pair with matching (col_start, col_end) ranges in
+                # `build_discretized_model_matrix`, so every smooth's columns are always found via
+                # `block_map` above. This branch guards against a hypothetical future change that
+                # breaks that invariant; it is unreachable through the current public API.
                 X_j = dm.parametric_cols[:, cs:ce]
-            else:
+            else:  # pragma: no cover
                 X_j = np.zeros((dm.n_obs, ce - cs))
 
             stat, ref_df, pval = _smooth_test(beta_j, V_j, X_j, edf_j)
