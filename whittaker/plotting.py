@@ -15,7 +15,7 @@ if TYPE_CHECKING:
 def _check_altair() -> None:
     try:
         import altair as alt  # noqa: F401
-    except ImportError as exc:
+    except ImportError as exc:  # pragma: no cover - exercised only without the optional dep
         raise ImportError(
             "Plotting requires the 'altair' optional dependency. "
             "Install it with: pip install 'whittaker[altair]'"
