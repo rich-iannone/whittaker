@@ -1,4 +1,4 @@
-"""Altair-based plotting for fitted GAM objects."""
+r"""Altair-based plotting for fitted GAM objects."""
 
 from __future__ import annotations
 
@@ -377,14 +377,23 @@ def check(
     model: GAM,
     plots: tuple[str, ...] | list[str] | None = None,
 ) -> list[alt.Chart]:
-    """Produce GAM diagnostic plots.
+    r"""Produce GAM diagnostic plots.
 
-    Returns a list of individual full-width Altair charts. Available plots (selected via `plots=`):
+    Provides the standard suite of residual diagnostics used to assess GAM fit quality, analogous to
+    `mgcv::gam.check()` in R. Rather than a single composite figure, each requested diagnostic is
+    returned as its own full-width Altair chart, so callers can lay them out, select a subset, or
+    display them individually (e.g. one per tab in an interactive app). Available plots (selected
+    via `plots=`):
 
-    - `"qq"`: QQ plot of deviance residuals
-    - `"residuals"`: Pearson residuals vs fitted values
-    - `"histogram"`: Histogram of deviance residuals
-    - `"response"`: Response vs fitted values
+    - `"qq"`: QQ plot of deviance residuals against theoretical normal quantiles. Systematic
+      curvature away from the reference line suggests the response distribution (family) may be
+      misspecified.
+    - `"residuals"`: Pearson residuals vs fitted values. A even, patternless scatter around zero is
+      the target; funnel shapes suggest heteroscedasticity (consider a location-scale family), and
+      curvature suggests a missing or under-smoothed term.
+    - `"histogram"`: Histogram of deviance residuals, for checking overall symmetry and shape.
+    - `"response"`: Observed response vs fitted values, with a 1:1 reference line, for an overall
+      sense of fit quality and to spot outliers.
 
     Parameters
     ----------
@@ -392,12 +401,30 @@ def check(
         A fitted GAM.
     plots:
         Which diagnostic plots to include. Pass a list of names (e.g., `["qq", "residuals"]`) or
-        `None` (default) for all four.
+        `None` (default) for all four, in the order `"qq"`, `"residuals"`, `"histogram"`,
+        `"response"`.
 
     Returns
     -------
     list[altair.Chart]
-        One chart per requested diagnostic plot.
+        One chart per requested diagnostic plot, in the order selected.
+
+    Examples
+    --------
+    ```{python}
+    import numpy as np
+    from whittaker.gam import GAM
+    from whittaker.plotting import check
+
+    rng = np.random.default_rng(0)
+    n = 300
+    x = rng.uniform(0, 1, n)
+    y = np.sin(2 * np.pi * x) + rng.normal(scale=0.2, size=n)
+
+    model = GAM("y ~ s(x)").fit({"x": x, "y": y})
+    charts = check(model, plots=["qq", "residuals"])
+    print(len(charts))
+    ```
     """
     _check_altair()
     import altair as alt
