@@ -46,7 +46,7 @@ functions.
 # Create a GAM with a smooth term for x
 model = wk.GAM("y ~ s(x)")
 
-# Fit the model; smoothing parameters are selected automatically via REML
+# Fit the model (smoothing parameters are selected automatically via REML)
 model.fit(data, method="REML")
 ```
 
@@ -64,7 +64,7 @@ print(model.summary())
 The summary reports:
 
 - **Smooth terms**: the effective degrees of freedom (EDF) for each smooth. An EDF near 1 means the
-  smooth is approximately linear; higher values indicate more complex curvature.
+smooth is approximately linear (higher values indicate more complex curvature).
 - **Model fit statistics**: deviance explained, GCV score, and scale estimate $\hat\phi$.
 
 ## Predict on new data
@@ -83,7 +83,7 @@ print(f"First 5 predictions: {preds.values[:5].round(3)}")
 ```
 
 The `predict()` method returns a `PredictionResult` with a `.values` attribute containing
-predictions on the response scale ($\hat\mu = g^{-1}(\hat\eta)$; for Gaussian with identity link,
+predictions on the response scale ($\hat\mu = g^{-1}(\hat\eta)$. For Gaussian with identity link,
 this is simply $X\hat\beta$).
 
 ## Predictions with standard errors
