@@ -81,7 +81,7 @@ from whittaker.streaming import StreamingGAM, StreamingSnapshot
 
 try:
     __version__: str = version("whittaker")
-except PackageNotFoundError:
+except PackageNotFoundError:  # pragma: no cover - only hit when whittaker isn't installed
     __version__ = "0.0.0+unknown"
 
 __all__ = [
