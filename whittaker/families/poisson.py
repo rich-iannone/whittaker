@@ -65,24 +65,113 @@ class Poisson(Family):
     """
 
     def link(self, mu: NDArray) -> NDArray:
+        r"""Apply the log link: $\eta = \log(\mu)$.
+
+        Parameters
+        ----------
+        mu
+            Conditional mean values, shape `(n,)`. Should be positive; values are clipped to
+            `_EPS` to avoid `log(0)`.
+
+        Returns
+        -------
+        NDArray
+            Linear predictor values $\eta = \log(\mu)$, shape `(n,)`.
+        """
         return np.log(np.maximum(mu, _EPS))
 
     def link_inverse(self, eta: NDArray) -> NDArray:
+        r"""Apply the inverse log link: $\mu = e^{\eta}$.
+
+        The linear predictor is clipped to `[-30, 30]` before exponentiating to guard against
+        overflow while fitting.
+
+        Parameters
+        ----------
+        eta
+            Linear predictor values, shape `(n,)`.
+
+        Returns
+        -------
+        NDArray
+            Conditional mean values $\mu = e^{\eta}$, shape `(n,)`.
+        """
         return np.exp(np.clip(eta, -30.0, 30.0))
 
     def link_derivative(self, mu: NDArray) -> NDArray:
+        r"""Derivative of the log link: $g'(\mu) = 1/\mu$.
+
+        Parameters
+        ----------
+        mu
+            Conditional mean values, shape `(n,)`.
+
+        Returns
+        -------
+        NDArray
+            Derivative values $1/\mu$, shape `(n,)`.
+        """
         return 1.0 / np.maximum(mu, _EPS)
 
     def variance(self, mu: NDArray) -> NDArray:
+        r"""Poisson variance function: $V(\mu) = \mu$.
+
+        The variance equals the mean, so `Var(Y) = phi * V(mu) = mu` since `phi = 1` for
+        Poisson (see `scale_known`).
+
+        Parameters
+        ----------
+        mu
+            Conditional mean values, shape `(n,)`.
+
+        Returns
+        -------
+        NDArray
+            Variance values $V(\mu) = \mu$, shape `(n,)`.
+        """
         return np.maximum(mu, _EPS)
 
     def deviance(self, y: NDArray, mu: NDArray, *, weights: NDArray | None = None) -> float:
+        r"""Total Poisson deviance, the (weighted) sum of `unit_deviance`.
+
+        Parameters
+        ----------
+        y
+            Observed response values (counts), shape `(n,)`.
+        mu
+            Fitted conditional mean values, shape `(n,)`.
+        weights
+            Optional prior weights, shape `(n,)`.
+
+        Returns
+        -------
+        float
+            The total (weighted) deviance.
+        """
         d = self.unit_deviance(y, mu)
         if weights is not None:
             d = weights * d
         return float(np.sum(d))
 
     def unit_deviance(self, y: NDArray, mu: NDArray) -> NDArray:
+        r"""Per-observation Poisson deviance contributions.
+
+        Computes
+        $d_i = 2 \left[ y_i \log(y_i / \hat\mu_i) - (y_i - \hat\mu_i) \right]$,
+        with the convention $y_i \log(y_i / \hat\mu_i) = 0$ when $y_i = 0$.
+
+        Parameters
+        ----------
+        y
+            Observed response values (counts), shape `(n,)`.
+        mu
+            Fitted conditional mean values, shape `(n,)`.
+
+        Returns
+        -------
+        NDArray
+            Per-observation deviance contributions, shape `(n,)`.
+        """
         mu_c = np.maximum(mu, _EPS)
         dev = np.empty_like(y)
         pos = y > 0
@@ -94,6 +183,27 @@ class Poisson(Family):
     def log_likelihood(
         self, y: NDArray, mu: NDArray, scale: float, *, weights: NDArray | None = None
     ) -> float:
+        r"""Poisson log-likelihood $\ell_i = y_i \log(\mu_i) - \mu_i - \log(y_i!)$.
+
+        The `scale` argument is accepted for interface compatibility but ignored, since the
+        Poisson distribution has no free dispersion parameter (`scale_known` is `True`).
+
+        Parameters
+        ----------
+        y
+            Observed response values (counts), shape `(n,)`.
+        mu
+            Fitted conditional mean values, shape `(n,)`.
+        scale
+            Ignored.
+        weights
+            Optional prior weights, shape `(n,)`.
+
+        Returns
+        -------
+        float
+            The total log-likelihood.
+        """
         from scipy.special import gammaln
 
         mu_c = np.maximum(mu, _EPS)
@@ -104,12 +214,49 @@ class Poisson(Family):
 
     @property
     def scale_known(self) -> bool:
+        """Whether the dispersion parameter is fixed. Always `True` for Poisson.
+
+        The Poisson distribution has no free dispersion parameter, so the scale is fixed at
+        `1` and is never estimated during fitting. This affects how `GAM.summary()` reports
+        the scale and how many degrees of freedom are attributed to dispersion estimation.
+        """
         return True
 
     def simulate(self, mu: NDArray, scale: float, rng: object) -> NDArray:
+        """Simulate Poisson-distributed response values with mean `mu`.
+
+        Parameters
+        ----------
+        mu
+            Mean (fitted values), shape `(n,)`.
+        scale
+            Ignored (the Poisson distribution has no free dispersion parameter).
+        rng
+            A `numpy.random.Generator` instance.
+
+        Returns
+        -------
+        NDArray
+            Simulated response values, shape `(n,)`.
+        """
         return rng.poisson(np.maximum(mu, _EPS)).astype(float)
 
     def initialize(self, y: NDArray) -> NDArray:
+        """Starting values for `mu`: `y` nudged away from zero.
+
+        Since the log link requires strictly positive `mu`, small or zero counts are pushed
+        away from zero to avoid `log(0)` on the first P-IRLS iteration.
+
+        Parameters
+        ----------
+        y
+            Observed response values (counts), shape `(n,)`.
+
+        Returns
+        -------
+        NDArray
+            Starting values for `mu`, shape `(n,)`.
+        """
         return np.maximum(y, 0.1) + 0.1
 
     def __repr__(self) -> str:
