@@ -105,7 +105,7 @@ the scale parameter.
 - It is more stable when the true function is close to the penalty null space.
 - REML accounts for the uncertainty in $\hat\beta$ when estimating $\phi$, producing better
   variance estimates.
-- It is the recommended default in both Whittaker and mgcv.
+- It is the recommended default in both Whittaker and `mgcv`.
 
 ```python
 model = wk.GAM("y ~ s(x)")
@@ -142,7 +142,7 @@ import numpy as np
 import whittaker as wk
 
 # Generate noisy data with a smooth underlying function
-rng = np.random.default_rng(42)
+rng = np.random.default_rng(23)
 n = 150
 x = np.linspace(0, 2 * np.pi, n)
 y_true = np.sin(x) + 0.3 * np.cos(3 * x)
@@ -220,7 +220,7 @@ true_line = alt.Chart({"values": true_records}).mark_line(
 ).encode(x="x:Q", y="y:Q")
 
 (points + true_line + lines).properties(
-    width=550, height=300,
+    width="container", height=300,
     title="Smoothness selection: GCV vs REML vs ML"
 )
 ```
@@ -301,7 +301,7 @@ to approximately zero, effectively removing it from the model.
 
 ```{python}
 # Variable selection example: x3 is pure noise
-rng = np.random.default_rng(42)
+rng = np.random.default_rng(23)
 n = 300
 x1 = np.linspace(0, 2 * np.pi, n)
 x2 = rng.uniform(0, 1, n)
@@ -344,7 +344,7 @@ alt.Chart({"values": bar_records}).mark_bar().encode(
         range=["#4c78a8", "#e45756"]
     )),
     xOffset="Model:N",
-).properties(width=400, height=300, title="Variable selection: per-term EDF")
+).properties(width="container", height=300, title="Variable selection: per-term EDF")
 ```
 
 With `select=True`, the EDF for `s(x3)` should be driven close to zero, confirming that Whittaker
@@ -376,7 +376,7 @@ This allows you to:
 
 ```{python}
 # Weights example: downweight outlier observations
-rng = np.random.default_rng(42)
+rng = np.random.default_rng(23)
 n = 100
 x = np.linspace(0, 2 * np.pi, n)
 y_w = np.sin(x) + rng.normal(0, 0.3, n)
@@ -456,7 +456,7 @@ lines = alt.Chart({"values": fit_records}).mark_line(strokeWidth=2).encode(
 )
 
 (points + lines).properties(
-    width=500, height=300,
+    width="container", height=300,
     title="Effect of observation weights on outlier robustness"
 )
 ```
