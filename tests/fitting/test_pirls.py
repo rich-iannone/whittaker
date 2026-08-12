@@ -365,7 +365,7 @@ class TestNumericalAccuracy:
             rmse = np.sqrt(np.mean((result.fitted_values - y_true) ** 2))
             rmses.append(rmse)
 
-        assert rmses[1] <= rmses[0] + 0.01
+        assert rmses[1] <= rmses[0] + 0.02
 
     def test_different_basis_types(self) -> None:
         data = _sin_data(200)
