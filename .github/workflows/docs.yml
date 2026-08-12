@@ -1,7 +1,15 @@
-name: CI Docs
+name: Docs
 
 on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
   workflow_dispatch:
+
+concurrency:
+  group: docs-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build-docs:
@@ -10,7 +18,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0 # full history for accurate page timestamps
+          fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -33,8 +41,8 @@ jobs:
   publish-docs:
     name: "Publish Docs"
     runs-on: ubuntu-latest
-    needs: "build-docs"
-    if: github.ref == 'refs/heads/main'
+    needs: build-docs
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
     permissions:
       pages: write
       id-token: write
