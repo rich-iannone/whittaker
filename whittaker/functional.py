@@ -307,14 +307,36 @@ class FunctionalGAM:
 
     @property
     def is_fitted(self) -> bool:
+        """Whether `fit()` has been called successfully.
+
+        Returns
+        -------
+        bool
+            `True` once the model has been fit; `False` beforehand.
+        """
         return self._fitted
 
     @property
     def response(self) -> str:
+        """Name of the scalar response variable.
+
+        Returns
+        -------
+        str
+            Response variable name, as passed to the constructor.
+        """
         return self._response
 
     @property
     def functional_terms(self) -> list[FunctionalTerm]:
+        """List of `FunctionalTerm` specifications used by this model.
+
+        Returns
+        -------
+        list[FunctionalTerm]
+            Copy of the functional term specifications; mutating the returned list does not
+            affect the model.
+        """
         return list(self._functional_terms)
 
     def fit(
@@ -682,26 +704,66 @@ class FunctionalGAM:
 
     @property
     def scale(self) -> float:
+        """Estimated scale (dispersion) parameter of the fitted model.
+
+        Returns
+        -------
+        float
+            Scale estimate from the penalized IRLS fit, used to compute standard errors.
+        """
         self._check_fitted()
         return self._fit_result.scale
 
     @property
     def deviance(self) -> float:
+        """Deviance of the fitted model.
+
+        Returns
+        -------
+        float
+            Model deviance from the penalized IRLS fit, a measure of goodness of fit.
+        """
         self._check_fitted()
         return self._fit_result.deviance
 
     @property
     def edf_total(self) -> float:
+        """Total effective degrees of freedom across all functional and scalar terms.
+
+        Returns
+        -------
+        float
+            Sum of per-term EDF values, reflecting the overall complexity of the fitted model.
+        """
         self._check_fitted()
         return self._fit_result.edf_total
 
     @property
     def coefficients(self) -> NDArray:
+        """Fitted coefficient vector for the combined design matrix.
+
+        Returns
+        -------
+        NDArray
+            Copy of the coefficients, including the intercept, functional term basis
+            coefficients, and any scalar term coefficients, in the order used internally by
+            the model.
+        """
         self._check_fitted()
         return self._fit_result.coefficients.copy()
 
     def summary(self) -> str:
-        """Text summary of the fitted functional GAM."""
+        """Build a text summary of the fitted functional GAM.
+
+        Reports the response name, family, number of observations, total EDF, deviance, and
+        scale, followed by per-functional-term details (basis type, number of basis functions,
+        domain, and EDF) and, if present, the scalar terms formula.
+
+        Returns
+        -------
+        str
+            Multi-line summary text.
+        """
         self._check_fitted()
         lines = [
             "FunctionalGAM summary",
