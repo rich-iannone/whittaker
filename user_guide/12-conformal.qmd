@@ -337,7 +337,7 @@ print(f"CV+ coverage:     {cov_cv:.4f}")
 Empirical coverage on any single test set will fluctuate around the nominal level due to sampling
 variability. The conformal guarantee is that coverage is **at least** $1 - \alpha$ in expectation
 over the randomness in the calibration data. A single test set may show coverage slightly below the
-nominal level; averaging over many random splits would confirm the guarantee.
+nominal level (averaging over many random splits would confirm the guarantee).
 :::
 
 ## Using with non-Gaussian families
