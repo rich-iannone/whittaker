@@ -71,7 +71,7 @@ def _lazyframe_to_dict(lf, chunk_size: int) -> InternalData:
     """Collect a LazyFrame into dict[str, NDArray] in chunks."""
     _import_polars()
 
-    df = lf.collect(streaming=True)
+    df = lf.collect(engine="streaming")
     columns: dict[str, list[NDArray]] = {}
     for chunk in df.iter_slices(chunk_size):
         for col in chunk.columns:
@@ -83,7 +83,7 @@ def _lazyframe_to_dict(lf, chunk_size: int) -> InternalData:
 def _count_lazy(lf) -> int:
     """Count rows in a LazyFrame."""
     pl = _import_polars()
-    return lf.select(pl.len()).collect(streaming=True).item()
+    return lf.select(pl.len()).collect(engine="streaming").item()
 
 
 class PolarsGAM(BigGAM):
