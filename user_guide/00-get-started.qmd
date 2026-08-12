@@ -12,8 +12,8 @@ gd.enable_tbl_preview(n_head=8, n_tail=3)
 ```
 
 Whittaker brings the full power of Generalized Additive Models (GAMs) to Python. It is built on
-NumPy and SciPy, follows the mathematical framework of Wood's `mgcv` (the gold standard for GAMs in
-R), and provides a formula-based interface that makes specifying even complex models a one-liner.
+NumPy and SciPy, follows the mathematical framework of Wood's `mgcv`, and provides a formula-based
+interface that makes specifying even complex models a one-liner.
 
 A GAM extends a linear model by replacing one or more linear terms $\beta x$ with smooth functions
 $f(x)$ whose shape is learned from the data:
