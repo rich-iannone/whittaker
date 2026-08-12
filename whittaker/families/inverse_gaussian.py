@@ -225,7 +225,7 @@ class InverseGaussian(Family):
         return False
 
     def simulate(self, mu: NDArray, scale: float, rng: object) -> NDArray:
-        """Simulate Inverse Gaussian (Wald) response values with mean `mu` and dispersion `scale`.
+        r"""Simulate Inverse Gaussian (Wald) response values with mean `mu` and dispersion `scale`.
 
         Draws are generated via Michael, Schucany & Haas's transformation of a chi-squared
         variate, then adjusted with a uniform random variable to select between the two
