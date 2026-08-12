@@ -120,31 +120,156 @@ class QuantileFamily(Family):
 
     @property
     def tau(self) -> float:
+        """Quantile level `tau` being estimated.
+
+        Returns
+        -------
+        float
+            The quantile level in `(0, 1)` passed at construction, e.g. `0.5` for
+            median regression or `0.9` for the upper decile.
+        """
         return self._tau
 
     @property
     def sigma(self) -> float:
+        """Bandwidth parameter `sigma` of the ELF loss approximation.
+
+        Returns
+        -------
+        float
+            The current smoothing bandwidth. Smaller values make the ELF loss
+            approximate the classical pinball loss more closely; larger values
+            smooth the optimization surface further at the cost of extra bias.
+        """
         return self._sigma
 
     @sigma.setter
     def sigma(self, value: float) -> None:
+        """Set the ELF bandwidth `sigma`, e.g. to anneal it across fitting iterations.
+
+        Parameters
+        ----------
+        value : float
+            New bandwidth. Must be strictly positive.
+
+        Raises
+        ------
+        ValueError
+            If `value` is not positive.
+        """
         if value <= 0:
             raise ValueError(f"sigma must be positive, got {value}")
         self._sigma = value
 
     def link(self, mu: NDArray) -> NDArray:
+        """Identity link: map the mean `mu` directly to the linear predictor `eta`.
+
+        `QuantileFamily` does not use a link function in the usual GLM sense
+        because it minimizes the ELF loss directly rather than modeling a
+        mean-variance relationship, so this implements the family-specific link
+        as the identity, `eta = mu`.
+
+        Parameters
+        ----------
+        mu : NDArray
+            Mean values on the response scale.
+
+        Returns
+        -------
+        NDArray
+            Same values, unchanged, interpreted as the linear predictor `eta`.
+        """
         return mu
 
     def link_inverse(self, eta: NDArray) -> NDArray:
+        """Identity inverse link: map the linear predictor `eta` back to `mu`.
+
+        Implements the family-specific inverse link as the identity, `mu = eta`,
+        matching `link` above.
+
+        Parameters
+        ----------
+        eta : NDArray
+            Linear predictor values.
+
+        Returns
+        -------
+        NDArray
+            Same values, unchanged, interpreted as the mean `mu`.
+        """
         return eta
 
     def link_derivative(self, mu: NDArray) -> NDArray:
+        """Derivative of the identity link with respect to `mu`.
+
+        Since `link` is the identity, `d(eta)/d(mu) = 1` everywhere, so this
+        implements the family-specific derivative as an array of ones with the
+        same shape as `mu`.
+
+        Parameters
+        ----------
+        mu : NDArray
+            Mean values on the response scale.
+
+        Returns
+        -------
+        NDArray
+            Array of ones, same shape as `mu`.
+        """
         return np.ones_like(mu)
 
     def variance(self, mu: NDArray) -> NDArray:
+        """Variance function for `QuantileFamily`, identically equal to 1.
+
+        `QuantileFamily` does not model a mean-variance relationship since
+        fitting minimizes the ELF loss directly, so the family-specific variance
+        function returns a constant array of ones regardless of `mu`; the
+        working weights used during fitting instead come from `irls_update`.
+
+        Parameters
+        ----------
+        mu : NDArray
+            Mean values on the response scale (unused beyond determining shape).
+
+        Returns
+        -------
+        NDArray
+            Array of ones, same shape as `mu`.
+        """
         return np.ones_like(mu)
 
     def irls_update(self, y: NDArray, mu: NDArray, eta: NDArray) -> tuple[NDArray, NDArray]:
+        r"""Compute the working response and weight for one custom IRLS step.
+
+        Implements the family-specific IRLS update used in place of the
+        standard GLM working response/weight pair, since the ELF loss does not
+        come from an exponential-family model. For residual `r = y - mu`, the
+        update uses the ELF score and curvature
+
+        $$
+        u = \tau - 1 + \operatorname{expit}(r/\sigma), \qquad
+        W = \max\!\left(\frac{1}{\sigma}\, s(1-s),\ \epsilon\right), \quad
+        s = \operatorname{expit}(r/\sigma),
+        $$
+
+        where `epsilon` is a small floor that prevents zero weights, and forms
+        the working response `z = eta + u / W`.
+
+        Parameters
+        ----------
+        y : NDArray
+            Observed response values.
+        mu : NDArray
+            Current fitted mean values.
+        eta : NDArray
+            Current linear predictor values.
+
+        Returns
+        -------
+        tuple[NDArray, NDArray]
+            The working response `z` and working weight `W`, both with the
+            same shape as `y`.
+        """
         r = y - mu
         score = _elf_d1(r, self._tau, self._sigma)
         W = np.maximum(_elf_d2(r, self._sigma), _W_FLOOR)
@@ -152,17 +277,93 @@ class QuantileFamily(Family):
         return z, W
 
     def deviance(self, y: NDArray, mu: NDArray, *, weights: NDArray | None = None) -> float:
+        r"""Total deviance, twice the summed ELF loss over observations.
+
+        Implements the family-specific deviance as
+
+        $$
+        D = 2 \sum_i w_i\, \rho_{\tau,\sigma}(y_i - \mu_i),
+        $$
+
+        where `w_i` are optional observation weights (defaulting to 1) and
+        `rho` is the ELF loss. As `sigma -> 0` this converges to twice the
+        usual pinball loss, matching the deviance convention used by other
+        families.
+
+        Parameters
+        ----------
+        y : NDArray
+            Observed response values.
+        mu : NDArray
+            Fitted mean values.
+        weights : NDArray or None, optional
+            Optional observation weights. If None, all weights are treated as 1.
+
+        Returns
+        -------
+        float
+            The total (weighted) deviance.
+        """
         d = 2.0 * _elf_loss(y - mu, self._tau, self._sigma)
         if weights is not None:
             d = weights * d
         return float(np.sum(d))
 
     def unit_deviance(self, y: NDArray, mu: NDArray) -> NDArray:
+        r"""Per-observation deviance contribution, twice the ELF loss.
+
+        Implements the family-specific unit deviance as
+        $d_i = 2 \rho_{\tau,\sigma}(y_i - \mu_i)$, the unweighted, un-summed
+        term whose sum (optionally weighted) gives `deviance`.
+
+        Parameters
+        ----------
+        y : NDArray
+            Observed response values.
+        mu : NDArray
+            Fitted mean values.
+
+        Returns
+        -------
+        NDArray
+            Per-observation deviance contributions, same shape as `y`.
+        """
         return 2.0 * _elf_loss(y - mu, self._tau, self._sigma)
 
     def log_likelihood(
         self, y: NDArray, mu: NDArray, scale: float, *, weights: NDArray | None = None
     ) -> float:
+        r"""Pseudo log-likelihood implied by the ELF loss.
+
+        Implements the family-specific log-likelihood as the negative summed
+        ELF loss,
+
+        $$
+        \ell = -\sum_i w_i\, \rho_{\tau,\sigma}(y_i - \mu_i),
+        $$
+
+        with optional observation weights `w_i`. This is a pseudo-likelihood
+        used for model comparison (e.g. AIC) rather than a true likelihood,
+        since `QuantileFamily` does not correspond to a proper probability
+        model; the `scale` argument is accepted for interface compatibility but
+        unused because `scale_known` is always True.
+
+        Parameters
+        ----------
+        y : NDArray
+            Observed response values.
+        mu : NDArray
+            Fitted mean values.
+        scale : float
+            Dispersion parameter; unused since the ELF loss has no free scale.
+        weights : NDArray or None, optional
+            Optional observation weights. If None, all weights are treated as 1.
+
+        Returns
+        -------
+        float
+            The (weighted) pseudo log-likelihood.
+        """
         ll_i = -_elf_loss(y - mu, self._tau, self._sigma)
         if weights is not None:
             ll_i = weights * ll_i
@@ -170,9 +371,49 @@ class QuantileFamily(Family):
 
     @property
     def scale_known(self) -> bool:
+        """Whether the dispersion (scale) parameter is fixed rather than estimated.
+
+        Always True for `QuantileFamily`, since the ELF loss has no free scale
+        parameter to estimate.
+
+        Returns
+        -------
+        bool
+            Always True.
+        """
         return True
 
     def simulate(self, mu: NDArray, scale: float, rng: object) -> NDArray:
+        r"""Draw random samples from the Asymmetric Laplace distribution.
+
+        Implements the family-specific sampler by inverting the CDF of the
+        Asymmetric Laplace distribution with location `mu`, scale `sigma`, and
+        asymmetry `tau` — the distribution whose negative log-density is
+        proportional to the pinball loss that the ELF loss approximates.
+        Draws `u ~ Uniform(0, 1)` and returns
+
+        $$
+        y =
+        \begin{cases}
+        \mu + \sigma \log(u / \tau), & u < \tau, \\
+        \mu - \sigma \log\!\left(\dfrac{1-u}{1-\tau}\right), & u \ge \tau.
+        \end{cases}
+        $$
+
+        Parameters
+        ----------
+        mu : NDArray
+            Location (fitted mean) values.
+        scale : float
+            Dispersion parameter; unused since sampling instead uses `sigma`.
+        rng : object
+            Random number generator exposing a `uniform(size=...)` method.
+
+        Returns
+        -------
+        NDArray
+            Simulated response values, same shape as `mu`.
+        """
         u = rng.uniform(size=mu.shape)
         return np.where(
             u < self._tau,
@@ -181,6 +422,22 @@ class QuantileFamily(Family):
         )
 
     def initialize(self, y: NDArray) -> NDArray:
+        """Initialize the mean `mu` from the observed response `y`.
+
+        Implements the family-specific starting values for P-IRLS as a direct
+        copy of the observed response, `mu = y`, which is a reasonable
+        starting point for quantile fitting regardless of `tau`.
+
+        Parameters
+        ----------
+        y : NDArray
+            Observed response values.
+
+        Returns
+        -------
+        NDArray
+            Copy of `y`, used as the initial mean estimate.
+        """
         return y.copy()
 
     def __repr__(self) -> str:
