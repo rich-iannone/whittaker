@@ -1,4 +1,4 @@
-"""Multinomial logistic family for unordered categorical responses.
+r"""Multinomial logistic family for unordered categorical responses.
 
 Implements a baseline-category logit model with a shared linear predictor and per-category
 intercepts. Category probabilities are computed via softmax:
@@ -29,16 +29,74 @@ def _softmax(logits: NDArray) -> NDArray:
 
 
 class Multinomial(Family):
-    """Multinomial logistic family for unordered categorical responses.
+    r"""Multinomial logistic family for unordered categorical responses.
 
-    Uses a baseline-category logit model with K categories (coded 1, ..., K). The last category
-    is the reference. A shared smooth linear predictor is scaled by per-category loading
-    coefficients, giving each category a different relationship with the covariates.
+    `Multinomial` models a categorical response with `K` unordered levels — for example, a
+    choice among several unranked options — using a baseline-category logit model. Unlike
+    `OrderedCategorical`, no assumption is made about the ordering of categories or a shared
+    direction of covariate effects: each non-reference category `k` gets its own intercept
+    `alpha_k` and its own loading coefficient `beta_k` that rescales the shared linear predictor
+    `eta`, so different categories can respond differently (even in sign) to the same covariate
+    effect. The final category `K` is fixed as the reference, with `alpha_K = 0` and `beta_K =
+    0`. Use this family when the response is nominal (has no natural order) with more than two
+    levels; for binary outcomes use `Binomial`, and for ordinal outcomes use
+    `OrderedCategorical`.
 
     Parameters
     ----------
-    n_categories:
-        Number of response categories K (must be >= 2).
+    n_categories : int
+        Number of response categories `K` (must be `>= 2`). Responses passed to `GAM.fit()`
+        should be integer-coded `1, 2, ..., K`, with category `K` as the reference.
+
+    Notes
+    -----
+    Category probabilities are obtained from a softmax over per-category logits built from the
+    shared linear predictor `eta`:
+
+    $$
+    P(Y = k \mid \eta) = \frac{\exp(\alpha_k + \beta_k \eta)}{\sum_{j=1}^{K} \exp(\alpha_j + \beta_j \eta)},
+    \qquad \alpha_K = \beta_K = 0.
+    $$
+
+    As with `OrderedCategorical`, this loss does not fit the standard GLM deviance framework:
+    `link` and `link_inverse` are the identity on `eta`, and a custom `irls_update` drives
+    P-IRLS while an inner maximum-likelihood step (`_update_params`) re-estimates the
+    per-category intercepts `alpha` and loadings `beta` at each iteration. The reported deviance
+    is $-2$ times the multinomial log-likelihood of the observed categories under the fitted
+    probabilities,
+
+    $$
+    D(y, \hat P) = -2 \sum_{i} \log \hat P(Y_i = y_i \mid \eta_i).
+    $$
+
+    Examples
+    --------
+    Fit a GAM to a three-level unordered categorical response:
+
+    ```{python}
+    import numpy as np
+    import whittaker as wk
+
+    rng = np.random.default_rng(0)
+    n = 300
+    x = np.linspace(-3, 3, n)
+    eta = np.sin(x)
+
+    alphas = np.array([0.0, 0.5])
+    betas = np.array([1.0, -1.5])
+
+    logits = np.column_stack(
+        [alphas[0] + betas[0] * eta, alphas[1] + betas[1] * eta, np.zeros(n)]
+    )
+    probs = np.exp(logits) / np.exp(logits).sum(axis=1, keepdims=True)
+    y = np.array([rng.choice([1, 2, 3], p=probs[i]) for i in range(n)], dtype=float)
+
+    data = {"x": x, "y": y}
+
+    model = wk.GAM("y ~ s(x)", family=wk.Multinomial(n_categories=3))
+    model.fit(data, method="REML")
+    print(model.summary())
+    ```
     """
 
     def __init__(self, n_categories: int) -> None:
