@@ -1,4 +1,4 @@
-"""Gaussian (Normal) family with identity link."""
+r"""Gaussian (Normal) family with identity link."""
 
 from __future__ import annotations
 
@@ -9,14 +9,66 @@ from whittaker.families.base import Family
 
 
 class Gaussian(Family):
-    """Gaussian family with identity link.
+    r"""Gaussian (Normal) family with identity link.
 
-    For the Gaussian family:
+    The Gaussian family models a continuous, unbounded response with constant variance. It is
+    the default family in Whittaker and corresponds to classical (penalized) least-squares
+    regression: with the identity link, P-IRLS converges in a single step since the working
+    response and weights do not depend on the current fit. Use it whenever the response is
+    real-valued, approximately symmetric, and its spread does not depend systematically on its
+    mean — for example, physical measurements, log-transformed sizes, or residual-like
+    quantities. If the variance grows with the mean, or the response is a count, proportion, or
+    strictly positive quantity, consider `Poisson`, `Binomial`, `Gamma`, or another family
+    instead.
 
-    - Link: g(μ) = μ (identity)
-    - Variance function: V(μ) = 1
-    - Deviance: Σ(y − μ)²
-    - Scale parameter φ = σ² (estimated from residuals)
+    Parameters
+    ----------
+    None
+        `Gaussian` takes no constructor arguments; the scale parameter `phi` (the residual
+        variance `sigma^2`) is estimated from the data during fitting rather than supplied by
+        the user.
+
+    Notes
+    -----
+    The canonical (and only supported) link is the identity function:
+
+    $$
+    g(\mu) = \mu
+    $$
+
+    so the linear predictor `eta` is directly on the response scale and no back-transformation
+    is needed for predictions. The variance function is constant in the mean,
+
+    $$
+    V(\mu) = 1, \qquad \operatorname{Var}(Y) = \phi \, V(\mu) = \sigma^2,
+    $$
+
+    which is what makes the Gaussian family the special case in which ordinary least squares and
+    maximum-likelihood estimation coincide. The deviance is the residual sum of squares:
+
+    $$
+    D(y, \hat\mu) = \sum_i (y_i - \hat\mu_i)^2 .
+    $$
+
+    Examples
+    --------
+    Fit a GAM with a smooth term to noisy sine-wave data using the (default) Gaussian family:
+
+    ```{python}
+    import numpy as np
+    import whittaker as wk
+
+    rng = np.random.default_rng(0)
+    n = 200
+    x = np.linspace(0, 2 * np.pi, n)
+    y = np.sin(x) + rng.normal(0, 0.3, n)
+
+    data = {"x": x, "y": y}
+
+    model = wk.GAM("y ~ s(x)", family=wk.Gaussian())
+    model.fit(data, method="REML")
+    print(model.summary())
+    ```
     """
 
     def link(self, mu: NDArray) -> NDArray:
