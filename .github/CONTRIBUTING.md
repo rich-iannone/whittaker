@@ -27,9 +27,6 @@ Run `make help` for the full list.
 
 ## House conventions
 
-- **R-validated numerics.** Correctness to tolerance against R's `mgcv` is the brand.
-  Regenerate fixtures with `Rscript scripts/regenerate_r_fixtures.R` and validate with
-  `make test-rparity`.
 - **Narwhals-native.** Never assume Pandas; write data handling against Narwhals and drop
   to NumPy only inside numeric kernels.
 - **Typed & deterministic.** Full type hints (`py.typed`), `pyright` clean, byte-identical
