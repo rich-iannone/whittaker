@@ -24,7 +24,7 @@ import numpy as np
 import whittaker as wk
 
 # Generate 200 observations from a noisy sine curve
-rng = np.random.default_rng(42)
+rng = np.random.default_rng(23)
 n = 200
 x = np.linspace(0, 2 * np.pi, n)
 y = np.sin(x) + rng.normal(0, 0.3, n)
@@ -146,7 +146,7 @@ true_line = alt.Chart({"values": true_data}).mark_line(
 
 # Combine all layers
 (band + points + line + true_line).properties(
-    width=500, height=300,
+    width="container", height=300,
     title="GAM fit: y ~ s(x)"
 )
 ```
@@ -162,7 +162,7 @@ generate data with two smooth effects and a linear term:
 
 ```{python}
 # Generate data with two smooth effects
-rng = np.random.default_rng(42)
+rng = np.random.default_rng(23)
 n = 300
 x1 = np.linspace(0, 2 * np.pi, n)
 x2 = rng.uniform(0, 1, n)
@@ -212,7 +212,7 @@ ref_line = alt.Chart(
 )
 
 (ref_line + scatter_multi).properties(
-    width=350, height=350,
+    width="container", height=350,
     title="Multi-predictor GAM: predicted vs. observed"
 )
 ```
@@ -232,7 +232,7 @@ For count data, binary outcomes, or other non-Gaussian responses, specify a fami
 
 ```{python}
 # Poisson count data
-rng = np.random.default_rng(42)
+rng = np.random.default_rng(23)
 n = 300
 x = np.linspace(0, 2 * np.pi, n)
 mu = np.exp(0.5 + 0.8 * np.sin(x))  # true log-linear rate
@@ -281,7 +281,7 @@ truth_line = alt.Chart({"values": true_rate_data}).mark_line(
 ).encode(x="x:Q", y="rate:Q")
 
 (points_pois + fitted_line + truth_line).properties(
-    width=500, height=300,
+    width="container", height=300,
     title="Poisson GAM: fitted rate vs. true rate"
 )
 ```
