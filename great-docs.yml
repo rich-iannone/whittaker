@@ -35,10 +35,10 @@ nav_icons:
     "Causal inference": git-branch
     "Streaming and online fitting": activity
     "Multi-response models": columns-3
-    "Functional regression": wave-square
+    "Functional regression": square-function
     "Cross-validation": repeat
     "Large datasets": database
-    "Serialization": save
+    "Saving and loading models": save
     "Glossary": book-open
 
 authors:
