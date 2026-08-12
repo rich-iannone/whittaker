@@ -13,26 +13,83 @@ _EPS = np.finfo(float).eps
 
 
 class OrderedCategorical(Family):
-    """Ordered categorical (proportional odds / cumulative logit) family.
+    r"""Ordered categorical (proportional odds / cumulative logit) family.
 
-    Models ordinal responses with `K` categories (coded 1, 2, ..., K) using the cumulative logit
-    model:
-
-        P(Y <= k | eta) = expit(alpha_k - eta)
-
-    where `alpha_1 < alpha_2 < ... < alpha_{K-1}` are ordered cutpoints and `eta = X @ beta` is the
-    linear predictor (without intercept — the cutpoints absorb it).
-
-    Category probabilities::
-
-        P(Y = 1) = expit(alpha_1 - eta)
-        P(Y = k) = expit(alpha_k - eta) - expit(alpha_{k-1} - eta)   for 1 < k < K
-        P(Y = K) = 1 - expit(alpha_{K-1} - eta)
+    `OrderedCategorical` models an ordinal response — one with a small number of categories that
+    have a natural order but no meaningful numeric spacing, such as a Likert scale
+    ("disagree" / "neutral" / "agree") or a severity grade — using the proportional-odds
+    cumulative logit model. A single set of `K - 1` ordered cutpoints (thresholds) `alpha_1 <
+    alpha_2 < ... < alpha_{K-1}` is estimated jointly with the smooth/linear predictor `eta`, and
+    each cutpoint defines a binary split between "category `k` or below" versus "above category
+    `k`". Because the same `eta` (and hence the same covariate effects) is shared across all
+    thresholds, covariate effects are assumed to shift the log-odds of being in a higher category
+    by the same amount at every threshold — the proportional-odds assumption. Use this family
+    for ordinal outcomes with three or more ordered levels; for a two-level (binary) response,
+    use `Binomial` instead, and for unordered categorical responses, use `Multinomial`.
 
     Parameters
     ----------
-    n_categories:
-        Number of ordered response categories K (must be >= 2).
+    n_categories : int
+        Number of ordered response categories `K` (must be `>= 2`). Responses passed to
+        `GAM.fit()` should be integer-coded `1, 2, ..., K`.
+
+    Notes
+    -----
+    The response, without an intercept in the design matrix (since the cutpoints absorb it), is
+    modeled through cumulative probabilities:
+
+    $$
+    P(Y \le k \mid \eta) = \operatorname{expit}(\alpha_k - \eta), \qquad k = 1, \dots, K-1,
+    $$
+
+    which is equivalent to a logit link on each cumulative probability,
+    $g(P(Y \le k)) = \alpha_k - \eta$. Category probabilities follow by differencing:
+
+    $$
+    P(Y = 1) = \operatorname{expit}(\alpha_1 - \eta), \qquad
+    P(Y = K) = 1 - \operatorname{expit}(\alpha_{K-1} - \eta),
+    $$
+
+    and for interior categories $1 < k < K$,
+
+    $$
+    P(Y = k) = \operatorname{expit}(\alpha_k - \eta) - \operatorname{expit}(\alpha_{k-1} - \eta).
+    $$
+
+    Because this loss does not fit the standard GLM deviance framework, `link` and
+    `link_inverse` are the identity on `eta`, and fitting instead uses a custom `irls_update`
+    together with an inner maximum-likelihood step (`_update_cutpoints`) that re-estimates the
+    cutpoints `alpha` at each P-IRLS iteration. The deviance reported is $-2$ times the
+    multinomial log-likelihood of the observed categories under the fitted probabilities.
+
+    Examples
+    --------
+    Fit a GAM to a four-level ordinal response with a smooth covariate effect:
+
+    ```{python}
+    import numpy as np
+    import whittaker as wk
+    from scipy.special import expit
+
+    rng = np.random.default_rng(0)
+    n = 300
+    x = np.linspace(-3, 3, n)
+    eta = np.sin(x)
+    cutpoints = np.array([-1.5, 0.0, 1.5])
+
+    y = np.empty(n)
+    for i in range(n):
+        probs = np.diff(
+            np.concatenate([[0.0], expit(cutpoints - eta[i]), [1.0]])
+        )
+        y[i] = rng.choice([1, 2, 3, 4], p=probs)
+
+    data = {"x": x, "y": y}
+
+    model = wk.GAM("y ~ s(x)", family=wk.OrderedCategorical(n_categories=4))
+    model.fit(data, method="REML")
+    print(model.summary())
+    ```
     """
 
     def __init__(self, n_categories: int) -> None:
