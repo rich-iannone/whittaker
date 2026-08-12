@@ -37,7 +37,7 @@ try:
     from sklearn.utils.validation import check_array, check_is_fitted, check_X_y
 
     _HAS_SKLEARN = True
-except ImportError:
+except ImportError:  # pragma: no cover
     _HAS_SKLEARN = False
 
     class BaseEstimator:  # type: ignore[no-redef]
@@ -51,7 +51,7 @@ except ImportError:
 
 
 def _check_sklearn() -> None:
-    if not _HAS_SKLEARN:
+    if not _HAS_SKLEARN:  # pragma: no cover
         raise ImportError(
             "scikit-learn is required for the sklearn wrapper. "
             "Install it with: pip install scikit-learn"
