@@ -314,9 +314,9 @@ class SoapFilm(SmoothBasis):
                 bnd_pts_list.append(mid)
         boundary_pts = np.array(bnd_pts_list)
 
-        from scipy.spatial import cKDTree
+        from scipy.spatial import KDTree
 
-        tree = cKDTree(boundary_pts)
+        tree = KDTree(boundary_pts)
         _, idx = tree.query(boundary_pts)
         seen = set()
         unique_mask = []

@@ -1520,7 +1520,7 @@ class GAM:
 
         charts = _check(self, plots=plots)
         try:
-            from IPython.display import display
+            from IPython.display import display  # type: ignore[import-not-found]
 
             for chart in charts:
                 display(chart)

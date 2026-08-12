@@ -478,7 +478,7 @@ def save_gam(model: Any, path: str | Path) -> None:
     arrays["__metadata__"] = np.array([json.dumps(metadata)])
     arrays.update(basis_arrays)
 
-    np.savez_compressed(path, **arrays)
+    np.savez_compressed(path, **arrays)  # type: ignore[arg-type]
 
 
 def load_gam(path: str | Path) -> Any:
