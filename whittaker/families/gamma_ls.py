@@ -1,4 +1,4 @@
-"""Gamma location-scale GAMLSS family."""
+r"""Gamma location-scale GAMLSS family."""
 
 from __future__ import annotations
 
@@ -14,10 +14,69 @@ _SIGMA_FLOOR = 1e-4
 
 
 class GammaLS(GAMLSSFamily):
-    """Gamma location-scale family for GAMLSS.
+    r"""Gamma location-scale family for GAMLSS.
 
-    Parameterised by mean `mu > 0` and shape `sigma > 0` where `sigma = 1 / sqrt(shape)`, i.e. the
-    coefficient of variation. Uses log link for both parameters.
+    `GammaLS` extends the plain `Gamma` family by letting both the mean `mu` and the coefficient
+    of variation `sigma` vary smoothly with covariates, instead of assuming a fixed shape
+    parameter. Use it for strictly positive, right-skewed responses where not only the typical
+    magnitude but also the relative spread (coefficient of variation) changes systematically
+    across the range of the predictors — for example, cost or duration data whose relative
+    volatility grows with the covariates rather than staying proportional to `mu` alone. Both
+    parameters use the log link, keeping `mu > 0` and `sigma > 0`.
+
+    Parameters
+    ----------
+    None
+        `GammaLS` takes no constructor arguments; both `mu` and `sigma` are modeled entirely
+        through the formulas supplied to `GAMLSS`.
+
+    Notes
+    -----
+    `GammaLS` parameterizes the Gamma distribution by its mean `mu > 0` and its coefficient of
+    variation `sigma > 0`, where `sigma = 1 / sqrt(shape)` and `shape = alpha = 1 / sigma^2`.
+    Both parameters use the log link:
+
+    $$
+    g_{\mu}(\mu) = \log(\mu), \qquad g_{\sigma}(\sigma) = \log(\sigma).
+    $$
+
+    The response density is the Gamma density with shape `alpha = 1/sigma^2` and rate
+    `alpha/mu`:
+
+    $$
+    f(y \mid \mu, \sigma) = \frac{(\alpha/\mu)^{\alpha}}{\Gamma(\alpha)}\, y^{\alpha - 1}
+    \exp\!\left(-\frac{\alpha y}{\mu}\right), \qquad \alpha = \frac{1}{\sigma^{2}}.
+    $$
+
+    Because `sigma` is the coefficient of variation, $\operatorname{Var}(Y) = \sigma^2 \mu^2$,
+    so this is a direct generalization of `Gamma`'s variance function `V(mu) = mu^2` in which the
+    proportionality constant `sigma^2` is itself allowed to depend on covariates.
+
+    Examples
+    --------
+    Fit a GAMLSS where both the mean and relative spread of a positive response vary smoothly:
+
+    ```{python}
+    import numpy as np
+    import whittaker as wk
+
+    rng = np.random.default_rng(0)
+    n = 300
+    x = np.linspace(0, 2 * np.pi, n)
+    mu = np.exp(1.0 + 0.4 * np.sin(x))
+    sigma = 0.2 + 0.15 * np.abs(np.cos(x))
+    shape = 1.0 / sigma**2
+    y = rng.gamma(shape, mu / shape)
+
+    data = {"x": x, "y": y}
+
+    model = wk.GAMLSS(
+        formulas={"mu": "y ~ s(x)", "sigma": "y ~ s(x)"},
+        family=wk.GammaLS(),
+    )
+    model.fit(data)
+    print(model.summary())
+    ```
     """
 
     @property
