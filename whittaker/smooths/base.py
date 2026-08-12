@@ -1,4 +1,4 @@
-"""Abstract base class for smooth basis types."""
+r"""Abstract base class for smooth basis types."""
 
 from __future__ import annotations
 
@@ -9,11 +9,18 @@ from numpy.typing import NDArray
 
 
 class SmoothBasis(ABC):
-    """Abstract base class for all smooth basis types.
+    r"""Abstract base class for all smooth basis types.
 
-    Subclasses must implement `fit()`, `basis_matrix()`,
-    `penalty_matrix()`, `null_space_dimension()`, and the
-    `n_basis=` property.
+    Every smooth term in a GAM — a thin plate spline, a cubic regression spline, a P-spline, a
+    Gaussian process smooth, and so on — is represented internally as a linear basis expansion
+    `f(x) = B(x) @ beta` together with a quadratic roughness penalty `beta.T @ S @ beta`. This
+    class fixes the contract that every basis type must satisfy so that the fitting machinery
+    (penalized least squares, smoothing-parameter selection, prediction) can treat all basis
+    types uniformly. Concrete subclasses differ only in how `B` and `S` are constructed, not in
+    how they are consumed.
+
+    Subclasses must implement `fit()`, `basis_matrix()`, `penalty_matrix()`,
+    `null_space_dimension()`, and the `n_basis` property.
 
     The typical workflow is::
 
@@ -22,6 +29,40 @@ class SmoothBasis(ABC):
         B_train = basis.basis_matrix(x_train)   # (n_train, k)
         B_new   = basis.basis_matrix(x_new)     # (n_new,  k)
         S       = basis.penalty_matrix()        # (k, k)
+
+    Notes
+    -----
+    A penalized basis decomposes its `k` basis functions into an unpenalized *null space* of
+    dimension `M` (typically low-order polynomials, for which the penalty contributes nothing —
+    e.g. a straight line has zero roughness under a second-derivative penalty) and a penalized
+    *range space* of dimension `k - M`. The total penalty for smoothing parameter `lambda` is
+
+    $$
+    \lambda \, \boldsymbol{\beta}^\top \mathbf{S} \boldsymbol{\beta},
+    $$
+
+    where `S` is symmetric positive semi-definite with `null_space_dimension()` zero eigenvalues.
+    Basis types built on this contract may additionally supply identifiability constraints (via
+    `identifiability_constraints()`) when the raw basis is not full rank on its own — for example
+    when several smooth terms share an intercept and must each be constrained to have mean zero
+    over the training data.
+
+    Examples
+    --------
+    Any concrete subclass follows this pattern:
+
+    ```{python}
+    import numpy as np
+    from whittaker.smooths import TPRS
+
+    rng = np.random.default_rng(0)
+    x = rng.uniform(0, 1, 100)
+
+    basis = TPRS(k=10).fit(x)
+    B = basis.basis_matrix(x)
+    S = basis.penalty_matrix()
+    B.shape, S.shape
+    ```
     """
 
     @abstractmethod
