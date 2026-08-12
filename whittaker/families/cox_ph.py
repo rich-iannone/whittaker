@@ -22,15 +22,76 @@ _ETA_CLIP = 20.0
 
 
 class CoxPH(Family):
-    """Cox proportional hazards family.
+    r"""Cox proportional hazards family for survival analysis.
+
+    `CoxPH` fits a semiparametric proportional hazards model, allowing smooth (via `s()`) and
+    linear covariate effects on the log hazard while leaving the baseline hazard `h0(t)`
+    unspecified. Use this family whenever the response is a time-to-event outcome that may be
+    right-censored — for example, time to failure, time to churn, or time to death/relapse in
+    survival data — and the goal is to model how covariates shift the instantaneous risk of the
+    event over time. Rather than a per-observation deviance and log-likelihood in the usual GLM
+    sense, `CoxPH` maximizes the Cox partial likelihood via a custom `irls_update`, so the
+    "response" `y` passed to `GAM.fit()` is the observed survival/censoring time, and the event
+    indicator is supplied separately through `set_data()` (populated automatically by `GAM.fit()`
+    from the column named by `status`).
 
     Parameters
     ----------
-    status:
-        Name of the column in the data dict containing the event indicator (`1` = event,
-        `0` = censored).
-    ties:
-        Tie-handling method: `"breslow"` (default) or `"efron"`.
+    status : str, default="event"
+        Name of the column in the data dict containing the event indicator (`1` = event
+        observed, `0` = right-censored). This column is looked up automatically from the data
+        passed to `GAM.fit()`.
+    ties : str, default="breslow"
+        Tie-handling method for the partial likelihood when multiple observations share the same
+        event time: `"breslow"` (default, simpler and faster) or `"efron"` (more accurate when
+        ties are frequent).
+
+    Notes
+    -----
+    The hazard is modeled multiplicatively as
+
+    $$
+    h(t \mid x) = h_0(t)\, e^{\eta(x)}, \qquad \eta(x) = X\beta,
+    $$
+
+    where `h0(t)` is an unspecified baseline hazard and `eta` is the (possibly smooth) linear
+    predictor, so `link` and `link_inverse` are both the identity. There is no closed-form
+    variance function or unit deviance in the usual GLM sense; instead, model fitting maximizes
+    the Cox partial log-likelihood,
+
+    $$
+    \ell(\beta) = \sum_{i:\, \delta_i = 1} \left[ \eta_i - \log\!\left( \sum_{j \in R(t_i)} e^{\eta_j} \right) \right],
+    $$
+
+    where $\delta_i$ is the event indicator and $R(t_i)$ is the risk set at time $t_i$ (those
+    still under observation just before $t_i$). The overall "deviance" reported by
+    `GAM.summary()` is $-2\ell(\beta)$. After fitting, `baseline_hazard()` and
+    `survival_function()` expose the Breslow estimate of the cumulative baseline hazard and the
+    implied survival curve.
+
+    Examples
+    --------
+    Fit a Cox proportional hazards GAM with a smooth effect of age on the hazard:
+
+    ```{python}
+    import numpy as np
+    import whittaker as wk
+
+    rng = np.random.default_rng(0)
+    n = 300
+    age = rng.uniform(40, 80, n)
+    risk = np.exp(0.03 * (age - 60))
+    time = rng.exponential(1.0 / risk)
+    censor_time = rng.exponential(2.0, n)
+    observed_time = np.minimum(time, censor_time)
+    event = (time <= censor_time).astype(float)
+
+    data = {"time": observed_time, "age": age, "event": event}
+
+    model = wk.GAM("time ~ s(age)", family=wk.CoxPH(status="event"))
+    model.fit(data, method="REML")
+    print(model.summary())
+    ```
     """
 
     def __init__(self, status: str = "event", ties: str = "breslow") -> None:
