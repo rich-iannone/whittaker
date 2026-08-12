@@ -1104,20 +1104,37 @@ class GAM:
 
         return partial_effects(self, n_points=n_points, level=level)
 
-    def check(self) -> object:
-        """Produce GAM diagnostic plots (analogous to `mgcv::gam.check`).
+    def check(
+        self,
+        plots: tuple[str, ...] | list[str] | None = None,
+    ) -> list[object]:
+        """Produce GAM diagnostic plots.
 
-        Returns a 2×2 panel: QQ plot of residuals, residuals vs fitted values, histogram of
-        residuals, and response vs fitted values.
+        Returns a list of individual full-width Altair charts, one per diagnostic. In a notebook
+        each chart renders independently with its own interactive controls.
+
+        Parameters
+        ----------
+        plots:
+            Which diagnostics to show. A list of names chosen from `"qq"`, `"residuals"`,
+            `"histogram"`, `"response"`. `None` (default) returns all four.
 
         Returns
         -------
-        altair.VConcatChart
-            A 2×2 diagnostic panel.
+        list[altair.Chart]
+            One chart per requested diagnostic plot.
         """
         from whittaker.plotting import check as _check
 
-        return _check(self)
+        charts = _check(self, plots=plots)
+        try:
+            from IPython.display import display
+
+            for chart in charts:
+                display(chart)
+        except ImportError:
+            pass
+        return charts
 
     def influence(self) -> object:
         """Compute hat values and Cook's distance for each observation.
