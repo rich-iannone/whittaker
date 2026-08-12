@@ -1,4 +1,14 @@
-"""Monotone P-spline basis for shape-constrained smoothing."""
+"""Shape-constrained P-spline bases: monotone and convex/concave smoothing.
+
+This module provides two variants of the P-spline basis (see `whittaker.smooths.pspline`) that
+constrain the *shape* of the fitted curve rather than only its smoothness: `MonotonePSpline` enforces
+a non-decreasing or non-increasing fit, and `ConvexPSpline` enforces a convex or concave fit. Both
+constraints are linear inequality conditions on the B-spline coefficients, and both are enforced
+during fitting by projecting the coefficients onto the corresponding constraint cone after each
+penalized least-squares update, using the Pool Adjacent Violators Algorithm (PAVA, `_pava`) as the
+underlying projection mechanism. `project_monotone` and `project_convex` expose that projection
+directly for the monotone and convex/concave cases, respectively.
+"""
 
 from __future__ import annotations
 
@@ -9,14 +19,20 @@ from whittaker.smooths.pspline import PSpline, _diff_matrix
 
 
 class MonotonePSpline(PSpline):
-    """Shape-constrained P-spline: monotone increasing or decreasing.
+    r"""Shape-constrained P-spline: monotone increasing or decreasing.
 
-    Uses a P-spline basis with an additional linear inequality constraint on the B-spline
-    coefficients. Monotonicity of a B-spline curve is guaranteed when the coefficients are
-    non-decreasing (increasing) or non-increasing (decreasing).
-
-    The constraint is enforced during fitting via iterative coefficient projection (Pool Adjacent
-    Violators).
+    Uses the same B-spline basis and difference penalty as `~whittaker.smooths.pspline.PSpline`, but
+    additionally requires the fitted curve `f(x) = \sum_j \beta_j B_j(x)` to be non-decreasing (or,
+    with `decreasing=True`, non-increasing) over the whole domain. This is enforced as a linear
+    inequality constraint on the coefficients rather than on `f` directly: because each B-spline basis
+    function `B_j` is non-negative and has local support (a "bump" that overlaps only its
+    neighbours), a non-decreasing sequence of coefficients `\beta_1 \le \beta_2 \le \dots \le \beta_k`
+    guarantees a non-decreasing curve. Intuitively, moving `x` to the right shifts the basis functions'
+    weight away from earlier, smaller-or-equal coefficients and onto later, larger-or-equal ones, so
+    the weighted sum can only stay flat or increase. Use `MonotonePSpline` (via `s(x, bs="mpi")` for
+    increasing or `s(x, bs="mpd")` for decreasing in a formula) whenever domain knowledge says the
+    relationship must be monotone — e.g. a dose-response curve, a cumulative distribution, or a growth
+    curve — and an unconstrained smooth would otherwise wiggle non-monotonically due to noise.
 
     Parameters
     ----------
@@ -28,6 +44,39 @@ class MonotonePSpline(PSpline):
         Difference penalty order. The default is `2`.
     decreasing:
         If `True`, enforce monotone *decreasing*. The default is `False` (monotone increasing).
+
+    Notes
+    -----
+    The monotonicity constraint is enforced during fitting, not by direct constrained optimization.
+    Instead, at each penalized iteratively reweighted least squares (P-IRLS) iteration the ordinary
+    (unconstrained) coefficient update is projected onto the monotone cone: `whittaker.fitting.pirls`
+    detects any smooth term whose basis is a `MonotonePSpline` and passes its coefficient block through
+    `project_monotone` before the next iteration's linear predictor is formed. This projection uses the
+    Pool Adjacent Violators Algorithm (PAVA), the standard algorithm for isotonic regression (Barlow,
+    Bartholomew, Bremner & Brunk, 1972; Best & Chakravarti, 1990). Given an arbitrary vector, PAVA finds
+    the closest non-decreasing vector to it in the least-squares sense by scanning for adjacent
+    "violations" (a value followed by a smaller one) and replacing each violating block with its mean,
+    merging blocks until no violations remain. Because this is an orthogonal projection onto the convex
+    cone of non-decreasing sequences, iterating it alongside the P-IRLS coefficient update drives the
+    fit toward the coefficient vector, within that cone, that best balances the penalized deviance and
+    the constraint.
+
+    Examples
+    --------
+    ```{python}
+    import numpy as np
+    import whittaker as wt
+
+    rng = np.random.default_rng(0)
+    x = np.sort(rng.uniform(0, 1, 200))
+    y = 3 * x + rng.normal(scale=0.15, size=200)
+
+    model = wt.GAM("y ~ s(x, bs='mpi')").fit({"x": x, "y": y})
+
+    new_x = np.linspace(0, 1, 50)
+    fitted = model.predict({"x": new_x}).values
+    np.all(np.diff(fitted) >= -1e-8)
+    ```
     """
 
     def __init__(
@@ -49,10 +98,17 @@ class MonotonePSpline(PSpline):
 
 
 class ConvexPSpline(PSpline):
-    """Shape-constrained P-spline: convex or concave.
+    r"""Shape-constrained P-spline: convex or concave.
 
-    Convexity of a B-spline curve is guaranteed when the second differences of the coefficients are
-    non-negative.
+    Uses the same B-spline basis and difference penalty as `~whittaker.smooths.pspline.PSpline`, but
+    additionally requires the fitted curve `f(x) = \sum_j \beta_j B_j(x)` to be convex (or, with
+    `concave=True`, concave) over the whole domain. As with `MonotonePSpline`, this is enforced as a
+    linear inequality on the coefficients: for an equally-spaced B-spline basis, the curve is convex
+    whenever the second differences of the coefficients, `\Delta^2 \beta_j = \beta_j - 2\beta_{j-1} +
+    \beta_{j-2}`, are all non-negative. Use `ConvexPSpline` (via `s(x, bs="cx")` for convex or
+    `s(x, bs="cv")` for concave in a formula) when the relationship is known to have a single bend of
+    consistent curvature — e.g. a cost curve, a learning curve, or a concave production function —
+    and an unconstrained smooth would otherwise produce spurious inflection points from noise.
 
     Parameters
     ----------
@@ -64,6 +120,39 @@ class ConvexPSpline(PSpline):
         Difference penalty order. The default is `2`.
     concave:
         If `True`, enforce concavity. The default is `False` (convex).
+
+    Notes
+    -----
+    As with `MonotonePSpline`, the constraint is enforced during P-IRLS fitting by projecting the
+    ordinary coefficient update onto the convex (or concave) cone after each iteration: smooth terms
+    whose basis is a `ConvexPSpline` have their coefficient block passed through `project_convex`
+    before the next iteration's linear predictor is formed (see `whittaker.fitting.pirls`). The
+    projection extends the monotone PAVA projection by one order of differencing: convexity requires
+    the *first* differences of the coefficients, `d_j = \beta_j - \beta_{j-1}`, to form a non-decreasing
+    sequence (equivalently, that the second differences of `\beta` are non-negative), so `project_convex`
+    computes the first differences, projects *them* onto the monotone cone with PAVA (see the `Notes`
+    on `MonotonePSpline` for the algorithm), and then reconstructs `\beta` by cumulatively summing the
+    projected differences back up from `\beta_0`. Concavity is handled by negating the differences
+    before and after the PAVA projection, mirroring `decreasing=True` for `MonotonePSpline`.
+
+    Examples
+    --------
+    ```{python}
+    import numpy as np
+    import whittaker as wt
+
+    rng = np.random.default_rng(0)
+    x = np.sort(rng.uniform(-1, 1, 200))
+    y = x**2 + rng.normal(scale=0.1, size=200)
+
+    model = wt.GAM("y ~ s(x, bs='cx')").fit({"x": x, "y": y})
+
+    new_x = np.linspace(-1, 1, 50)
+    fitted = model.predict({"x": new_x}).values
+    second_diff = np.diff(fitted, n=2)
+    # Second differences are non-negative up to fitting/projection tolerance.
+    np.all(second_diff >= -1e-2)
+    ```
     """
 
     def __init__(
@@ -89,17 +178,50 @@ class ConvexPSpline(PSpline):
 
 
 def project_monotone(beta: NDArray, *, decreasing: bool = False) -> NDArray:
-    """Project coefficients onto the monotone cone using PAVA."""
+    """Project a coefficient vector onto the monotone cone using PAVA.
+
+    Returns the closest (in least-squares distance) non-decreasing, or if `decreasing=True`,
+    non-increasing vector to `beta`. See `MonotonePSpline` for details on the PAVA algorithm and how
+    this projection is used to enforce monotonicity during fitting.
+
+    Parameters
+    ----------
+    beta:
+        Coefficient vector to project, shape `(k,)`.
+    decreasing:
+        If `True`, project onto the non-increasing cone instead of the non-decreasing cone. The
+        default is `False`.
+
+    Returns
+    -------
+    NDArray
+        The projected coefficient vector, shape `(k,)`.
+    """
     if decreasing:
         return -_pava(-beta)
     return _pava(beta)
 
 
 def project_convex(beta: NDArray, *, concave: bool = False) -> NDArray:
-    """Project coefficients onto the convex (or concave) cone.
+    """Project a coefficient vector onto the convex (or concave) cone.
 
-    Convexity requires non-negative second differences.  We project the second differences onto the
-    non-negative cone, then reconstruct.
+    Convexity requires non-negative second differences of `beta`. This is achieved by projecting the
+    *first* differences of `beta` onto the monotone (non-decreasing) cone with PAVA, then
+    reconstructing the coefficient vector by cumulative summation. See `ConvexPSpline` for the full
+    derivation and how this projection is used to enforce convexity during fitting.
+
+    Parameters
+    ----------
+    beta:
+        Coefficient vector to project, shape `(k,)`.
+    concave:
+        If `True`, project onto the concave cone (non-positive second differences) instead of the
+        convex cone. The default is `False`.
+
+    Returns
+    -------
+    NDArray
+        The projected coefficient vector, shape `(k,)`.
     """
     D1 = _diff_matrix(len(beta), 1)
     diffs = D1 @ beta
@@ -114,7 +236,7 @@ def project_convex(beta: NDArray, *, concave: bool = False) -> NDArray:
 
 
 def _pava(x: NDArray) -> NDArray:
-    """Pool Adjacent Violators: isotonic regression (non-decreasing)."""
+    """Pool Adjacent Violators Algorithm: isotonic (non-decreasing) regression on `x`."""
     n = len(x)
     result = x.copy()
     block_start = np.arange(n)
