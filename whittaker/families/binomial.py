@@ -1,4 +1,4 @@
-"""Binomial family with logit link."""
+r"""Binomial family with logit link."""
 
 from __future__ import annotations
 
@@ -12,13 +12,68 @@ _EPS = np.finfo(float).eps
 
 
 class Binomial(Family):
-    """Binomial family with logit (canonical) link.
+    r"""Binomial family with logit (canonical) link.
 
-    For the Binomial family:
+    The Binomial family models a response that is either binary (`0`/`1`) or a proportion in
+    `[0, 1]` (e.g. the fraction of successes out of a known number of trials). The logit link
+    maps the unit interval to the whole real line, so the linear predictor is unconstrained
+    while the fitted mean is always a valid probability. Use it for classification-style GAMs,
+    for aggregated success/trial proportions, or wherever the outcome represents the
+    probability of an event. The logit link additionally gives coefficients a log-odds
+    interpretation: a one-unit increase in a covariate changes the log-odds of success by
+    `coefficient`, and multiplies the odds by `exp(coefficient)`.
 
-    - Link: g(μ) = log(μ / (1 − μ)) (logit)
-    - Variance function: V(μ) = μ(1 − μ)
-    - Deviance: 2 Σ [y log(y/μ) + (1−y) log((1−y)/(1−μ))]
+    Parameters
+    ----------
+    None
+        `Binomial` takes no constructor arguments. The scale parameter is fixed at `1` (see
+        `scale_known`), since the Bernoulli/Binomial distribution has no free dispersion
+        parameter.
+
+    Notes
+    -----
+    The canonical link is the logit function:
+
+    $$
+    g(\mu) = \log\!\left(\frac{\mu}{1-\mu}\right)
+    $$
+
+    with inverse the logistic sigmoid $\mu = g^{-1}(\eta) = 1 / (1 + e^{-\eta})$. The variance
+    function is
+
+    $$
+    V(\mu) = \mu(1-\mu),
+    $$
+
+    which is largest near $\mu = 0.5$ and shrinks toward zero as $\mu$ approaches either
+    boundary. The deviance is
+
+    $$
+    D(y, \hat\mu) = 2 \sum_i \left[ y_i \log\!\left(\frac{y_i}{\hat\mu_i}\right)
+    + (1 - y_i) \log\!\left(\frac{1 - y_i}{1 - \hat\mu_i}\right) \right] .
+    $$
+
+    Examples
+    --------
+    Fit a GAM to a binary outcome with a smooth, nonlinear log-odds relationship:
+
+    ```{python}
+    import numpy as np
+    import whittaker as wk
+    from scipy.special import expit
+
+    rng = np.random.default_rng(0)
+    n = 300
+    x = np.linspace(-3, 3, n)
+    p = expit(np.sin(x))
+    y = rng.binomial(1, p)
+
+    data = {"x": x, "y": y}
+
+    model = wk.GAM("y ~ s(x)", family=wk.Binomial())
+    model.fit(data, method="REML")
+    print(model.summary())
+    ```
     """
 
     def link(self, mu: NDArray) -> NDArray:
