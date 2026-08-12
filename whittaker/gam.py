@@ -233,17 +233,47 @@ class GAM:
 
     @property
     def formula(self) -> Formula:
-        """The parsed model formula."""
+        """The parsed model formula.
+
+        This is the `Formula` object produced by parsing the formula string passed to
+        `GAM.__init__()` (or the `Formula` object passed directly). It lists the response
+        column and the parsed smooth (`s()`, `te()`, `ti()`, `t2()`), parametric, interaction,
+        and offset terms that make up the right-hand side.
+
+        Returns
+        -------
+        Formula
+            The parsed formula.
+        """
         return self._formula
 
     @property
     def family(self) -> Family:
-        """The response distribution family."""
+        """The response distribution family used to fit this model.
+
+        Determines the variance function, deviance, and link function used during P-IRLS.
+        Defaults to `Gaussian()` when no `family` argument was given to `GAM.__init__()`.
+
+        Returns
+        -------
+        Family
+            The family object supplied to (or defaulted by) the constructor.
+        """
         return self._family
 
     @property
     def is_fitted(self) -> bool:
-        """`True` after `fit()` has been called."""
+        """Whether the model has been fitted.
+
+        `True` once `fit()` has completed successfully; `False` beforehand. Most other
+        properties and methods (`coefficients`, `predict()`, `summary()`, etc.) require this to
+        be `True` and raise a `RuntimeError` via `_check_fitted()` otherwise.
+
+        Returns
+        -------
+        bool
+            Fitted status of the model.
+        """
         return self._fitted
 
     def fit(
@@ -822,19 +852,48 @@ class GAM:
 
     @property
     def coefficients(self) -> NDArray:
-        """Estimated coefficients β."""
+        r"""Estimated coefficients $\boldsymbol{\beta}$.
+
+        A single flat vector holding the intercept, parametric term coefficients, and every
+        smooth term's basis coefficients concatenated in formula order. Use
+        `self._model_matrix.smooths` (or `predict(type="terms")`) to map sub-ranges of this
+        vector back to individual terms.
+
+        Returns
+        -------
+        numpy.ndarray
+            Coefficient vector, shape `(n_coefs,)`. A copy, safe to mutate.
+        """
         self._check_fitted()
         return self._fit_result.coefficients.copy()
 
     @property
     def fitted_values(self) -> NDArray:
-        """Fitted values μ on the response scale."""
+        r"""Fitted values $\mu$ on the response scale.
+
+        Equal to $g^{-1}(\eta)$ where $\eta = \mathbf{X}\boldsymbol{\beta}$ is the linear
+        predictor evaluated on the training data used in `fit()`.
+
+        Returns
+        -------
+        numpy.ndarray
+            Fitted response values, shape `(n,)`. A copy, safe to mutate.
+        """
         self._check_fitted()
         return self._fit_result.fitted_values.copy()
 
     @property
     def residuals(self) -> NDArray:
-        """Response residuals (y − μ)."""
+        r"""Response residuals ($y - \mu$) on the training data.
+
+        These are the raw (unstandardized) residuals. For Pearson, deviance, or working
+        residuals — or residuals on new data — use `get_residuals()` instead.
+
+        Returns
+        -------
+        numpy.ndarray
+            Residual vector, shape `(n,)`. A copy, safe to mutate.
+        """
         self._check_fitted()
         return self._fit_result.residuals.copy()
 
@@ -879,49 +938,133 @@ class GAM:
 
     @property
     def smoothing_params(self) -> list[float]:
-        """Selected or fixed smoothing parameters λ_j."""
+        r"""Selected or fixed smoothing parameters $\lambda_j$, one per penalty.
+
+        If `fit()` was called with `smoothing_params=None` (the default), these are the values
+        chosen automatically via GCV, REML, or ML; otherwise they are the fixed values that were
+        passed in. A `te()`/`t2()` term contributes more than one entry (one per marginal
+        penalty), so this list is generally longer than the number of smooth terms.
+
+        Returns
+        -------
+        list[float]
+            One smoothing parameter per penalty, in the order the penalties were built.
+        """
         self._check_fitted()
         return list(self._fit_result.smoothing_params)
 
     @property
     def edf(self) -> list[float]:
-        """Effective degrees of freedom per smooth term."""
+        """Effective degrees of freedom (EDF) for each smooth term.
+
+        Each value is the trace of the portion of the hat matrix attributable to that term,
+        reflecting how much shrinkage its smoothing parameter applied: values near the term's
+        basis dimension indicate little penalization, values near 1 indicate near-linear
+        shrinkage.
+
+        Returns
+        -------
+        list[float]
+            One EDF value per smooth term, in formula order.
+        """
         self._check_fitted()
         return list(self._fit_result.edf)
 
     @property
     def edf_total(self) -> float:
-        """Total model effective degrees of freedom."""
+        """Total effective degrees of freedom across all model terms.
+
+        The sum of the per-term EDF values (plus the intercept and parametric terms), i.e. the
+        trace of the full hat (influence) matrix. Used in `summary()`, `gam_check()`, and in
+        computing residual degrees of freedom for interval and test calculations.
+
+        Returns
+        -------
+        float
+            Total EDF of the fitted model.
+        """
         self._check_fitted()
         return self._fit_result.edf_total
 
     @property
     def scale(self) -> float:
-        """Estimated scale parameter φ."""
+        r"""Estimated scale (dispersion) parameter $\phi$.
+
+        For families with a known scale (Binomial, Poisson) this is fixed at `1.0`. For families
+        with unknown scale (Gaussian, Gamma, Tweedie) it is estimated from the Pearson residuals
+        and is used to scale coefficient standard errors and prediction intervals.
+
+        Returns
+        -------
+        float
+            Estimated (or fixed) dispersion parameter.
+        """
         self._check_fitted()
         return self._fit_result.scale
 
     @property
     def deviance(self) -> float:
-        """Model deviance at convergence."""
+        """Model deviance at convergence.
+
+        Twice the difference between the saturated log-likelihood and the fitted model's
+        log-likelihood, evaluated at the final coefficients. Lower values indicate a better fit
+        to the training data; compare against `null_deviance` via `deviance_explained`.
+
+        Returns
+        -------
+        float
+            Deviance of the fitted model.
+        """
         self._check_fitted()
         return self._fit_result.deviance
 
     @property
     def gcv_score(self) -> float:
-        """GCV score at the fitted smoothing parameters."""
+        r"""Generalized Cross-Validation score at the fitted smoothing parameters.
+
+        Computed as $\text{GCV} = n \cdot D / (n - \text{tr}(\mathbf{H}))^2$, where $D$ is the
+        deviance and $\mathbf{H}$ is the hat matrix. This is the criterion minimized when
+        `fit(method="GCV")` selects smoothing parameters, and is reported even when a different
+        `method` was used.
+
+        Returns
+        -------
+        float
+            GCV score of the fitted model.
+        """
         self._check_fitted()
         return self._fit_result.gcv_score
 
     @property
     def null_deviance(self) -> float:
-        """Null deviance (intercept-only model)."""
+        """Deviance of the intercept-only (null) model.
+
+        Fit on the same data and with the same family and weights, but with every covariate
+        effect (smooth and parametric) removed. Serves as the baseline against which
+        `deviance_explained` measures the reduction in deviance achieved by the fitted model.
+
+        Returns
+        -------
+        float
+            Deviance of the intercept-only model.
+        """
         self._check_fitted()
         return self._fit_result.null_deviance
 
     @property
     def deviance_explained(self) -> float:
-        """Proportion of null deviance explained by the model (analogous to R²)."""
+        """Proportion of null deviance explained by the model (analogous to R²).
+
+        Computed as `1 - deviance / null_deviance`. Ranges from `0` (no improvement over an
+        intercept-only model) up to `1` (a perfect fit), and provides a family-agnostic measure
+        of goodness of fit that generalizes R² beyond the Gaussian case.
+
+        Returns
+        -------
+        float
+            Proportion of deviance explained, in `[0, 1]` for a sensible fit. Returns `0.0` if
+            the null deviance is non-positive.
+        """
         self._check_fitted()
         null_dev = self._fit_result.null_deviance
         if null_dev <= 0:
@@ -930,13 +1073,33 @@ class GAM:
 
     @property
     def aic(self) -> float:
-        """Akaike Information Criterion."""
+        """Akaike Information Criterion of the fitted model.
+
+        Balances goodness of fit against model complexity (using the total effective degrees of
+        freedom in place of the raw parameter count). Lower values indicate a preferable
+        trade-off; use it to compare non-nested models fitted to the same data and family.
+
+        Returns
+        -------
+        float
+            AIC of the fitted model.
+        """
         self._check_fitted()
         return self._fit_result.aic
 
     @property
     def bic(self) -> float:
-        """Bayesian Information Criterion."""
+        """Bayesian Information Criterion of the fitted model.
+
+        Like `aic`, but penalizes model complexity more heavily as sample size grows (using
+        `log(n)` in place of `2` as the per-degree-of-freedom penalty), which tends to favor
+        simpler models than AIC for larger datasets.
+
+        Returns
+        -------
+        float
+            BIC of the fitted model.
+        """
         self._check_fitted()
         return self._fit_result.bic
 
