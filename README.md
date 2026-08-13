@@ -34,39 +34,39 @@ Whittaker is a Python library for Generalized Additive Models (GAMs), the flexib
 - it gives you the full smooth catalog from R's mgcv: thin plate regression splines, cubic splines, P-splines, tensor products, cyclic splines, random effects, factor smooths, and more
 - smoothness selection is principled: REML by default, with GCV, ML, and fREML as alternatives
 - you get beautiful, interactive plots: partial effects, diagnostics, term comparisons, and prediction intervals, all powered by [Altair](https://altair-viz.github.io/)
-- it goes beyond the mean: distributional regression (GAMLSS), quantile regression, conformal prediction, causal inference, streaming GAMs, and functional regression are all built in
+- it goes well beyond the mean: distributional regression (GAMLSS), quantile regression, conformal prediction, causal inference, streaming GAMs, and functional regression are all built in
 
 ## What's included
 
 Core GAM fitting:
 
-- **GAM**: the central class. Fit penalized regression splines with automatic smoothness selection via REML, GCV, or ML. Full summary, diagnostics, and partial-effect visualization.
-- **Formula syntax**: R-style formulas like `"y ~ s(x1) + s(x2, k=20) + te(x3, x4) + x5"` with smooth terms, tensor products, linear terms, interactions, offsets, and by-variable smooths.
-- **Response families**: Gaussian, Poisson, Binomial, Gamma, Negative Binomial, Beta, Tweedie, Inverse Gaussian, Cox PH, and more. Each with appropriate link functions and variance structure.
-- **Smooth basis types**: TPRS (default), cubic regression splines, P-splines, cyclic variants, shrinkage smooths, thin plate splines, Duchon splines, Gaussian processes, soap film smooths, Markov random fields, random effects, and factor smooths.
-- **Shape constraints**: monotone increasing/decreasing, convex, and concave smooths via constrained P-splines with PAVA projection.
+- **GAM**: the central class that can fit penalized regression splines with automatic smoothness selection via REML, GCV, or ML. Full summary, diagnostics, and partial-effect visualization
+- **Formula syntax**: R-style formulas like `"y ~ s(x1) + s(x2, k=20) + te(x3, x4) + x5"` with smooth terms, tensor products, linear terms, interactions, offsets, and by-variable smooths
+- **Response families**: Gaussian, Poisson, Binomial, Gamma, Negative Binomial, Beta, Tweedie, Inverse Gaussian, Cox PH, and more. Each with appropriate link functions and variance structure
+- **Smooth basis types**: TPRS (default), cubic regression splines, P-splines, cyclic variants, shrinkage smooths, thin plate splines, Duchon splines, Gaussian processes, soap film smooths, Markov random fields, random effects, and factor smooths
+- **Shape constraints**: monotone increasing/decreasing, convex, and concave smooths via constrained P-splines with PAVA projection
 
 Prediction and inference:
 
-- **Prediction**: point estimates, standard errors, confidence intervals (pointwise and simultaneous), prediction intervals, and term-level contributions. All on response or link scale.
-- **Diagnostics**: `model.summary()` for EDF and significance tests, `model.check()` for basis dimension adequacy (k-index test), concurvity analysis, and residual plots.
-- **Cross-validation**: k-fold CV with deviance, MSE, or MAE scoring via `cross_validate()`.
+- **Prediction**: point estimates, standard errors, confidence intervals (pointwise and simultaneous), prediction intervals, and term-level contributions. All on response or link scale
+- **Diagnostics**: `model.summary()` for EDF and significance tests, `model.check()` for basis dimension adequacy (k-index test), concurvity analysis, and residual plots
+- **Cross-validation**: k-fold CV with deviance, MSE, or MAE scoring via `cross_validate()`
 
 Advanced models:
 
-- **Distributional regression** (`GAMLSS`): model location, scale, and shape simultaneously. Gaussian, Gamma, and Beta location-scale families, plus zero-inflated Poisson and Negative Binomial.
-- **Quantile regression** (`QuantileGAM`): fit conditional quantiles with ELF loss, optional non-crossing constraints, and sigma calibration.
-- **Conformal prediction** (`ConformalPredictor`): distribution-free prediction intervals via split, CV+, and jackknife+ methods.
-- **Causal inference** (`CausalGAM`): double/debiased machine learning for ATE and CATE estimation, with mediation analysis.
-- **Streaming GAMs** (`StreamingGAM`): incremental fitting via sufficient statistics with exponential decay for tracking distribution shift.
-- **Multi-response GAMs** (`MultiResponseGAM`): joint fitting of multiple responses with optional residual correlation modeling.
-- **Functional regression** (`FunctionalGAM`): scalar-on-function regression with B-spline or Fourier bases for functional covariates.
+- **Distributional regression** (`GAMLSS`): model location, scale, and shape simultaneously (Gaussian, Gamma, and Beta location-scale families, plus zero-inflated Poisson and Negative Binomial)
+- **Quantile regression** (`QuantileGAM`): fit conditional quantiles with ELF loss, optional non-crossing constraints, and sigma calibration
+- **Conformal prediction** (`ConformalPredictor`): distribution-free prediction intervals via split, CV+, and jackknife+ methods
+- **Causal inference** (`CausalGAM`): double/debiased machine learning for ATE and CATE estimation, with mediation analysis
+- **Streaming GAMs** (`StreamingGAM`): incremental fitting via sufficient statistics with exponential decay for tracking distribution shift
+- **Multi-response GAMs** (`MultiResponseGAM`): joint fitting of multiple responses with optional residual correlation modeling
+- **Functional regression** (`FunctionalGAM`): scalar-on-function regression with B-spline or Fourier bases for functional covariates
 
 Scalability and deployment:
 
-- **Large datasets**: `BigGAM` (discretized P-IRLS), `PolarsGAM` (streaming from Polars/files), and `DuckDBGAM` (SQL-native streaming) for datasets that exceed memory.
-- **Serialization**: `save_gam` / `load_gam` for compact `.npz` archives, and `to_mgcv_dict` / `from_mgcv_dict` for R interoperability.
-- **scikit-learn integration**: `GAMRegressor` and `GAMClassifier` for use in pipelines and grid search.
+- **Large datasets**: `BigGAM` (discretized P-IRLS), `PolarsGAM` (streaming from Polars/files), and `DuckDBGAM` (SQL-native streaming) for datasets that exceed memory
+- **Serialization**: `save_gam()` / `load_gam()` for compact `.npz` archives, and `to_mgcv_dict` / `from_mgcv_dict` for R interoperability
+- **scikit-learn integration**: `GAMRegressor` and `GAMClassifier` for use in pipelines and grid search
 
 ## Get started
 
