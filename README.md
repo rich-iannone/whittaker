@@ -26,7 +26,7 @@
 
 ## What is Whittaker?
 
-Whittaker is a Python library for Generalized Additive Models (GAMs), the flexible regression models that replace rigid linear assumptions with smooth, data-driven functions. Whether you're fitting a dose-response curve, modeling spatial patterns, or building prediction intervals, Whittaker gives you the smooth catalog, inference machinery, and diagnostic tools to do it right.
+Whittaker is a Python library for Generalized Additive Models (GAMs), the flexible regression models that replace rigid linear assumptions with smooth, data-driven functions. Whether you're fitting a dose-response curve, modeling spatial patterns, or building prediction intervals, Whittaker gives you the smooth catalog, inference machinery, and diagnostic tools to do it right!
 
 ### Why Whittaker?
 
