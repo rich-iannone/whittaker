@@ -11,7 +11,7 @@
 <a href="https://github.com/rich-iannone/whittaker/actions/workflows/ci.yml"><img src="https://github.com/rich-iannone/whittaker/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI"></a>
 </p>
 <p align="center">
-<a href="https://www.repostatus.org/#wip"><img src="https://www.repostatus.org/badges/latest/wip.svg" alt="Repo Status"></a>
+<a href="https://www.repostatus.org/#active"><img src="https://www.repostatus.org/badges/latest/active.svg" alt="Repo Status"></a>
 </p>
 <p align="center">
 <a href="https://rich-iannone.github.io/whittaker/"><img src="https://img.shields.io/badge/docs-project_website-blue.svg" alt="Documentation"></a>
@@ -19,7 +19,7 @@
 <a href="https://www.contributor-covenant.org/version/3/0/"><img src="https://img.shields.io/badge/Contributor%20Covenant-v3.0%20adopted-ff69b4.svg" alt="Contributor Covenant"></a>
 </p>
 <p align="center">
-<img src="https://raw.githubusercontent.com/rich-iannone/whittaker/main/assets/readme_strip.png" alt="GAM smooth fits" width="700">
+<img src="https://rich-iannone.github.io/whittaker/assets/readme_strip.png" alt="GAM smooth fits" width="700">
 </p>
 
 ---
@@ -93,7 +93,7 @@ preds = model.predict({"x": np.linspace(0, 2 * np.pi, 50)}, se=True)
 ```
 
 <p align="center">
-<img src="https://raw.githubusercontent.com/rich-iannone/whittaker/main/assets/readme_partial_effects.png" alt="Partial effects plot" width="700">
+<img src="https://rich-iannone.github.io/whittaker/assets/readme_partial_effects.png" alt="Partial effects plot" width="700">
 </p>
 
 ```python
@@ -102,7 +102,7 @@ model.check()
 ```
 
 <p align="center">
-<img src="https://raw.githubusercontent.com/rich-iannone/whittaker/main/assets/readme_diagnostics.png" alt="Diagnostic plots" width="700">
+<img src="https://rich-iannone.github.io/whittaker/assets/readme_diagnostics.png" alt="Diagnostic plots" width="700">
 </p>
 
 See the [user guide](https://rich-iannone.github.io/whittaker/user-guide/get-started.html) for a comprehensive tour of all features, from basic smoothing to distributional regression and causal inference.
