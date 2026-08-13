@@ -33,7 +33,7 @@ Whittaker is a Python library for Generalized Additive Models (GAMs), the flexib
 - it works with your dataframe library: Pandas, Polars, PyArrow, or anything supported by [Narwhals](https://narwhals-dev.github.io/narwhals/)
 - it gives you the full smooth catalog from R's mgcv: thin plate regression splines, cubic splines, P-splines, tensor products, cyclic splines, random effects, factor smooths, and more
 - smoothness selection is principled: REML by default, with GCV, ML, and fREML as alternatives
-- you get beautiful, interactive visualizations with [Altair](https://altair-viz.github.io/) and publication-ready tables through [Great Tables](https://posit-co.github.io/great-tables/)
+- you get beautiful, interactive plots: partial effects, diagnostics, term comparisons, and prediction intervals, all powered by [Altair](https://altair-viz.github.io/)
 - it goes beyond the mean: distributional regression (GAMLSS), quantile regression, conformal prediction, causal inference, streaming GAMs, and functional regression are all built in
 
 ## What's included
@@ -154,7 +154,7 @@ pip install whittaker
 For optional backends and visualization:
 
 ```bash
-pip install "whittaker[all]"       # Pandas, Polars, PyArrow, Altair, Great Tables
+pip install "whittaker[all]"       # Pandas, Polars, PyArrow, Altair
 pip install "whittaker[pl,altair]" # Just Polars and Altair
 ```
 
