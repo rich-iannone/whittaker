@@ -18,6 +18,9 @@
 <a href="https://github.com/rich-iannone/whittaker/graphs/contributors"><img src="https://img.shields.io/github/contributors/rich-iannone/whittaker" alt="Contributors"></a>
 <a href="https://www.contributor-covenant.org/version/3/0/"><img src="https://img.shields.io/badge/Contributor%20Covenant-v3.0%20adopted-ff69b4.svg" alt="Contributor Covenant"></a>
 </p>
+<p align="center">
+<img src="https://raw.githubusercontent.com/rich-iannone/whittaker/main/assets/readme_strip.png" alt="GAM smooth fits" width="700">
+</p>
 
 ---
 
