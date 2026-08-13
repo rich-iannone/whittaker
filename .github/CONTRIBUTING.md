@@ -1,8 +1,7 @@
 # Contributing to Whittaker
 
-Thanks for your interest in improving Whittaker! This project is in active early
-development (see [`PLAN.md`](../PLAN.md)). Contributions of code, tests, docs, and
-R-parity fixtures are all welcome.
+Thanks for your interest in improving Whittaker! Contributions of code, tests, and docs are all
+welcome.
 
 ## Development setup
 
