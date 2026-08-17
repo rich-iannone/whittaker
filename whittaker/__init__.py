@@ -5,6 +5,7 @@ from __future__ import annotations
 from importlib.metadata import PackageNotFoundError, version
 
 from whittaker.bam import BigGAM
+from whittaker.datasets import list_datasets, load_dataset
 from whittaker.calibration import calibrate_sigma
 from whittaker.causal import (
     CATEResult,
@@ -192,4 +193,7 @@ __all__ = [
     "predict_matrix",
     "ModelMatrix",
     "SmoothInfo",
+    # Datasets
+    "load_dataset",
+    "list_datasets",
 ]
