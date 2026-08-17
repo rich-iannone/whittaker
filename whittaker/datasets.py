@@ -35,8 +35,7 @@ _REGISTRY: dict[str, dict[str, str]] = {
         "variables": "temperature (°C), depth (m), count",
         "family": "Poisson",
         "note": (
-            "Count response driven by a non-linear temperature effect "
-            "and a linear depth effect."
+            "Count response driven by a non-linear temperature effect and a linear depth effect."
         ),
     },
     "credit": {
@@ -167,8 +166,7 @@ def load_dataset(name: str, as_frame: bool = False) -> dict[str, NDArray] | Any:
         import pandas as pd
     except ImportError as exc:
         raise ImportError(
-            "load_dataset(..., as_frame=True) requires pandas. "
-            "Install it with: pip install pandas"
+            "load_dataset(..., as_frame=True) requires pandas. Install it with: pip install pandas"
         ) from exc
     return pd.DataFrame(data)
 
@@ -193,7 +191,7 @@ def _mcycle() -> dict[str, NDArray]:
     times = np.sort(
         np.concatenate(
             [
-                rng.uniform(0.0, 13.0, 20),   # pre-impact
+                rng.uniform(0.0, 13.0, 20),  # pre-impact
                 rng.uniform(13.0, 32.0, 78),  # crash + recovery onset
                 rng.uniform(32.0, 57.6, 35),  # late recovery
             ]
@@ -254,12 +252,7 @@ def _fish() -> dict[str, NDArray]:
     temperature = rng.uniform(8.0, 28.0, n)
     depth = rng.uniform(2.0, 50.0, n)
 
-    log_mu = (
-        2.8
-        - 0.018 * (temperature - 18.0) ** 2
-        - 0.025 * depth
-        + rng.normal(0.0, 0.15, n)
-    )
+    log_mu = 2.8 - 0.018 * (temperature - 18.0) ** 2 - 0.025 * depth + rng.normal(0.0, 0.15, n)
     count = rng.poisson(np.exp(log_mu)).astype(float)
 
     return {"temperature": temperature, "depth": depth, "count": count}
@@ -282,7 +275,7 @@ def _credit() -> dict[str, NDArray]:
     log_odds = (
         0.5
         - 0.018 * income
-        + 4.5 * debt_ratio ** 2
+        + 4.5 * debt_ratio**2
         + 0.003 * (age - 45.0) ** 2 / 5.0
         + rng.normal(0.0, 0.25, n)
     )
@@ -309,7 +302,7 @@ def _wages() -> dict[str, NDArray]:
         + 0.06 * (age - 18.0)
         - 0.0006 * (age - 18.0) ** 2
         + 0.04 * experience
-        - 0.0008 * experience ** 2
+        - 0.0008 * experience**2
         + rng.normal(0.0, 0.25, n)
     )
     wage = np.exp(log_wage)
@@ -334,7 +327,7 @@ def _proportions() -> dict[str, NDArray]:
         2.0
         - 0.012 * (temperature - 22.0) ** 2
         + 0.03 * water
-        - 0.0002 * water ** 2
+        - 0.0002 * water**2
         + rng.normal(0.0, 0.5, n)
     )
     mu = 1.0 / (1.0 + np.exp(-logit_mu))
@@ -417,12 +410,12 @@ def _abalone() -> dict[str, NDArray]:
     length = rng.uniform(0.10, 0.80, n)
     diameter = length * rng.uniform(0.65, 0.85, n)
     height = length * rng.uniform(0.10, 0.40, n)
-    shucked_weight = rng.uniform(0.002, 1.5, n) * length ** 2.5
+    shucked_weight = rng.uniform(0.002, 1.5, n) * length**2.5
 
     log_rings = (
         1.6
         + 2.5 * length
-        - 1.2 * length ** 2
+        - 1.2 * length**2
         + 0.4 * np.log(shucked_weight + 0.1)
         + rng.normal(0.0, 0.18, n)
     )
@@ -459,11 +452,7 @@ def _climate() -> dict[str, NDArray]:
         + 8.0 * np.cos(2 * np.pi * (month - 1) / 12.0)
     )
     # True SD: larger at high altitude and high latitude (more variable climates)
-    log_sd = (
-        0.8
-        + 0.0004 * altitude
-        + 0.025 * (latitude - 40.0)
-    )
+    log_sd = 0.8 + 0.0004 * altitude + 0.025 * (latitude - 40.0)
     sigma = np.exp(log_sd)
     temperature = mu + rng.normal(0.0, sigma, n)
 
