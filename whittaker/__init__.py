@@ -5,7 +5,6 @@ from __future__ import annotations
 from importlib.metadata import PackageNotFoundError, version
 
 from whittaker.bam import BigGAM
-from whittaker.datasets import list_datasets, load_dataset
 from whittaker.calibration import calibrate_sigma
 from whittaker.causal import (
     CATEResult,
@@ -21,6 +20,7 @@ from whittaker.conformal import (
     conformal_fit,
 )
 from whittaker.cross_validation import CVResult, cross_validate
+from whittaker.datasets import list_datasets, load_dataset
 from whittaker.duckdb import DuckDBGAM
 from whittaker.families import (
     Beta,
