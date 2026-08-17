@@ -34,7 +34,10 @@ _REGISTRY: dict[str, dict[str, str]] = {
         "description": "Synthetic fish-count survey data (n=300).",
         "variables": "temperature (°C), depth (m), count",
         "family": "Poisson",
-        "note": "Count response driven by a non-linear temperature effect and a linear depth effect.",
+        "note": (
+            "Count response driven by a non-linear temperature effect "
+            "and a linear depth effect."
+        ),
     },
     "credit": {
         "description": "Synthetic credit-default dataset (n=1000).",
