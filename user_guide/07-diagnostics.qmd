@@ -63,7 +63,7 @@ cannot capture the true function shape. The `check()` method runs a basis dimens
 
 ```{python}
 # Run the check
-model.check();
+model.check()
 ```
 
 The k-index is based on the ratio of the residual variance estimated from neighboring residuals to
@@ -214,7 +214,7 @@ model_bad = wk.GAM("y ~ s(x, k=5)")
 model_bad.fit({"x": x, "y": y}, method="REML")
 
 # Check: the k-index should flag the problem
-model_bad.check();
+model_bad.check()
 ```
 
 ```{python}
@@ -223,7 +223,7 @@ model_good = wk.GAM("y ~ s(x, k=20)")
 model_good.fit({"x": x, "y": y}, method="REML")
 
 # The check should now pass
-model_good.check();
+model_good.check()
 ```
 
 ```{python}
