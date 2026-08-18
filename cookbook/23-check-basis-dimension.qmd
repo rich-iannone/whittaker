@@ -1,0 +1,96 @@
+---
+title: "Check Basis Dimension Adequacy"
+description: "Verify that k is large enough using the k-index test."
+tags: [Diagnostics, Model selection]
+---
+
+# Check Basis Dimension Adequacy
+
+Every smooth in a Whittaker GAM is represented by `k` basis functions. If `k` is too
+small, the smooth cannot capture the true shape of the relationship, no matter how
+much data you have. The k-index test detects this by comparing the spatial
+autocorrelation of the residuals against what you would expect from a well-fitted
+smooth.
+
+## Run the check
+
+Fit a simple GAM as a starting point.
+
+```{python}
+import whittaker as wk
+
+data = wk.load_dataset("mcycle")
+model = wk.GAM("accel ~ s(times)").fit(data)
+```
+
+`model.k_check()` returns one `KCheckResult` per smooth term. For a single-smooth
+model the element of interest is the first one.
+
+```{python}
+kc = model.k_check()
+kc[0].k_index
+```
+
+A k-index at or above 1 indicates that the basis dimension is adequate. Values below
+0.8 are a warning sign that `k` is too small to capture the true shape of the
+relationship.
+
+```{python}
+kc[0].p_value
+```
+
+A p-value below 0.05 would corroborate that warning. Here both diagnostics are
+healthy, so the default `k = 10` is sufficient for this dataset.
+
+The diagnostic table also includes the effective degrees of freedom (EDF) used by the
+smooth and the basis dimension `k` itself.
+
+- `k_prime`: the number of basis functions available to the smooth (the value passed
+  as `k`, minus one for the identifiability constraint).
+- `edf`: the effective degrees of freedom actually used. If EDF is close to `k_prime`,
+  the smooth is pressing against the basis limit.
+- `k_index`: residual autocorrelation relative to its expected value. At or above 1 is
+  fine whereas below 0.8 is a concern.
+- `p_value`: significance of the k-index test. Small values (<0.05) suggest inadequacy.
+
+## What to do if k is too small
+
+If either diagnostic raises a concern, refit with a larger `k` inside the `s()` call. Common choices
+are 20 or 30.
+
+```{python}
+model_k20 = wk.GAM("accel ~ s(times, k=20)").fit(data)
+kc20 = model_k20.k_check()
+```
+
+Compare the EDF before and after increasing `k`. If the EDF rises substantially, the original `k`
+was genuinely constraining the smooth.
+
+```{python}
+# original model: k = 10
+kc[0].edf
+```
+
+```{python}
+# refitted model: k = 20
+kc20[0].edf
+```
+
+The EDF barely changes here, which confirms that the default basis was not too small. Look at the
+full summaries side by side to see how the other diagnostics compare.
+
+```{python}
+model.summary()
+```
+
+```{python}
+model_k20.summary()
+```
+
+## Rule of thumb
+
+A well-chosen `k` leaves room to spare: the EDF should be noticeably below `k − 1`. If EDF ≈ k − 1
+(within about 0.5), the penalty is pressing against the basis dimension limit rather than
+controlling the smooth's wiggliness, and a larger `k` is warranted. There is little cost to using a
+generous `k` (penalization will shrink the smooth back toward the appropriate flexibility) so err on
+the side of too large rather than too small.
