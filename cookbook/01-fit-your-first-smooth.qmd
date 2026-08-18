@@ -1,0 +1,75 @@
+---
+title: "Fit Your First Smooth"
+description: "Go from raw data to a fitted GAM and a model summary in five lines."
+tags: [Basics, Gaussian]
+---
+
+# Fit Your First Smooth
+
+Whittaker GAMs are specified with a formula string, fitted in one call, and ready to interpret
+immediately. This recipe walks through loading data, fitting a single-smooth Gaussian GAM, reading
+the summary, and visualizing the smooth (all in just a few lines).
+
+## Load data
+
+The built-in `mcycle` dataset records head acceleration (in g) of a motorcycle rider over time (in
+milliseconds) during a simulated crash. It is a classic benchmark for nonlinear smoothing.
+
+```{python}
+import whittaker as wk
+
+# load the dataset and inspect its columns
+data = wk.load_dataset("mcycle")
+list(data.keys())
+```
+
+The dataset has two columns: `times` (milliseconds post-impact) and `accel` (head acceleration in
+*g*). Let's confirm the sample size.
+
+```{python}
+len(data["times"])
+```
+
+With 133 observations, there is enough data to fit a smooth with several degrees of freedom.
+
+## Fit a GAM
+
+The formula `"accel ~ s(times)"` tells Whittaker to model `accel` as a smooth function of `times`.
+The `s()` wrapper requests a penalized spline. With no `family` argument, Whittaker defaults to
+`wk.Gaussian()`.
+
+```{python}
+model = wk.GAM("accel ~ s(times)").fit(data)
+model.edf_total
+```
+
+The total effective degrees of freedom tells us how many parameters the fitted smooth effectively
+consumed. A value substantially above 1 means the smooth is genuinely nonlinear. Next, check how
+much of the variation it accounts for.
+
+```{python}
+model.deviance_explained
+```
+
+A value near or above 0.70 suggests the smooth captures a substantial portion of the variance in
+this noisy dataset.
+
+## Inspect the fit
+
+`model.summary()` returns a formatted text block. The two numbers to look at first are the EDF
+(effective degrees of freedom) for `s(times)` and the deviance explained at the bottom.
+
+```{python}
+model.summary()
+```
+
+An EDF well above 1 confirms the relationship is genuinely nonlinear. Deviance explained near or
+above 70 % suggests a reasonable fit for this noisy dataset.
+
+## Visualize the smooth
+
+The `partial_effects()` function renders the fitted smooth with a confidence ribbon.
+
+```{python}
+wk.partial_effects(model)
+```
