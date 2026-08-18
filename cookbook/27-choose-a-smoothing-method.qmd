@@ -1,0 +1,105 @@
+---
+title: "Choose a Smoothing Method"
+description: "Compare REML, GCV, and ML and know when each is appropriate."
+tags: [Model fitting, Model selection]
+---
+
+# Choose a Smoothing Method
+
+The smoothing method controls how the penalty strength λ is selected during fitting. A well-chosen λ
+balances the fidelity of the smooth to the data against its wiggliness. Whittaker offers three
+methods: `REML` (the default), `GCV`, and `ML`. All three produce a fitted model but they differ in
+their statistical criterion and their tendency to over or undersmooth.
+
+## Fit with each method
+
+The `method` argument is passed to `fit()`. The dataset is `mcycle`, which deals with head
+acceleration over time during a simulated crash.
+
+```{python}
+import whittaker as wk
+
+data = wk.load_dataset("mcycle")
+
+model_reml = wk.GAM("accel ~ s(times)").fit(data, method="REML")
+model_gcv  = wk.GAM("accel ~ s(times)").fit(data, method="GCV")
+model_ml   = wk.GAM("accel ~ s(times)").fit(data, method="ML")
+```
+
+## Smoothing parameters
+
+Each fitted model exposes `smoothing_params`: the selected λ values (one per smooth). A larger λ
+compresses the smooth toward a straight line; a smaller λ allows more wiggle. Compare the value
+selected by each method.
+
+```{python}
+# REML
+model_reml.smoothing_params[0]
+```
+
+```{python}
+# GCV
+model_gcv.smoothing_params[0]
+```
+
+```{python}
+# ML
+model_ml.smoothing_params[0]
+```
+
+GCV often selects a smaller λ than REML, meaning it allows a wigglier smooth. REML and ML tend to be
+closer to each other.
+
+## Effective degrees of freedom
+
+`edf` measures the wiggliness of each smooth: higher EDF means more curvature. Lower means more
+compression toward a line. Check how much each method differs.
+
+```{python}
+# REML
+model_reml.edf[0]
+```
+
+```{python}
+# GCV
+model_gcv.edf[0]
+```
+
+```{python}
+# ML
+model_ml.edf[0]
+```
+
+Small differences in EDF across methods are normal. Large differences (more than a unit or two)
+suggest the criterion matters for this dataset and `REML` is usually the safer choice.
+
+## Full summaries
+
+Read the full summaries to compare deviance explained, GCV score, and AIC across methods.
+
+```{python}
+model_reml.summary()
+```
+
+```{python}
+model_gcv.summary()
+```
+
+```{python}
+model_ml.summary()
+```
+
+## Comparison table
+
+| Method | Criterion | Tendency | When to use |
+|--------|-----------|----------|-------------|
+| REML | Restricted maximum likelihood | Balanced; slightly conservative | Default, most datasets |
+| GCV | Generalized cross-validation | Can undersmooth (too wiggly) | Quick exploration, large n |
+| ML | Maximum likelihood | Similar to REML, no correction for fixed effects | Comparing models with different fixed-effect structures |
+
+## Rule of thumb
+
+It's often good to use REML unless you have a specific reason to switch to something else. GCV is a
+reasonable alternative for large datasets where speed matters and mild oversmoothing is acceptable.
+Use ML only when you need to compare models that differ in their parametric (non-smooth) terms. ML
+(unlike REML) produces a likelihood that is directly comparable across such models.
