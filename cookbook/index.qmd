@@ -1,0 +1,138 @@
+---
+title: Cookbook
+bread-crumbs: false
+page-navigation: false
+---
+
+The Whittaker Cookbook is filled with short and self-contained recipes that try to answer one
+question at a time. Every recipe is fully executable so you can copy the code and run it easily in
+your own environment.
+
+## Getting started
+
+Start here if you are new to Whittaker. These recipes cover the core workflow: fitting a model,
+picking the right response distribution, and reading the output.
+
+<div class="section-cards section-cards-list" style="display: grid; grid-template-columns: 1fr; gap: 1rem; margin-top: 0.5rem;">
+<div style="border: 1px solid #dee2e6; border-radius: 0.5rem; overflow: hidden;">
+<a href="fit-your-first-smooth.qmd" style="display: block; padding: 1.25rem 1.5rem; color: inherit; text-decoration: none;">
+<div style="font-size: 1.1rem; font-weight: 600; margin-bottom: 0.35rem; color: #0d6efd;">Fit Your First Smooth</div>
+<div style="font-size: 0.9rem; color: #6c757d; line-height: 1.45;">Go from raw data to a fitted GAM and a model summary in five lines.</div>
+</a>
+</div>
+<div style="border: 1px solid #dee2e6; border-radius: 0.5rem; overflow: hidden;">
+<a href="choose-a-response-family.qmd" style="display: block; padding: 1.25rem 1.5rem; color: inherit; text-decoration: none;">
+<div style="font-size: 1.1rem; font-weight: 600; margin-bottom: 0.35rem; color: #0d6efd;">Choose a Response Family</div>
+<div style="font-size: 0.9rem; color: #6c757d; line-height: 1.45;">Pick the right distribution for your outcome variable — Gaussian, Poisson, Binomial, and more.</div>
+</a>
+</div>
+<div style="border: 1px solid #dee2e6; border-radius: 0.5rem; overflow: hidden;">
+<a href="read-the-model-summary.qmd" style="display: block; padding: 1.25rem 1.5rem; color: inherit; text-decoration: none;">
+<div style="font-size: 1.1rem; font-weight: 600; margin-bottom: 0.35rem; color: #0d6efd;">Read the Model Summary</div>
+<div style="font-size: 0.9rem; color: #6c757d; line-height: 1.45;">Understand EDF, significance tests, and fit statistics at a glance.</div>
+</a>
+</div>
+</div>
+
+## Response families
+
+The response family determines the assumed distribution of your outcome and the link function that
+connects it to the linear predictor. These recipes show how to handle counts, binary outcomes, and
+proportions (the most common departures from a Gaussian response).
+
+<div class="section-cards section-cards-list" style="display: grid; grid-template-columns: 1fr; gap: 1rem; margin-top: 0.5rem;">
+<div style="border: 1px solid #dee2e6; border-radius: 0.5rem; overflow: hidden;">
+<a href="model-count-data-with-poisson.qmd" style="display: block; padding: 1.25rem 1.5rem; color: inherit; text-decoration: none;">
+<div style="font-size: 1.1rem; font-weight: 600; margin-bottom: 0.35rem; color: #0d6efd;">Model Count Data with Poisson</div>
+<div style="font-size: 0.9rem; color: #6c757d; line-height: 1.45;">Fit a GAM when the response is a non-negative integer count, such as events per interval.</div>
+</a>
+</div>
+<div style="border: 1px solid #dee2e6; border-radius: 0.5rem; overflow: hidden;">
+<a href="model-binary-outcomes-with-binomial.qmd" style="display: block; padding: 1.25rem 1.5rem; color: inherit; text-decoration: none;">
+<div style="font-size: 1.1rem; font-weight: 600; margin-bottom: 0.35rem; color: #0d6efd;">Model Binary Outcomes with Binomial</div>
+<div style="font-size: 0.9rem; color: #6c757d; line-height: 1.45;">Fit a logistic GAM for 0/1 responses. Predictions come back as probabilities.</div>
+</a>
+</div>
+</div>
+
+## Prediction and inference
+
+A fitted GAM is most useful when you can generate predictions at new inputs and attach uncertainty
+estimates. These recipes cover point predictions, standard errors, and several flavors of confidence
+interval.
+
+<div class="section-cards section-cards-list" style="display: grid; grid-template-columns: 1fr; gap: 1rem; margin-top: 0.5rem;">
+<div style="border: 1px solid #dee2e6; border-radius: 0.5rem; overflow: hidden;">
+<a href="predict-on-new-data.qmd" style="display: block; padding: 1.25rem 1.5rem; color: inherit; text-decoration: none;">
+<div style="font-size: 1.1rem; font-weight: 600; margin-bottom: 0.35rem; color: #0d6efd;">Predict on New Data</div>
+<div style="font-size: 0.9rem; color: #6c757d; line-height: 1.45;">Generate fitted values for any set of covariate values after fitting — grids, held-out rows, or hypothetical inputs.</div>
+</a>
+</div>
+<div style="border: 1px solid #dee2e6; border-radius: 0.5rem; overflow: hidden;">
+<a href="get-confidence-intervals.qmd" style="display: block; padding: 1.25rem 1.5rem; color: inherit; text-decoration: none;">
+<div style="font-size: 1.1rem; font-weight: 600; margin-bottom: 0.35rem; color: #0d6efd;">Get Confidence Intervals</div>
+<div style="font-size: 0.9rem; color: #6c757d; line-height: 1.45;">Add pointwise, simultaneous, or prediction-interval uncertainty bands to any set of predictions.</div>
+</a>
+</div>
+</div>
+
+## Diagnostics and model selection
+
+Before trusting a model's predictions you should verify that it is well-specified. These recipes
+walk through basis dimension checks, residual analysis, and how to choose a smoothness selection
+criterion.
+
+<div class="section-cards section-cards-list" style="display: grid; grid-template-columns: 1fr; gap: 1rem; margin-top: 0.5rem;">
+<div style="border: 1px solid #dee2e6; border-radius: 0.5rem; overflow: hidden;">
+<a href="check-basis-dimension.qmd" style="display: block; padding: 1.25rem 1.5rem; color: inherit; text-decoration: none;">
+<div style="font-size: 1.1rem; font-weight: 600; margin-bottom: 0.35rem; color: #0d6efd;">Check Basis Dimension Adequacy</div>
+<div style="font-size: 0.9rem; color: #6c757d; line-height: 1.45;">Verify that k is large enough to capture the true shape using the k-index diagnostic.</div>
+</a>
+</div>
+<div style="border: 1px solid #dee2e6; border-radius: 0.5rem; overflow: hidden;">
+<a href="inspect-residuals.qmd" style="display: block; padding: 1.25rem 1.5rem; color: inherit; text-decoration: none;">
+<div style="font-size: 1.1rem; font-weight: 600; margin-bottom: 0.35rem; color: #0d6efd;">Inspect Residuals</div>
+<div style="font-size: 0.9rem; color: #6c757d; line-height: 1.45;">Plot deviance residuals and the QQ plot to spot patterns that signal a poor model fit.</div>
+</a>
+</div>
+<div style="border: 1px solid #dee2e6; border-radius: 0.5rem; overflow: hidden;">
+<a href="choose-a-smoothing-method.qmd" style="display: block; padding: 1.25rem 1.5rem; color: inherit; text-decoration: none;">
+<div style="font-size: 1.1rem; font-weight: 600; margin-bottom: 0.35rem; color: #0d6efd;">Choose a Smoothing Method</div>
+<div style="font-size: 0.9rem; color: #6c757d; line-height: 1.45;">Compare REML, GCV, and ML smoothness selection and know when each is the right choice.</div>
+</a>
+</div>
+</div>
+
+## Data input
+
+Whittaker accepts Pandas DataFrames, Polars DataFrames, plain dicts, and NumPy arrays
+interchangeably. This section shows how to work with data formats you may already have on hand.
+
+<div class="section-cards section-cards-list" style="display: grid; grid-template-columns: 1fr; gap: 1rem; margin-top: 0.5rem;">
+<div style="border: 1px solid #dee2e6; border-radius: 0.5rem; overflow: hidden;">
+<a href="use-a-polars-dataframe.qmd" style="display: block; padding: 1.25rem 1.5rem; color: inherit; text-decoration: none;">
+<div style="font-size: 1.1rem; font-weight: 600; margin-bottom: 0.35rem; color: #0d6efd;">Use a Polars DataFrame</div>
+<div style="font-size: 0.9rem; color: #6c757d; line-height: 1.45;">Pass a Polars DataFrame directly to fit() without converting to NumPy or pandas first.</div>
+</a>
+</div>
+</div>
+
+## Deployment
+
+Once a model is fit, you will often need to persist it, share it, or work with it in an existing ML
+pipeline. These recipes cover serialization and scikit-learn compatibility.
+
+<div class="section-cards section-cards-list" style="display: grid; grid-template-columns: 1fr; gap: 1rem; margin-top: 0.5rem;">
+<div style="border: 1px solid #dee2e6; border-radius: 0.5rem; overflow: hidden;">
+<a href="save-and-load-a-model.qmd" style="display: block; padding: 1.25rem 1.5rem; color: inherit; text-decoration: none;">
+<div style="font-size: 1.1rem; font-weight: 600; margin-bottom: 0.35rem; color: #0d6efd;">Save and Load a Fitted Model</div>
+<div style="font-size: 0.9rem; color: #6c757d; line-height: 1.45;">Persist a fitted model to disk with save_gam() and restore it for inference with load_gam().</div>
+</a>
+</div>
+<div style="border: 1px solid #dee2e6; border-radius: 0.5rem; overflow: hidden;">
+<a href="use-in-sklearn-pipeline.qmd" style="display: block; padding: 1.25rem 1.5rem; color: inherit; text-decoration: none;">
+<div style="font-size: 1.1rem; font-weight: 600; margin-bottom: 0.35rem; color: #0d6efd;">Use a GAM in a scikit-learn Pipeline</div>
+<div style="font-size: 0.9rem; color: #6c757d; line-height: 1.45;">Wrap a GAM in a Pipeline for cross-validation and grid search using the sklearn-compatible estimators.</div>
+</a>
+</div>
+</div>
