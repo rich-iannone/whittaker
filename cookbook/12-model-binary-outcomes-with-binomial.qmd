@@ -1,0 +1,91 @@
+---
+title: Model Binary Outcomes with Binomial
+description: Fit a logistic GAM for 0/1 responses.
+tags: [Families, Binomial]
+---
+
+# Model Binary Outcomes with Binomial
+
+Use the Binomial family when the response is a binary outcome encoded as 0 or 1 (e.g., loan default,
+disease presence, conversion events, etc.). The logit link models log-odds on the linear predictor
+scale, but `predict()` returns probabilities in [0, 1] by default, so you rarely need to transform
+the output yourself. Smooth terms let the log-odds curve non-linearly with each predictor instead of
+forcing a straight line through the probability space.
+
+## Load data
+
+Load the built-in credit dataset as a DataFrame and inspect its columns.
+
+```{python}
+import whittaker as wk
+
+data = wk.load_dataset("credit", as_frame=True)
+
+# column names
+data.columns.tolist()
+```
+
+The credit dataset has four columns: `income` (annual income in thousands), `debt_ratio` (total debt
+divided by income), `age` (applicant age in years), and `default` (`1` if the applicant defaulted,
+`0` otherwise).
+
+```{python}
+data.head()
+```
+
+Each row represents one credit applicant. The response must be a 0/1 float column. Whittaker checks
+for this and raises an error if you pass integer labels or strings.
+
+## Fit
+
+Fit a logistic GAM with smooth terms for income and debt ratio.
+
+```{python}
+model = wk.GAM(
+    "default ~ s(income) + s(debt_ratio)",
+    family=wk.Binomial(),
+).fit(data)
+
+model.summary()
+```
+
+The EDF column in the summary tells you how many degrees of freedom each smooth consumed. Large EDF
+values (close to the basis dimension `k`) are a signal to run the k-index diagnostic to check
+whether `k` is large enough to capture the true shape.
+
+## Partial effects
+
+Plotting the partial effects shows how each predictor bends the log-odds of default.
+
+```{python}
+wk.partial_effects(model)
+```
+
+Partial effects are plotted on the log-odds scale. A rising curve for `s(debt_ratio)` means that
+higher debt ratios are associated with higher log-odds of default (holding income constant). Points
+near zero on the y-axis indicate that the predictor is not shifting the log-odds much at that value.
+
+## Predict probabilities
+
+Pass a dictionary of new covariate values to get back predicted default probabilities. All values
+are in [0, 1] (no sigmoid transformation is needed).
+
+```{python}
+new_data = {
+    "income": [50.0, 100.0, 150.0],
+    "debt_ratio": [0.3, 0.3, 0.3],
+}
+probs = model.predict(new_data).values
+
+probs
+```
+
+Holding `debt_ratio` fixed at `0.3`, the predicted probability of default falls as income rises.
+This is the direction you would expect if income is a protective factor in the model.
+
+## Proportion responses
+
+If your response is a proportion rather than a strict 0/1 binary (for example, the fraction of items
+that passed inspection in each batch) use `family=wk.Beta()` instead. The Beta family is defined on
+the open interval (0, 1) and handles the boundary-avoiding behavior of proportions more faithfully
+than the Binomial.
