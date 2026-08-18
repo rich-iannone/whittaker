@@ -151,9 +151,9 @@ class GamCheckResult:
 class ModelSummary:
     """Rich-display wrapper returned by `GAM.summary()`.
 
-    Renders as plain text in a terminal and as a `<pre>` block in Jupyter/Quarto,
-    so calling `model.summary()` as the last expression in a cell produces readable
-    output without needing `print()`.
+    Renders as plain text in terminals and Quarto/Jupyter cells; calling
+    `model.summary()` as the last expression in a cell produces readable output
+    without needing `print()`.
     """
 
     def __init__(self, text: str) -> None:
@@ -164,9 +164,6 @@ class ModelSummary:
 
     def __str__(self) -> str:
         return self._text
-
-    def _repr_html_(self) -> str:
-        return f"<pre>{self._text}</pre>"
 
 
 class GAM:
