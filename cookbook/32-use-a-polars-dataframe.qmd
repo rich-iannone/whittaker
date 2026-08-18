@@ -1,0 +1,106 @@
+---
+title: "Use a Polars DataFrame"
+description: "Pass a Polars DataFrame directly to fit() without any manual conversion."
+tags: [Data input, Polars]
+---
+
+# Use a Polars DataFrame
+
+Whittaker uses [Narwhals](https://narwhals-dev.github.io/) for data ingestion. This means that
+Polars DataFrames are accepted by `fit()` natively. And any DataFrame type that Narwhals supports
+(Pandas, PyArrow, cuDF, Modin) follows the same pattern.
+
+## From load_dataset
+
+The `load_dataset()` function returns a plain dict of NumPy arrays. You can wrap it in
+`pl.DataFrame` and the result feeds directly into `fit()`.
+
+```{python}
+import polars as pl
+import whittaker as wk
+
+data = wk.load_dataset("wages")
+df = pl.DataFrame(data)
+```
+
+Check the dimensions of the resulting DataFrame to confirm the data loaded correctly.
+
+```{python}
+df.shape
+```
+
+The tuple shows the dataset has three columns: `age`, `experience`, and `wage`. Inspect the first
+few rows to verify the layout.
+
+```{python}
+df.head(3)
+```
+
+Now fit a Gamma GAM using the Polars DataFrame directly.
+
+```{python}
+model = wk.GAM("wage ~ s(age) + s(experience)", family=wk.Gamma()).fit(df)
+model.summary()
+```
+
+The effective degrees of freedom gives a sense of the model's overall complexity.
+
+```{python}
+model.edf_total
+```
+
+The deviance explained measures how well the two-predictor model accounts for variation in wage.
+
+```{python}
+model.deviance_explained
+```
+
+## From a file
+
+Reading a CSV with Polars and passing the result straight to `fit()` requires no intermediate steps.
+
+```{python}
+# df = pl.read_csv("data.csv")
+# model = wk.GAM("y ~ s(x1) + s(x2)").fit(df)
+```
+
+The column names in the CSV become the predictor names used in the formula. Whittaker reads only the
+columns it needs, so the file may contain extra columns without causing an error.
+
+## LazyFrame
+
+Polars `LazyFrame` objects (created by `pl.scan_csv()`, `pl.scan_parquet()`, and similar scan
+functions) are **not** directly supported by `GAM.fit()`. Collect the frame first:
+
+```{python}
+# lazy = pl.scan_csv("large_file.csv")
+# df = lazy.collect()          # collect before passing to fit()
+# model = wk.GAM("y ~ s(x)").fit(df)
+```
+
+For very large datasets that do not fit in memory, see the user guide section on `PolarsGAM`, which
+processes data in batches without loading it all at once.
+
+## Column types
+
+Polars uses strict dtypes. Whittaker expects numeric predictors and the response to be
+floating-point or integer columns. If a column is stored as `Utf8` (string) or `Categorical`, cast
+it before fitting.
+
+```{python}
+df_cast = df.with_columns(pl.col("age").cast(pl.Float64))
+model2 = wk.GAM("wage ~ s(age)", family=wk.Gamma()).fit(df_cast)
+```
+
+The simpler single-predictor model has fewer effective degrees of freedom than the two-predictor
+version.
+
+```{python}
+model2.edf_total
+```
+
+Deviance explained is also lower, as the experience predictor has been dropped from the formula.
+
+```{python}
+model2.deviance_explained
+```
