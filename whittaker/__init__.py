@@ -52,6 +52,7 @@ from whittaker.gam import GAM, GamCheckResult, PredictionResult, TermsPrediction
 from whittaker.gamlss import GAMLSS, GAMLSSPrediction
 from whittaker.io import from_mgcv_dict, load_gam, save_gam, to_mgcv_dict
 from whittaker.model_matrix import ModelMatrix, SmoothInfo, build_model_matrix, predict_matrix
+from whittaker.plotting import check, partial_effects
 from whittaker.multi_response import MultiResponseGAM, MultiResponseResult, ResidualCorrelation
 from whittaker.polars_streaming import PolarsGAM
 from whittaker.quantile_gam import QuantileGAM, QuantileGAMResult
@@ -196,4 +197,7 @@ __all__ = [
     # Datasets
     "load_dataset",
     "list_datasets",
+    # Plotting
+    "check",
+    "partial_effects",
 ]
