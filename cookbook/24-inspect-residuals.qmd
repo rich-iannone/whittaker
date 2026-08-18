@@ -1,0 +1,58 @@
+---
+title: "Inspect Residuals"
+description: "Plot deviance residuals and the QQ plot to assess model fit."
+tags: [Diagnostics]
+---
+
+# Inspect Residuals
+
+Deviance residuals summarize how far each observation falls from the model's fitted value, scaled to
+the family's variance function. If the model fits well, deviance residuals should look like Gaussian
+white noise: symmetric, roughly constant variance, and no systematic pattern with respect to fitted
+values or covariates.
+
+## Fit
+
+Fit a simple GAM to get started.
+
+```{python}
+import whittaker as wk
+
+data = wk.load_dataset("mcycle")
+model = wk.GAM("accel ~ s(times)").fit(data)
+```
+
+## Four-panel diagnostics
+
+The `wk.check()` function returns all four diagnostic panels as a single stacked chart.
+
+```{python}
+wk.check(model)
+```
+
+The four panels are:
+
+- **QQ plot** (top-left): deviance residuals against theoretical Gaussian quantiles.
+  Points should fall close to the diagonal reference line.
+- **Residuals vs fitted values** (top-right): residuals on the y-axis, fitted values
+  on the x-axis. No trend or funnel shape is ideal.
+- **Histogram of residuals** (bottom-left): the marginal distribution of deviance
+  residuals. A single symmetric peak centered near zero is the target.
+- **Response vs fitted values** (bottom-right): observed response against model
+  predictions. Points should scatter evenly around the 45-degree line.
+
+## What to look for
+
+Patterns in these panels point to specific problems:
+
+- **S-curve in the QQ plot**: the residuals have heavier or lighter tails than a
+  Gaussian, suggesting the wrong response family. Try `wk.Gamma()` for right-skewed
+  continuous data or `wk.Poisson()` for counts.
+- **Funnel shape in residuals vs fitted**: variance grows with the mean
+  (heteroscedasticity). A log or square-root transformation of the response, or
+  switching to a Poisson or Gamma family, can stabilize variance.
+- **Bimodal histogram**: the data may come from two distinct sub-populations. Consider
+  adding a grouping factor or fitting separate models.
+- **Systematic curve in residuals vs fitted**: the model is missing a nonlinear
+  relationship. Add an interaction term, increase `k`, or include an additional smooth
+  for a covariate not yet in the formula.
