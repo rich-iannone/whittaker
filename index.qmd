@@ -22,7 +22,7 @@ implementation.
 - **Full smooth catalog**: thin plate regression splines, cubic splines, P-splines, tensor products,
 cyclic splines, random effects, factor smooths, and more.
 - **Principled smoothness selection**: REML by default, with GCV, ML, and fREML as alternatives.
-- **Beautiful diagnostics**: `model.check()` and `model.plot()` produce interactive Altair charts
+- **Beautiful diagnostics**: `wk.check(model)` and `model.plot()` produce interactive Altair charts
 right in your notebook.
 - **Goes beyond the mean**: distributional regression (GAMLSS), quantile regression, conformal
 prediction, causal inference, streaming GAMs, and functional regression are all built in.
@@ -33,7 +33,7 @@ prediction, causal inference, streaming GAMs, and functional regression are all 
 1. **Specify** your model with a formula string or programmatic term list.
 2. **Fit** with `model.fit(data)`: automatic smoothness selection via REML.
 3. **Inspect** with `model.summary()`: EDF, p-values, and smoothing parameters for every term.
-4. **Check** with `model.check()`: basis dimension adequacy, residual plots, convergence info.
+4. **Check** with `wk.check(model)`: basis dimension adequacy, residual plots, convergence info.
 5. **Predict** with `model.predict(new_data)`: point estimates, standard errors, or term
 contributions.
 6. **Visualize** with `model.plot()`: partial-effect plots with confidence bands for every smooth.
@@ -55,13 +55,13 @@ y = np.sin(x) + rng.normal(0, 0.3, 200)
 
 model = wk.GAM("y ~ s(x)")
 model.fit({"x": x, "y": y}, method="REML")
-print(model.summary())
+model.summary()
 ```
 
 **Step 2: Check basis dimension adequacy**
 
 ```{python}
-model.check();
+wk.check(model)
 ```
 
 **Step 3: Predict with standard errors and visualize the fit**
@@ -107,7 +107,7 @@ counts = rng.poisson(mu).astype(float)
 
 model_pois = wk.GAM("y ~ s(x1) + s(x2)", family=wk.Poisson())
 model_pois.fit({"x1": x1, "x2": x2, "y": counts}, method="REML")
-print(model_pois.summary())
+model_pois.summary()
 ```
 
 **Step 5: Cross-validate and save the model**
@@ -146,7 +146,7 @@ P-splines with PAVA projection.
 **Prediction and inference**: point estimates, standard errors, confidence intervals (pointwise and
 simultaneous), prediction intervals, and term-level contributions. All on response or link scale.
 
-**Model diagnostics**: `model.summary()` for EDF and significance tests, `model.check()` for basis
+**Model diagnostics**: `model.summary()` for EDF and significance tests, `wk.check(model)` for basis
 dimension adequacy (k-index test), concurvity analysis, and residual plots.
 
 **Distributional regression (GAMLSS)**: model location, scale, and shape simultaneously with
