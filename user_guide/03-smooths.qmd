@@ -718,7 +718,7 @@ model_check = wk.GAM("y ~ s(x)")
 model_check.fit({"x": x, "y": y}, method="REML")
 
 # Check for basis dimension adequacy
-model_check.check()
+wk.check(model_check)
 ```
 
 ::: {.callout-warning}
