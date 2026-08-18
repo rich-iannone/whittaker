@@ -41,6 +41,27 @@ nav_icons:
     "Saving and loading models": save
     "Glossary": book-open
 
+# Page Tags
+# ---------
+tags:
+  enabled: true
+  icons:
+    Basics: rocket
+    Diagnostics: stethoscope
+    Families: layers
+    Gaussian: chart-spline
+    Poisson: hash
+    Binomial: toggle-left
+    Model fitting: cpu
+    Model selection: list-checks
+    Prediction: telescope
+    Inference: search
+    Data input: database
+    Polars: zap
+    Serialization: save
+    Deployment: cloud-upload
+    scikit-learn: puzzle
+
 authors:
   - name: Richard Iannone
     role: Maintainer
