@@ -286,6 +286,12 @@ reference:
       - from_mgcv_dict
       - to_mgcv_dict
 
+  - title: Datasets
+    desc: Built-in synthetic datasets for testing and examples.
+    contents:
+      - load_dataset
+      - list_datasets
+
   - title: Model matrix
     desc: Low-level model matrix construction from formulas and data.
     contents:
@@ -295,3 +301,34 @@ reference:
         members: true
       - name: SmoothInfo
         members: true
+
+sections:
+  - title: Cookbook
+    dir: cookbook
+    navbar_after: User Guide
+    sidebar_groups:
+      - section: Getting started
+        contents:
+          - fit-your-first-smooth.qmd
+          - choose-a-response-family.qmd
+          - read-the-model-summary.qmd
+      - section: Response families
+        contents:
+          - model-count-data-with-poisson.qmd
+          - model-binary-outcomes-with-binomial.qmd
+      - section: Prediction and inference
+        contents:
+          - predict-on-new-data.qmd
+          - get-confidence-intervals.qmd
+      - section: Diagnostics and model selection
+        contents:
+          - check-basis-dimension.qmd
+          - inspect-residuals.qmd
+          - choose-a-smoothing-method.qmd
+      - section: Data input
+        contents:
+          - use-a-polars-dataframe.qmd
+      - section: Deployment
+        contents:
+          - save-and-load-a-model.qmd
+          - use-in-sklearn-pipeline.qmd
