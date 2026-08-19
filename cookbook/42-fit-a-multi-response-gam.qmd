@@ -19,8 +19,8 @@ explain.
 
 ## Simulate data
 
-We generate two correlated measurements along a periodic covariate. Both follow sinusoidal patterns
-but with different phases, so their residuals after smoothing retain a meaningful correlation.
+We generate two measurements along a periodic covariate. Both follow sinusoidal patterns but with
+different phases.
 
 ```{python}
 import numpy as np
@@ -40,7 +40,7 @@ data = {"y1": y1, "y2": y2, "x": x}
 ## Fit
 
 The `formula` argument specifies the covariate structure shared by all responses. Each response gets
-its own smooth fitted independently under `correlation="independent"`.
+its own smooth fitted independently.
 
 ```{python}
 model = wk.MultiResponseGAM(
