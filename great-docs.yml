@@ -47,15 +47,25 @@ tags:
   enabled: true
   icons:
     Basics: rocket
+    Smooths: chart-spline
     Diagnostics: stethoscope
     Families: layers
-    Gaussian: chart-spline
+    Gaussian: wave
     Poisson: hash
     Binomial: toggle-left
+    Gamma: triangle-right
+    Beta: percent
+    Survival: heart-pulse
+    Interactions: git-merge
+    Time series: clock
+    Spatial: map-pin
+    Random effects: users
     Model fitting: cpu
     Model selection: list-checks
     Prediction: telescope
     Inference: search
+    Interpretation: lightbulb
+    Cross-validation: repeat
     Data input: database
     Polars: zap
     Serialization: save
@@ -333,19 +343,39 @@ sections:
           - fit-your-first-smooth.qmd
           - choose-a-response-family.qmd
           - read-the-model-summary.qmd
+      - section: Smooth terms
+        contents:
+          - fit-a-thin-plate-regression-spline.qmd
+          - control-basis-dimension.qmd
+          - fit-a-cyclic-smooth.qmd
+          - add-a-tensor-product.qmd
+          - use-a-by-variable-smooth.qmd
+          - add-a-random-effect.qmd
+          - fit-a-spatial-smooth.qmd
       - section: Response families
         contents:
           - model-count-data-with-poisson.qmd
           - model-binary-outcomes-with-binomial.qmd
+          - model-skewed-positive-data-with-gamma.qmd
+          - handle-overdispersed-counts-with-negative-binomial.qmd
+          - model-proportions-with-beta.qmd
+          - estimate-a-survival-curve-with-cox-ph.qmd
       - section: Prediction and inference
         contents:
           - predict-on-new-data.qmd
           - get-confidence-intervals.qmd
+          - get-simultaneous-confidence-bands.qmd
+          - get-prediction-intervals.qmd
+          - extract-term-level-contributions.qmd
+          - predict-on-the-link-scale.qmd
       - section: Diagnostics and model selection
         contents:
           - check-basis-dimension.qmd
           - inspect-residuals.qmd
+          - compare-models-with-aic.qmd
+          - cross-validate-a-gam.qmd
           - choose-a-smoothing-method.qmd
+          - use-select-smoothing.qmd
       - section: Data input
         contents:
           - use-a-polars-dataframe.qmd
