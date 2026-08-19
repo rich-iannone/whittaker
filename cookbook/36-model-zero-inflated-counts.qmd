@@ -1,0 +1,101 @@
+---
+title: "Model Zero-Inflated Counts"
+description: "Handle excess zeros in count data by fitting a zero-inflated Poisson model with separate mean and zero-probability smooths."
+tags: [Families, Poisson]
+---
+
+# Model Zero-Inflated Counts
+
+Count data often contains more zeros than a Poisson distribution can account for. This arises when
+two distinct processes generate the data: one that determines whether any count is possible at all
+(the zero-inflation process), and one that governs the actual count when it is. Treating these as a
+single Poisson model leads to overdispersion, biased estimates, and poor calibration.
+
+`ZeroInflatedPoisson()` separates the two processes explicitly. The `mu` parameter models the
+Poisson rate for sites that can produce counts; the `pi` parameter models the probability that a
+site is a structural zero (one that cannot produce any count regardless of environmental
+conditions).
+
+## Generate data
+
+This recipe uses synthetic fish survey data. Many survey sites record zero fish not because
+conditions are poor but because those sites are structurally unsuitable (shallow, turbid, or
+otherwise inhospitable). The data-generating process encodes that structure explicitly.
+
+```{python}
+import numpy as np
+import whittaker as wk
+
+rng = np.random.default_rng(23)
+n = 400
+temperature = rng.uniform(5, 25, n)
+depth = rng.uniform(1, 20, n)
+
+log_mu = -1.0 + 0.15 * temperature - 0.04 * depth
+pi_true = 1 / (1 + np.exp(-(0.5 - 0.08 * temperature)))
+
+is_structural_zero = rng.binomial(1, pi_true).astype(bool)
+count = np.where(is_structural_zero, 0, rng.poisson(np.exp(log_mu)))
+
+data = {"temperature": temperature, "depth": depth, "count": count}
+```
+
+## Fit
+
+Fit a `GAMLSS` with `ZeroInflatedPoisson()`. The `mu` formula captures how the Poisson rate varies
+with both temperature and depth. The `pi` formula captures how the probability of a structural zero
+varies with temperature.
+
+```{python}
+model = wk.GAMLSS(
+    formulas={
+        "mu": "count ~ s(temperature) + s(depth)",
+        "pi": "count ~ s(temperature)",
+    },
+    family=wk.ZeroInflatedPoisson(),
+).fit(data)
+```
+
+## Summarize
+
+```{python}
+model.summary()
+```
+
+The summary reports smoothing parameters and effective degrees of freedom for each term. Look at the
+`pi` smooth: if its EDF is well above 1.0, zero-inflation varies non-linearly with temperature,
+confirming that a simpler intercept-only inflation model would miss the trend.
+
+## Predict zero-inflation probability
+
+Build a grid across the observed temperature range at a fixed mid-range depth, then inspect the
+predicted `pi`, which is the probability that a site generates no fish regardless of conditions.
+
+```{python}
+new_data = {
+    "temperature": np.linspace(5, 25, 50),
+    "depth":       np.full(50, 10.0),
+}
+
+pred = model.predict(new_data)
+pred.values["pi"][:5]
+```
+
+## Predict count mean
+
+The `mu` values are the expected Poisson rate at sites that are not structural zeros. Together with
+`pi`, they fully characterize the predictive distribution.
+
+```{python}
+pred.values["mu"][:5]
+```
+
+## Interpret
+
+`mu` reflects the Poisson rate for sites capable of hosting fish; it rises with temperature and
+falls with depth, consistent with the data-generating process. `pi` is the probability of a
+structural zero: sites that are cold tend to have lower `pi` (more fish-capable), while warmer sites
+in this synthetic example show a rising zero-inflation probability. In practice these patterns are
+recovered from data alone, without knowing the true generating equations. Reporting both parameters
+gives a complete picture: a site can have a high predicted count rate yet still be likely to record
+zero if its structural suitability is low.
