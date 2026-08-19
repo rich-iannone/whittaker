@@ -552,9 +552,7 @@ def check(
             .encode(x="x:Q", y="y:Q")
         )
         result.append(
-            (resp_points + resp_ref).properties(
-                width=640, height=250, title="Response vs fitted"
-            )
+            (resp_points + resp_ref).properties(width=640, height=250, title="Response vs fitted")
         )
 
     return alt.vconcat(*result)
