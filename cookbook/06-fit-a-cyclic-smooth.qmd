@@ -1,0 +1,64 @@
+---
+title: "Fit a Cyclic Smooth to Seasonal Data"
+description: "Use bs='cc' to fit a smooth that joins at the endpoints, ideal for periodic data."
+tags: [Smooths, Time series]
+---
+
+# Fit a Cyclic Smooth to Seasonal Data
+
+A cyclic cubic spline (`bs='cc'`) is constrained so its value and derivatives match at the two
+endpoints of the range. This makes it ideal for seasonality: January connects smoothly to
+December without any artificial discontinuity. Combine it with a long-run trend smooth to
+decompose a time series into trend and seasonal components in a single model.
+
+## Load data
+
+Load the `co2` dataset, which contains monthly mean atmospheric CO2 concentrations with a
+decimal-year time index and a 1–12 month column.
+
+```{python}
+import whittaker as wk
+
+data = wk.load_dataset("co2", as_frame=True)
+data.head()
+```
+
+The columns are `co2` (ppm), `t` (decimal year, e.g. 1958.04), and `month` (integer 1–12).
+
+## Fit
+
+Fit a model with two smooth terms: a TPRS for the long-run trend over `t`, and a cyclic cubic
+spline for the annual seasonal cycle over `month`. Setting `k=12` for the cyclic term matches
+the natural frequency of the 12-month cycle.
+
+```{python}
+model = wk.GAM(
+    "co2 ~ s(t) + s(month, bs='cc', k=12)"
+).fit(data)
+
+model.summary()
+```
+
+Both smooths should have meaningful EDF values. The trend smooth typically absorbs the rising
+baseline while the cyclic smooth captures the summer-winter oscillation. The deviance explained
+should be very high for this well-behaved time series.
+
+## Partial effects
+
+```{python}
+wk.partial_effects(model)
+```
+
+The two panels show the decomposed components. The trend panel reveals the accelerating rise in
+CO2 over decades. The seasonal panel shows the annual cycle peaking in spring (Northern
+Hemisphere growing season not yet active) and troughing in late summer. Crucially, the
+curve closes smoothly at month 1/12 without a step discontinuity.
+
+## Diagnostics
+
+```{python}
+wk.check(model)
+```
+
+Check that residuals show no remaining seasonal structure. If a seasonal pattern remains in the
+residuals, raise `k` for the cyclic term.
