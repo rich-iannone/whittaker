@@ -101,6 +101,6 @@ model_ml.summary()
 ## Rule of thumb
 
 It's often good to use REML unless you have a specific reason to switch to something else. GCV is a
-reasonable alternative for large datasets where speed matters and mild oversmoothing is acceptable.
+reasonable alternative for large datasets where speed matters and mild undersmoothing is acceptable.
 Use ML only when you need to compare models that differ in their parametric (non-smooth) terms. ML
 (unlike REML) produces a likelihood that is directly comparable across such models.
