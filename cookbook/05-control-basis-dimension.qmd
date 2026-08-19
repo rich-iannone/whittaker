@@ -1,0 +1,77 @@
+---
+title: "Control Basis Dimension with k"
+description: "Choose an appropriate basis dimension k and diagnose underfitting with wk.check()."
+tags: [Smooths, Model selection]
+---
+
+# Control Basis Dimension with k
+
+The `k` argument in `s(x, k=...)` sets the maximum number of basis functions: the upper limit
+on how wiggly the smooth can be. The actual wiggliness is then controlled by the penalty. If `k`
+is too small, the smooth cannot represent the true shape no matter how the penalty is tuned.
+Use `wk.check()` to catch this: a k-index below 1 and a small p-value signal that `k` needs
+to be raised.
+
+## Load data
+
+```{python}
+import whittaker as wk
+
+data = wk.load_dataset("mcycle", as_frame=True)
+data.head()
+```
+
+## Fit with k too small
+
+Fit with `k=4` (far too few basis functions for the complex shape in `mcycle`).
+
+```{python}
+model_small = wk.GAM("accel ~ s(times, k=4)").fit(data)
+
+model_small.summary()
+```
+
+The EDF is close to the maximum allowed by `k`, which is a warning sign that the smooth is
+being constrained rather than smoothed.
+
+## Check the small-k model
+
+```{python}
+wk.check(model_small)
+```
+
+Look at the k-index in the diagnostics table. A value below 1 means the smooth is running up
+against the basis dimension limit. The residual pattern in the plots will also show structure
+that the model cannot capture.
+
+## Fit with adequate k
+
+Raise `k` to 15 to give the smooth enough room.
+
+```{python}
+model_ok = wk.GAM("accel ~ s(times, k=15)").fit(data)
+
+model_ok.summary()
+```
+
+The EDF should now be well below `k-1`, indicating the penalty (not the basis) is the
+binding constraint. This is the desired state.
+
+## Check the adequate-k model
+
+```{python}
+wk.check(model_ok)
+```
+
+The k-index should now be above 1 and the residuals should be much cleaner. Once the k-index
+is comfortably above 1, further increasing `k` has little effect on the fitted curve (only on
+computation time).
+
+## Compare AIC
+
+```{python}
+{"k=4 AIC": model_small.aic, "k=15 AIC": model_ok.aic}
+```
+
+The lower AIC for the adequate-k model confirms the fit improved. In practice, set `k` high
+enough that `wk.check()` gives a clean k-index, then leave it alone.
