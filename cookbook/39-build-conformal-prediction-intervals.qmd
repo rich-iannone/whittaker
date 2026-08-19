@@ -1,0 +1,75 @@
+---
+title: "Build Conformal Prediction Intervals"
+description: "Construct distribution-free prediction intervals with guaranteed coverage using split conformal prediction."
+tags:
+  - Prediction
+  - Inference
+---
+
+# Build Conformal Prediction Intervals
+
+Conformal prediction is a framework for constructing prediction intervals with a finite-sample
+coverage guarantee. Unlike parametric intervals, which require assumptions about the error
+distribution, conformal intervals are valid under any exchangeable data-generating process. The
+split conformal method reserves a calibration set during fitting, uses it to measure residual
+quantiles, and inflates the interval accordingly (a procedure that is simple, fast, and
+theoretically grounded).
+
+## Fit
+
+Load the `mcycle` dataset and fit a conformal predictor with the split method at a nominal 95%
+coverage level. The `seed` argument ensures reproducibility of the train/calibration split.
+
+```{python}
+import numpy as np
+import whittaker as wk
+
+data = wk.load_dataset("mcycle")
+predictor = wk.conformal_fit(
+    "accel ~ s(times, k=15)",
+    data=data,
+    method="split",
+    level=0.95,
+    seed=23,
+)
+```
+
+## Predict
+
+Generate predictions on an evenly spaced grid across the observed time range. The result is a
+`ConformalResult` with point predictions and interval bounds.
+
+```{python}
+new_data = {"times": np.linspace(data["times"].min(), data["times"].max(), 200)}
+result = predictor.predict(new_data)
+result.values[:5]
+```
+
+Inspect the lower and upper interval bounds separately.
+
+```{python}
+result.lower[:5]
+```
+
+```{python}
+result.upper[:5]
+```
+
+## Verify Coverage
+
+Compute empirical coverage on the training data. This measures the fraction of observed responses
+that fall within their respective prediction intervals.
+
+```{python}
+wk.conformal_coverage(predictor, data, response="accel")
+```
+
+## Interpret
+
+The empirical coverage should meet or exceed the nominal 0.95 level. This is not a coincidence or a
+tuning outcome but rather it is a finite-sample guarantee that holds as long as the training and
+test data are exchangeable. Unlike Bayesian credible intervals, which express posterior uncertainty
+under a model, conformal intervals make no assumption about how the errors are distributed. The cost
+of this generality is that intervals are uniform in width across the covariate space. Methods such
+as `cv+` or `jackknife+` can produce locally adaptive widths at the expense of additional
+computation.
