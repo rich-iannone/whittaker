@@ -219,10 +219,37 @@ criterion.
 </div>
 </div>
 
+## Shape constraints
+
+Shape-constrained smooths enforce monotone or convex behavior when domain knowledge demands it.
+Use them to make a GAM obey known physical constraints while still fitting the data nonparametrically.
+
+<div class="section-cards section-cards-list" style="display: grid; grid-template-columns: 1fr; gap: 1rem; margin-top: 0.5rem;">
+<div style="border: 1px solid #dee2e6; border-radius: 0.5rem; overflow: hidden;">
+<a href="fit-a-monotone-increasing-smooth.qmd" style="display: block; padding: 1.25rem 1.5rem; color: inherit; text-decoration: none;">
+<div style="font-size: 1.1rem; font-weight: 600; margin-bottom: 0.35rem; color: #0d6efd;">Fit a Monotone Increasing Smooth</div>
+<div style="font-size: 0.9rem; color: #6c757d; line-height: 1.45;">Constrain a smooth to be non-decreasing with bs='mpi' when the response must rise with the predictor.</div>
+</a>
+</div>
+<div style="border: 1px solid #dee2e6; border-radius: 0.5rem; overflow: hidden;">
+<a href="fit-a-monotone-decreasing-smooth.qmd" style="display: block; padding: 1.25rem 1.5rem; color: inherit; text-decoration: none;">
+<div style="font-size: 1.1rem; font-weight: 600; margin-bottom: 0.35rem; color: #0d6efd;">Fit a Monotone Decreasing Smooth</div>
+<div style="font-size: 0.9rem; color: #6c757d; line-height: 1.45;">Constrain a smooth to be non-increasing with bs='mpd' to model effects that can only fall.</div>
+</a>
+</div>
+<div style="border: 1px solid #dee2e6; border-radius: 0.5rem; overflow: hidden;">
+<a href="fit-a-convex-smooth.qmd" style="display: block; padding: 1.25rem 1.5rem; color: inherit; text-decoration: none;">
+<div style="font-size: 1.1rem; font-weight: 600; margin-bottom: 0.35rem; color: #0d6efd;">Fit a Convex Smooth</div>
+<div style="font-size: 0.9rem; color: #6c757d; line-height: 1.45;">Enforce bowl-shaped curvature with bs='cx' for responses that have a known convex structure.</div>
+</a>
+</div>
+</div>
+
 ## Data input
 
-Whittaker accepts Pandas DataFrames, Polars DataFrames, plain dicts, and NumPy arrays
-interchangeably. This section shows how to work with data formats you may already have on hand.
+Whittaker accepts Pandas DataFrames, Polars DataFrames, PyArrow Tables, plain dicts, and NumPy
+arrays interchangeably. This section shows how to work with data formats you may already have on
+hand, including how to account for exposure with an offset term.
 
 <div class="section-cards section-cards-list" style="display: grid; grid-template-columns: 1fr; gap: 1rem; margin-top: 0.5rem;">
 <div style="border: 1px solid #dee2e6; border-radius: 0.5rem; overflow: hidden;">
@@ -231,12 +258,119 @@ interchangeably. This section shows how to work with data formats you may alread
 <div style="font-size: 0.9rem; color: #6c757d; line-height: 1.45;">Pass a Polars DataFrame directly to fit() without converting to NumPy or pandas first.</div>
 </a>
 </div>
+<div style="border: 1px solid #dee2e6; border-radius: 0.5rem; overflow: hidden;">
+<a href="use-a-pyarrow-table.qmd" style="display: block; padding: 1.25rem 1.5rem; color: inherit; text-decoration: none;">
+<div style="font-size: 1.1rem; font-weight: 600; margin-bottom: 0.35rem; color: #0d6efd;">Use a PyArrow Table</div>
+<div style="font-size: 0.9rem; color: #6c757d; line-height: 1.45;">Pass a PyArrow Table directly to fit(): Narwhals handles the conversion transparently.</div>
+</a>
+</div>
+<div style="border: 1px solid #dee2e6; border-radius: 0.5rem; overflow: hidden;">
+<a href="use-an-offset-term-for-exposure.qmd" style="display: block; padding: 1.25rem 1.5rem; color: inherit; text-decoration: none;">
+<div style="font-size: 1.1rem; font-weight: 600; margin-bottom: 0.35rem; color: #0d6efd;">Use an Offset Term for Exposure</div>
+<div style="font-size: 0.9rem; color: #6c757d; line-height: 1.45;">Model rates instead of raw counts by fixing log(exposure) as an offset in a Poisson formula.</div>
+</a>
+</div>
+</div>
+
+## Advanced models
+
+These recipes cover specialized GAM extensions for structured problems: heteroscedastic responses,
+zero-inflated counts, quantile and conformal inference, causal estimation, multiple correlated
+responses, functional predictors, and online learning.
+
+<div class="section-cards section-cards-list" style="display: grid; grid-template-columns: 1fr; gap: 1rem; margin-top: 0.5rem;">
+<div style="border: 1px solid #dee2e6; border-radius: 0.5rem; overflow: hidden;">
+<a href="model-location-and-scale-together.qmd" style="display: block; padding: 1.25rem 1.5rem; color: inherit; text-decoration: none;">
+<div style="font-size: 1.1rem; font-weight: 600; margin-bottom: 0.35rem; color: #0d6efd;">Model Location and Scale Together (GAMLSS)</div>
+<div style="font-size: 0.9rem; color: #6c757d; line-height: 1.45;">Fit both the mean and variance as smooth functions of covariates using a Gaussian location-scale model.</div>
+</a>
+</div>
+<div style="border: 1px solid #dee2e6; border-radius: 0.5rem; overflow: hidden;">
+<a href="model-zero-inflated-counts.qmd" style="display: block; padding: 1.25rem 1.5rem; color: inherit; text-decoration: none;">
+<div style="font-size: 1.1rem; font-weight: 600; margin-bottom: 0.35rem; color: #0d6efd;">Model Zero-Inflated Counts</div>
+<div style="font-size: 0.9rem; color: #6c757d; line-height: 1.45;">Handle excess zeros with a zero-inflated Poisson model and separate mean and zero-probability smooths.</div>
+</a>
+</div>
+<div style="border: 1px solid #dee2e6; border-radius: 0.5rem; overflow: hidden;">
+<a href="fit-quantile-regression.qmd" style="display: block; padding: 1.25rem 1.5rem; color: inherit; text-decoration: none;">
+<div style="font-size: 1.1rem; font-weight: 600; margin-bottom: 0.35rem; color: #0d6efd;">Fit Quantile Regression</div>
+<div style="font-size: 0.9rem; color: #6c757d; line-height: 1.45;">Estimate multiple quantile curves simultaneously using a smooth quantile GAM.</div>
+</a>
+</div>
+<div style="border: 1px solid #dee2e6; border-radius: 0.5rem; overflow: hidden;">
+<a href="enforce-non-crossing-quantiles.qmd" style="display: block; padding: 1.25rem 1.5rem; color: inherit; text-decoration: none;">
+<div style="font-size: 1.1rem; font-weight: 600; margin-bottom: 0.35rem; color: #0d6efd;">Enforce Non-Crossing Quantiles</div>
+<div style="font-size: 0.9rem; color: #6c757d; line-height: 1.45;">Prevent quantile curves from crossing by enabling the isotonic non-crossing constraint.</div>
+</a>
+</div>
+<div style="border: 1px solid #dee2e6; border-radius: 0.5rem; overflow: hidden;">
+<a href="build-conformal-prediction-intervals.qmd" style="display: block; padding: 1.25rem 1.5rem; color: inherit; text-decoration: none;">
+<div style="font-size: 1.1rem; font-weight: 600; margin-bottom: 0.35rem; color: #0d6efd;">Build Conformal Prediction Intervals</div>
+<div style="font-size: 0.9rem; color: #6c757d; line-height: 1.45;">Construct distribution-free prediction intervals with guaranteed coverage using split conformal prediction.</div>
+</a>
+</div>
+<div style="border: 1px solid #dee2e6; border-radius: 0.5rem; overflow: hidden;">
+<a href="estimate-an-average-treatment-effect.qmd" style="display: block; padding: 1.25rem 1.5rem; color: inherit; text-decoration: none;">
+<div style="font-size: 1.1rem; font-weight: 600; margin-bottom: 0.35rem; color: #0d6efd;">Estimate an Average Treatment Effect</div>
+<div style="font-size: 0.9rem; color: #6c757d; line-height: 1.45;">Use a partially linear GAM to estimate a causal ATE while controlling for confounders nonparametrically.</div>
+</a>
+</div>
+<div style="border: 1px solid #dee2e6; border-radius: 0.5rem; overflow: hidden;">
+<a href="estimate-heterogeneous-treatment-effects.qmd" style="display: block; padding: 1.25rem 1.5rem; color: inherit; text-decoration: none;">
+<div style="font-size: 1.1rem; font-weight: 600; margin-bottom: 0.35rem; color: #0d6efd;">Estimate Heterogeneous Treatment Effects (CATE)</div>
+<div style="font-size: 0.9rem; color: #6c757d; line-height: 1.45;">Estimate how treatment effects vary with individual characteristics using an interactive causal GAM.</div>
+</a>
+</div>
+<div style="border: 1px solid #dee2e6; border-radius: 0.5rem; overflow: hidden;">
+<a href="fit-a-multi-response-gam.qmd" style="display: block; padding: 1.25rem 1.5rem; color: inherit; text-decoration: none;">
+<div style="font-size: 1.1rem; font-weight: 600; margin-bottom: 0.35rem; color: #0d6efd;">Fit a Multi-Response GAM</div>
+<div style="font-size: 0.9rem; color: #6c757d; line-height: 1.45;">Model multiple correlated responses simultaneously with a shared covariate structure.</div>
+</a>
+</div>
+<div style="border: 1px solid #dee2e6; border-radius: 0.5rem; overflow: hidden;">
+<a href="fit-a-functional-covariate.qmd" style="display: block; padding: 1.25rem 1.5rem; color: inherit; text-decoration: none;">
+<div style="font-size: 1.1rem; font-weight: 600; margin-bottom: 0.35rem; color: #0d6efd;">Fit a Functional Covariate</div>
+<div style="font-size: 0.9rem; color: #6c757d; line-height: 1.45;">Model how a scalar response depends on an entire observed curve using a functional GAM.</div>
+</a>
+</div>
+<div style="border: 1px solid #dee2e6; border-radius: 0.5rem; overflow: hidden;">
+<a href="update-a-streaming-gam-incrementally.qmd" style="display: block; padding: 1.25rem 1.5rem; color: inherit; text-decoration: none;">
+<div style="font-size: 1.1rem; font-weight: 600; margin-bottom: 0.35rem; color: #0d6efd;">Update a Streaming GAM Incrementally</div>
+<div style="font-size: 0.9rem; color: #6c757d; line-height: 1.45;">Fit a GAM online by calling partial_fit() on successive data batches, then solve() to update the model.</div>
+</a>
+</div>
+</div>
+
+## Large datasets
+
+When data is too large to hold in memory, these approaches fit the same smooth models without
+materializing the full design matrix (using discretization, DuckDB, or Polars streaming).
+
+<div class="section-cards section-cards-list" style="display: grid; grid-template-columns: 1fr; gap: 1rem; margin-top: 0.5rem;">
+<div style="border: 1px solid #dee2e6; border-radius: 0.5rem; overflow: hidden;">
+<a href="fit-a-biggam-on-a-large-dataframe.qmd" style="display: block; padding: 1.25rem 1.5rem; color: inherit; text-decoration: none;">
+<div style="font-size: 1.1rem; font-weight: 600; margin-bottom: 0.35rem; color: #0d6efd;">Fit a BigGAM on a Large DataFrame</div>
+<div style="font-size: 0.9rem; color: #6c757d; line-height: 1.45;">Use BigGAM to fit a smooth model on millions of rows without materializing the full design matrix.</div>
+</a>
+</div>
+<div style="border: 1px solid #dee2e6; border-radius: 0.5rem; overflow: hidden;">
+<a href="query-with-duckdb-and-fit-in-database.qmd" style="display: block; padding: 1.25rem 1.5rem; color: inherit; text-decoration: none;">
+<div style="font-size: 1.1rem; font-weight: 600; margin-bottom: 0.35rem; color: #0d6efd;">Query with DuckDB and Fit In-Database</div>
+<div style="font-size: 0.9rem; color: #6c757d; line-height: 1.45;">Fit a GAM directly on data held in DuckDB without loading it into Python memory.</div>
+</a>
+</div>
+<div style="border: 1px solid #dee2e6; border-radius: 0.5rem; overflow: hidden;">
+<a href="stream-a-polars-lazyframe.qmd" style="display: block; padding: 1.25rem 1.5rem; color: inherit; text-decoration: none;">
+<div style="font-size: 1.1rem; font-weight: 600; margin-bottom: 0.35rem; color: #0d6efd;">Stream a Polars LazyFrame</div>
+<div style="font-size: 0.9rem; color: #6c757d; line-height: 1.45;">Fit a GAM on a Polars LazyFrame, deferring data loading until fit time.</div>
+</a>
+</div>
 </div>
 
 ## Deployment
 
 Once a model is fit, you will often need to persist it, share it, or work with it in an existing ML
-pipeline. These recipes cover serialization and scikit-learn compatibility.
+pipeline. These recipes cover serialization, scikit-learn compatibility, and R interoperability.
 
 <div class="section-cards section-cards-list" style="display: grid; grid-template-columns: 1fr; gap: 1rem; margin-top: 0.5rem;">
 <div style="border: 1px solid #dee2e6; border-radius: 0.5rem; overflow: hidden;">
@@ -249,6 +383,12 @@ pipeline. These recipes cover serialization and scikit-learn compatibility.
 <a href="use-in-sklearn-pipeline.qmd" style="display: block; padding: 1.25rem 1.5rem; color: inherit; text-decoration: none;">
 <div style="font-size: 1.1rem; font-weight: 600; margin-bottom: 0.35rem; color: #0d6efd;">Use a GAM in a scikit-learn Pipeline</div>
 <div style="font-size: 0.9rem; color: #6c757d; line-height: 1.45;">Wrap a GAM in a Pipeline for cross-validation and grid search using the sklearn-compatible estimators.</div>
+</a>
+</div>
+<div style="border: 1px solid #dee2e6; border-radius: 0.5rem; overflow: hidden;">
+<a href="export-a-model-to-r-mgcv-format.qmd" style="display: block; padding: 1.25rem 1.5rem; color: inherit; text-decoration: none;">
+<div style="font-size: 1.1rem; font-weight: 600; margin-bottom: 0.35rem; color: #0d6efd;">Export a Model to R's mgcv Format</div>
+<div style="font-size: 0.9rem; color: #6c757d; line-height: 1.45;">Convert a fitted whittaker GAM to an mgcv-compatible dict for cross-language interoperability with R.</div>
 </a>
 </div>
 </div>
