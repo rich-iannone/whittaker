@@ -1,0 +1,53 @@
+---
+title: "Fit a Thin Plate Regression Spline"
+description: "Use the default TPRS basis to fit a smooth non-linear curve."
+tags: [Smooths]
+---
+
+# Fit a Thin Plate Regression Spline
+
+Thin plate regression splines (TPRS) are the default smooth basis in Whittaker. They minimise a
+penalty on integrated squared second derivatives, producing a smooth curve that adapts to the
+data without requiring you to place knots manually. Use `s(x)` or `s(x, bs='tp')` as both are
+identical. TPRS works well as a general-purpose smooth for any continuous predictor.
+
+## Load data
+
+Load the `mcycle` dataset, which records head acceleration during a simulated motorcycle crash.
+It is a classic benchmark for smoothing because the signal has strong curvature.
+
+```{python}
+import whittaker as wk
+
+data = wk.load_dataset("mcycle", as_frame=True)
+data.head()
+```
+
+The two columns are `times` (milliseconds after impact) and `accel` (head acceleration in g).
+
+## Fit
+
+Fit a Gaussian GAM with a TPRS smooth on `times`. The `bs='tp'` argument is shown explicitly
+here but is the default (both formulas produce the same model).
+
+```{python}
+model = wk.GAM("accel ~ s(times, bs='tp')").fit(data)
+
+model.summary()
+```
+
+Check the estimated degrees of freedom (EDF) for the smooth. An EDF near 1 would indicate a
+nearly linear effect; a higher EDF reflects more curvature. The k-index should be above 1 and
+the p-value for the smooth should be small, confirming that the non-linear term is necessary.
+
+## Partial effects
+
+Plot the fitted smooth to see the shape of the relationship.
+
+```{python}
+wk.partial_effects(model)
+```
+
+The partial effects plot shows the TPRS smooth with a pointwise confidence band. Notice how the
+curve captures the sharp dip around 15–20 ms and the rebound afterward (a pattern that a
+straight line would completely miss).
