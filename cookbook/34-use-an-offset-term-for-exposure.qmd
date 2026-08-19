@@ -65,8 +65,8 @@ m_offset.summary()
 
 ## Visualize the rate smooth
 
-`model.plot()` shows the partial effect of temperature on the log-rate scale. The inverted-U shape
-reflects the quadratic log-rate used when generating the data.
+`m_offset.plot()` shows the partial effect of temperature on the log-rate scale. The inverted-U
+shape reflects the quadratic log-rate used when generating the data.
 
 ```{python}
 m_offset.plot()
