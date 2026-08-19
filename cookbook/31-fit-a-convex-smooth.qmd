@@ -1,0 +1,66 @@
+---
+title: "Fit a Convex Smooth"
+description: "Constrain a smooth to be convex (bowl-shaped) using bs='cx'."
+tags: [Smooths, Shape constraints]
+---
+
+# Fit a Convex Smooth
+
+A convex function curves upward and so its slope is non-decreasing from left to right. This shape
+arises naturally in physics and engineering: the motorcycle helmet acceleration data from `mcycle`
+shows a sharp drop followed by a recovery, a pattern with a pronounced convex region. The `bs="cx"`
+basis imposes convexity across the entire range of the predictor, which prevents the smooth from
+developing the extra wiggles that a flexible unconstrained basis sometimes fits to noise.
+
+## Fit both models
+
+Load the `mcycle` dataset and fit a convex-constrained model alongside an unconstrained baseline.
+Both use the same formula; only the basis changes.
+
+```{python}
+import whittaker as wk
+
+data = wk.load_dataset("mcycle")
+
+m_convex = wk.GAM("accel ~ s(times, bs='cx')").fit(data)
+m_free   = wk.GAM("accel ~ s(times, bs='tp')").fit(data)
+```
+
+## Summarize the convex model
+
+The EDF for the convex smooth reflects the constraint: it cannot be lower than 1 (linear) but the
+curvature is restricted to a single direction, so very high EDF values are suppressed.
+
+```{python}
+m_convex.summary()
+```
+
+## Compare the smooths
+
+Let's plot the partial effect from each model. The convex smooth follows a bowl-shaped trajectory
+and the unconstrained smooth is free to develop local reversals that may or may not be physically
+meaningful.
+
+```{python}
+m_convex.plot()
+```
+
+```{python}
+m_free.plot()
+```
+
+## Check diagnostics
+
+Run the four-panel diagnostic check on the convex model. If the residuals vs fitted plot shows a
+systematic arch, the convexity constraint may be too strong for this region of the data.
+
+```{python}
+wk.check(m_convex)
+```
+
+## When convexity is appropriate
+
+The convex basis is most useful when theory dictates the shape (cost curves in economics,
+voltage–discharge curves in battery modeling, or recovery curves in biomechanics). Imposing the
+constraint when it matches reality reduces variance without introducing meaningful bias. When shape
+is uncertain, `bs="tp"` remains the safer default.
