@@ -72,6 +72,7 @@ bounds).
 ```{python}
 # Predict with link-scale confidence intervals
 link_ci = model.predict(grid, type="link", interval="confidence")
+
 # Back-transform bounds to count scale
 count_lower = np.exp(link_ci.lower).round(4)
 count_upper = np.exp(link_ci.upper).round(4)
@@ -126,4 +127,4 @@ The values match `probs.values`. The logit link means `μ = 1 / (1 + exp(-η))`.
 - **Model combination:** average or stack linear predictors from multiple models before
   back-transforming.
 - **Additive interpretation:** report the contribution of each smooth on a common additive
-  scale using `terms=True` alongside `type="link"`.
+  scale using `type="terms"`.
