@@ -1,0 +1,68 @@
+---
+title: "Add a Tensor Product for Two Predictors"
+description: "Use te() to model the joint non-linear effect of two continuous predictors including their interaction."
+tags: [Smooths, Interactions]
+---
+
+# Add a Tensor Product for Two Predictors
+
+When two continuous predictors interact (meaning the effect of one depends on the level of the
+other) a tensor product smooth `te(x1, x2)` captures that joint surface without assuming the
+predictors operate on the same scale. Unlike `s(x1, x2)`, a tensor product is invariant to the
+units of each predictor, making it the right choice when `x1` and `x2` are measured in
+different units or have very different ranges.
+
+## Load data
+
+Load the `wages` dataset, which contains age, experience, and hourly wage for survey
+respondents.
+
+```{python}
+import whittaker as wk
+
+data = wk.load_dataset("wages", as_frame=True)
+data.head()
+```
+
+The columns are `age` (years), `experience` (years in the workforce), and `wage` (hourly rate
+in dollars). Age and experience are correlated but not identical as some workers have more
+experience relative to their age, others have little.
+
+## Fit
+
+Fit a Gamma GAM with a tensor product of `age` and `experience`. The Gamma family is
+appropriate for wages because the response is strictly positive and often right-skewed.
+
+```{python}
+model = wk.GAM(
+    "wage ~ te(age, experience)",
+    family=wk.Gamma(),
+).fit(data)
+
+model.summary()
+```
+
+The summary reports a single EDF for the tensor product term. A high EDF indicates that the
+interaction surface has substantial curvature: the wage effect of additional experience differs
+across age groups.
+
+## Partial effects
+
+```{python}
+wk.partial_effects(model)
+```
+
+The partial effects plot renders the tensor product as a two-dimensional surface or contour.
+Look for regions where the wage surface curves differently along age versus experience: for
+example, high experience may carry a larger wage premium for mid-career workers than for very
+young or very old ones.
+
+## Diagnostics
+
+```{python}
+wk.check(model)
+```
+
+For a Gamma model, pay attention to the Q-Q plot. Heavy tails or a systematic arc indicate
+the distributional assumption may need revisiting. Clean residuals here confirm the tensor
+product captured the main interaction structure.
