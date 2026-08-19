@@ -1,0 +1,95 @@
+---
+title: "Extract Term-Level Contributions"
+description: "Decompose a GAM prediction into each smooth term's individual contribution to the linear predictor."
+tags: [Prediction, Interpretation]
+---
+
+# Extract Term-Level Contributions
+
+A GAM prediction is an intercept plus a sum of smooth functions. `predict(type="terms")` exposes
+each smooth's contribution separately, so you can see how much each predictor is adding to the
+linear predictor at any covariate value. This is useful for explaining which variable is driving a
+high or low fitted value.
+
+## Fit
+
+Fit a two-smooth Gaussian GAM on the wages dataset.
+
+```{python}
+import whittaker as wk
+import numpy as np
+
+data = wk.load_dataset("wages")
+model = wk.GAM("wage ~ s(age) + s(experience)").fit(data)
+model.summary()
+```
+
+## Extract term contributions
+
+Pass `type="terms"` to `predict()`. The return type is `TermsPredictionResult` with a `.terms`
+dict and a `.labels` list.
+
+```{python}
+new_data = {"age": np.array([25, 35, 45, 55]), "experience": np.array([2, 10, 18, 28])}
+preds_terms = model.predict(new_data, type="terms")
+preds_terms.labels
+```
+
+The labels show the exact term names used as keys in `.terms` (they match the formula notation).
+
+## Inspect each smooth's contribution
+
+Access each term's contribution array using its label.
+
+```{python}
+preds_terms.terms["s(age)"].round(3)
+```
+
+```{python}
+preds_terms.terms["s(experience)"].round(3)
+```
+
+Each value is the smooth's contribution to the linear predictor at the corresponding row in
+`new_data`, centered so that it integrates to zero over the data. A large positive value means
+that covariate value pushes the prediction upward.
+
+## Sum of contributions
+
+The `.values` property sums all term contributions, giving the linear predictor minus the
+intercept.
+
+```{python}
+preds_terms.values.round(3)
+```
+
+To compare with the full link-scale prediction (which adds the intercept), call `predict()` with
+`type="link"`.
+
+```{python}
+link_preds = model.predict(new_data, type="link")
+link_preds.values.round(3)
+```
+
+The difference between the two is the intercept: a single scalar added to every prediction.
+
+```{python}
+(link_preds.values - preds_terms.values).round(4)
+```
+
+The constant difference confirms the identity: `link prediction = intercept + sum(term contributions)`.
+
+## Compare contributions across observations
+
+Stack the two smooth contributions side by side to see which predictor dominates at each point.
+
+```{python}
+np.column_stack([
+    preds_terms.terms["s(age)"].round(3),
+    preds_terms.terms["s(experience)"].round(3),
+])
+```
+
+Rows correspond to the four observations. The first column is the `age` contribution; the second
+is `experience`. When the `age` value is large and `experience` is near zero, age is the primary
+driver of that prediction (and vice versa). This decomposition is more informative than inspecting
+the overall fitted value alone.
