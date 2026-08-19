@@ -1,0 +1,74 @@
+---
+title: "Estimate a Survival Curve with Cox PH"
+description: "Fit a GAM-extended Cox proportional hazards model for time-to-event data."
+tags: [Families, Survival]
+---
+
+# Estimate a Survival Curve with Cox PH
+
+Use the Cox proportional hazards family when your outcome is the time until an event (death,
+equipment failure, customer churn, or relapse) and some observations may be right-censored (the
+event had not yet occurred when follow-up ended). The GAM extension allows the log-hazard to be a
+smooth function of continuous covariates like age, avoiding the need to categorize or assume
+linearity. Parametric terms like `treatment` enter as log-hazard ratios, directly interpretable as
+relative hazard multipliers.
+
+## Load data
+
+Load the survival dataset and inspect its columns.
+
+```{python}
+import whittaker as wk
+
+data = wk.load_dataset("survival", as_frame=True)
+data.columns.tolist()
+```
+
+The dataset has four columns: `time`, `event`, `age`, and `treatment`.
+
+```{python}
+data.head()
+```
+
+The `event` column is a 0/1 indicator where 1 means the event occurred and 0 means the observation
+was censored. The `CoxPH` family reads this column automatically from the formula's response
+variable specification.
+
+## Fit
+
+Fit a Cox PH GAM with a smooth over age and a linear parametric term for treatment.
+
+```{python}
+model = wk.GAM(
+    "time ~ s(age) + treatment",
+    family=wk.CoxPH(),
+).fit(data)
+
+model.summary()
+```
+
+The summary reports the coefficient for `treatment` as a log-hazard ratio: exponentiate it to
+obtain the hazard ratio. The EDF for `s(age)` indicates how non-linearly age affects the
+log-hazard (an EDF near 1 implies a roughly log-linear age effect).
+
+## Partial effects
+
+```{python}
+wk.partial_effects(model)
+```
+
+Partial effects are on the log-hazard scale. For `s(age)`, an upward slope at a given age means
+the instantaneous risk of the event increases with age in that region; a downward slope means
+decreasing risk. The `treatment` panel shows the linear log-hazard contrast between treatment
+levels. Centered partial effects are relative to the mean log-hazard in the data, so positive
+values indicate above-average hazard.
+
+## Diagnostics
+
+```{python}
+wk.check(model)
+```
+
+For Cox models, the diagnostic plots check the proportional hazards assumption and the distribution
+of martingale or deviance residuals. Systematic trends in residuals over time can indicate
+time-varying effects not captured by the model.
