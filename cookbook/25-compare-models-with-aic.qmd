@@ -1,0 +1,65 @@
+---
+title: "Compare Models with AIC"
+description: "Use AIC to choose between nested GAMs of varying complexity."
+tags: [Diagnostics, Model selection]
+---
+
+# Compare Models with AIC
+
+AIC (Akaike Information Criterion) ranks models by balancing goodness-of-fit against complexity. In a GAM, complexity is measured by the total effective degrees of freedom (EDF) rather than the raw number of parameters, so AIC automatically accounts for how wiggly each smooth is.
+
+Use AIC when you have several candidate models and want a principled way to decide which predictors to include.
+
+## Fit the candidate models
+
+Load the `abalone` dataset and fit three nested models, starting with a single smooth and adding predictors one at a time.
+
+```{python}
+import whittaker as wk
+
+data = wk.load_dataset("abalone")
+
+m1 = wk.GAM("rings ~ s(length)").fit(data)
+m2 = wk.GAM("rings ~ s(length) + s(diameter)").fit(data)
+m3 = wk.GAM("rings ~ s(length) + s(diameter) + s(height) + s(shucked_weight)").fit(data)
+```
+
+## Compare AIC values
+
+Extract the `.aic` attribute from each model and display them together.
+
+```{python}
+m1.aic, m2.aic, m3.aic
+```
+
+Lower AIC is better. A difference (ΔAIC) of less than 2 means the models are essentially equivalent in predictive quality. A ΔAIC greater than 10 means the simpler model is decisively worse and the extra predictors are earning their place.
+
+## Check total EDF
+
+AIC penalises via total EDF, so it is worth inspecting how complex each model actually is.
+
+```{python}
+m1.edf_total, m2.edf_total, m3.edf_total
+```
+
+The full model carries more EDF. If its AIC is not substantially lower, the extra terms are not paying off after the penalty is applied.
+
+## Inspect the winning model
+
+Look at the summary of whichever model has the lowest AIC to see per-term EDF and deviance explained.
+
+```{python}
+m3.summary()
+```
+
+Check `deviance_explained` and the per-smooth EDF values. Any smooth with EDF near 1.0 is nearly linear — it contributes little beyond a simple slope.
+
+## AIC rule of thumb
+
+| ΔAIC from best model | Interpretation |
+|----------------------|---------------|
+| 0–2 | Essentially equivalent; prefer simpler |
+| 2–10 | Some evidence for the more complex model |
+| > 10 | Strong evidence; simpler model is decisively worse |
+
+AIC selects the model that will generalise best on average, not the model that fits the training data best. When predictive accuracy on held-out data is the primary goal, pair AIC comparison with cross-validation (see recipe 26).
