@@ -376,10 +376,35 @@ sections:
           - cross-validate-a-gam.qmd
           - choose-a-smoothing-method.qmd
           - use-select-smoothing.qmd
+      - section: Shape constraints
+        contents:
+          - fit-a-monotone-increasing-smooth.qmd
+          - fit-a-monotone-decreasing-smooth.qmd
+          - fit-a-convex-smooth.qmd
       - section: Data input
         contents:
           - use-a-polars-dataframe.qmd
+          - use-a-pyarrow-table.qmd
+          - use-an-offset-term-for-exposure.qmd
+      - section: Advanced models
+        contents:
+          - model-location-and-scale-together.qmd
+          - model-zero-inflated-counts.qmd
+          - fit-quantile-regression.qmd
+          - enforce-non-crossing-quantiles.qmd
+          - build-conformal-prediction-intervals.qmd
+          - estimate-an-average-treatment-effect.qmd
+          - estimate-heterogeneous-treatment-effects.qmd
+          - fit-a-multi-response-gam.qmd
+          - fit-a-functional-covariate.qmd
+          - update-a-streaming-gam-incrementally.qmd
+      - section: Large datasets
+        contents:
+          - fit-a-biggam-on-a-large-dataframe.qmd
+          - query-with-duckdb-and-fit-in-database.qmd
+          - stream-a-polars-lazyframe.qmd
       - section: Deployment
         contents:
           - save-and-load-a-model.qmd
           - use-in-sklearn-pipeline.qmd
+          - export-a-model-to-r-mgcv-format.qmd
