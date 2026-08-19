@@ -1,0 +1,99 @@
+---
+title: "Get Prediction Intervals"
+description: "Compute intervals that cover individual future observations, not just the mean curve."
+tags: [Prediction, Inference]
+---
+
+# Get Prediction Intervals
+
+A confidence interval answers: where is the true mean? A prediction interval answers: where will
+the next observed value fall? The prediction interval is always wider because it must account for
+both uncertainty in the estimated mean and the irreducible noise in each individual observation
+(the residual variance, σ²). Unlike confidence intervals, prediction intervals cannot shrink to
+zero with more data (the observation-level noise remains no matter how large the sample).
+
+## Fit
+
+Fit a GAM on the motorcycle helmet dataset.
+
+```{python}
+import whittaker as wk
+import numpy as np
+
+data = wk.load_dataset("mcycle")
+model = wk.GAM("accel ~ s(times)").fit(data)
+model.summary()
+```
+
+## Build a prediction grid
+
+A 200-point grid spanning the full range of `times` is sufficient to compare both interval types.
+
+```{python}
+grid = {"times": np.linspace(data["times"].min(), data["times"].max(), 200)}
+```
+
+## Confidence interval
+
+Pass `interval="confidence"` to quantify uncertainty about the mean curve.
+
+```{python}
+ci = model.predict(grid, interval="confidence")
+ci_width = (ci.upper - ci.lower).mean().round(3)
+ci_width
+```
+
+This width shrinks as sample size increases (it measures how well the mean is estimated).
+
+## Prediction interval
+
+Pass `interval="prediction"` to quantify where individual future observations are expected to
+land.
+
+```{python}
+pi = model.predict(grid, interval="prediction")
+pi_width = (pi.upper - pi.lower).mean().round(3)
+pi_width
+```
+
+The prediction interval is noticeably wider than the confidence interval. The excess comes from
+the estimated residual variance, which is a property of the data-generating process and does not
+decrease with sample size.
+
+## Width ratio
+
+Quantify how much wider the prediction interval is.
+
+```{python}
+round(pi_width / ci_width, 3)
+```
+
+A ratio well above 1 confirms that observation-level noise dominates the uncertainty. If the
+model were fit on thousands of observations the confidence interval would nearly collapse, but the
+prediction interval would remain wide by roughly the same absolute amount.
+
+## Compare bounds directly
+
+Inspect the first five rows of each set of bounds to see the difference concretely.
+
+```{python}
+import numpy as np
+
+np.column_stack([
+    ci.lower[:5].round(2),
+    ci.upper[:5].round(2),
+    pi.lower[:5].round(2),
+    pi.upper[:5].round(2),
+])
+```
+
+Columns are: CI lower, CI upper, PI lower, PI upper. The prediction bounds extend substantially
+further from the fitted values.
+
+## When to use each
+
+Use `interval="confidence"` when you want to make statements about the mean response: "the
+average acceleration at time 20 ms is between X and Y." Use `interval="prediction"` when you
+need to bound where a new individual measurement will fall: "the next helmet test at 20 ms should
+record a value between X and Y." Reporting prediction intervals as if they were confidence
+intervals understates the true uncertainty for individual forecasts.
