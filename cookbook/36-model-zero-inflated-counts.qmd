@@ -99,8 +99,8 @@ pred.values["mu"][:5]
 
 `mu` reflects the Poisson rate for sites capable of hosting fish; it rises with temperature and
 falls with depth, consistent with the data-generating process. `pi` is the probability of a
-structural zero: sites that are cold tend to have lower `pi` (more fish-capable), while warmer sites
-in this synthetic example show a rising zero-inflation probability. In practice these patterns are
-recovered from data alone, without knowing the true generating equations. Reporting both parameters
-gives a complete picture: a site can have a high predicted count rate yet still be likely to record
-zero if its structural suitability is low.
+structural zero: sites that are cold tend to have higher `pi` (more structural zeros, less
+fish-capable), while warmer sites in this synthetic example show a declining zero-inflation
+probability. In practice these patterns are recovered from data alone, without knowing the true
+generating equations. Reporting both parameters gives a complete picture: a site can have a high
+predicted count rate yet still be likely to record zero if its structural suitability is low.
