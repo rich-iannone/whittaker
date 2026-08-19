@@ -1,0 +1,96 @@
+---
+title: "Model Skewed Positive Data with Gamma"
+description: "Fit a GAM when the response is a positive continuous variable with right skew."
+tags: [Families, Gamma]
+---
+
+# Model Skewed Positive Data with Gamma
+
+Use the Gamma family whenever your response is strictly positive and right-skewed (income,
+insurance claims, reaction times, or wages are classic examples). The log link means each covariate
+has a multiplicative effect on the expected response. Unlike a log-transformed Gaussian, the Gamma
+model preserves the original scale and gives well-calibrated prediction intervals. The smooth terms
+`s(age)` and `s(experience)` let the data determine the shape of each relationship.
+
+## Load data
+
+Load the built-in wages dataset and inspect its columns.
+
+```{python}
+import whittaker as wk
+import numpy as np
+
+data = wk.load_dataset("wages", as_frame=True)
+data.columns.tolist()
+```
+
+The wages dataset has three columns: `age`, `experience`, and `wage`.
+
+```{python}
+data.head()
+```
+
+Look at the distribution of `wage`. It is bounded below at zero and has a long right tail, which
+is exactly the shape the Gamma family is designed for.
+
+## Fit
+
+Fit a Gamma GAM with REML smoothness selection. REML is generally preferred for Gamma models
+because it is less prone to under-smoothing than GCV.
+
+```{python}
+model = wk.GAM(
+    "wage ~ s(age) + s(experience)",
+    family=wk.Gamma(),
+).fit(data, method="REML")
+
+model.summary()
+```
+
+Check the deviance explained and the EDF for each smooth. A high EDF for `s(experience)` would
+indicate a strongly non-linear wage-experience profile.
+
+## Partial effects
+
+```{python}
+wk.partial_effects(model)
+```
+
+Each panel shows how `wage` changes with that covariate on the log (link) scale, holding the other
+covariate at its mean. The shaded band is the 95% confidence interval. A roughly linear partial
+effect means a log-linear relationship; curvature indicates genuine non-linearity.
+
+## Diagnostics
+
+```{python}
+wk.check(model)
+```
+
+For a well-fitting Gamma model, the Q-Q plot should follow the diagonal and the residual-vs-fitted
+plot should show no obvious funnel pattern.
+
+## Predict at new values
+
+Construct a small grid of new covariate values and obtain response-scale predictions with
+confidence intervals.
+
+```{python}
+import pandas as pd
+
+new_data = pd.DataFrame({
+    "age": [25, 35, 45],
+    "experience": [2, 10, 20],
+})
+
+preds = model.predict(new_data, interval="confidence")
+pd.DataFrame({
+    "age": new_data["age"],
+    "experience": new_data["experience"],
+    "predicted_wage": preds.values,
+    "lower": preds.lower,
+    "upper": preds.upper,
+})
+```
+
+Predictions are automatically back-transformed from the log scale to the original wage scale, so
+they are directly interpretable as expected wages in the same units as the response.
