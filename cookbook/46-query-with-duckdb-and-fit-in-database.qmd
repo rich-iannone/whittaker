@@ -1,0 +1,76 @@
+---
+title: "Query with DuckDB and Fit In-Database"
+description: "Fit a GAM directly on data held in DuckDB without loading it into Python memory."
+tags: [Scalability, Data input]
+---
+
+# Query with DuckDB and Fit In-Database
+
+`DuckDBGAM` reads data from a DuckDB connection in Arrow-format chunks, so the Python process never
+materializes the full dataset. This is well-suited to Parquet files or persistent DuckDB databases
+that are larger than available RAM.
+
+## Set Up a DuckDB Table
+
+Create an in-memory DuckDB connection and populate a table with synthetic sensor readings.
+
+```{python}
+#| eval: false
+import duckdb
+import numpy as np
+import whittaker as wk
+
+rng = np.random.default_rng(23)
+conn = duckdb.connect()
+
+conn.execute(
+    "CREATE TABLE sensor AS "
+    "SELECT i AS id, "
+    "(i / 500.0) * 2 * pi() AS x, "
+    "sin((i / 500.0) * 2 * pi()) + ? * random() AS y "
+    "FROM range(50000) AS t(i)",
+    [0.3],
+)
+```
+
+## Fit from a Table Name
+
+Pass the table name as a string along with the open connection. `DuckDBGAM` will scan the table in
+chunks without pulling it into Python memory.
+
+```{python}
+#| eval: false
+model = wk.DuckDBGAM("y ~ s(x, k=10)").fit("sensor", conn)
+model.summary()
+```
+
+## Fit from a Query
+
+Use `fit_query()` when you want to apply filters, joins, or aggregations before fitting. The full
+expressiveness of SQL is available at this step.
+
+```{python}
+#| eval: false
+model2 = wk.DuckDBGAM("y ~ s(x, k=10)").fit_query(
+    "SELECT x, y FROM sensor WHERE x < 4.0", conn
+)
+model2.n_rows
+```
+
+## Predict
+
+Prediction takes any dict of arrays (no DuckDB connection is needed after fitting).
+
+```{python}
+#| eval: false
+new_data = {"x": np.linspace(0, 2 * np.pi, 100)}
+preds = model.predict(new_data)
+preds.values[:5]
+```
+
+## Interpret
+
+`DuckDBGAM` streams data through Arrow batches, keeping the Python process memory footprint
+proportional to `chunk_size` rather than to the total number of rows. It is particularly practical
+for Parquet files on disk: use `conn` and a Parquet file with `duckdb.read_parquet()` and the rest
+of the workflow is identical.
