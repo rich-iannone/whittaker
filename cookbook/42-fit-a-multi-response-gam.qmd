@@ -1,0 +1,88 @@
+---
+title: "Fit a Multi-Response GAM"
+description: "Model multiple correlated responses simultaneously with a shared covariate structure."
+tags:
+  - Prediction
+  - Inference
+---
+
+# Fit a Multi-Response GAM
+
+When multiple outcomes are measured on the same observations and share common predictors, modeling
+them jointly can improve efficiency and reveal how the responses relate to each other. A
+multi-response GAM fits a separate smooth model for each outcome while optionally estimating the
+residual correlation structure between them.
+
+Fitting with `correlation="unstructured"` goes further: after the smooth effects are removed, the
+remaining residual covariance is estimated, exposing shared variation that the covariates do not
+explain.
+
+## Simulate data
+
+We generate two correlated measurements along a periodic covariate. Both follow sinusoidal patterns
+but with different phases, so their residuals after smoothing retain a meaningful correlation.
+
+```{python}
+import numpy as np
+import whittaker as wk
+
+rng = np.random.default_rng(23)
+n = 400
+x = np.linspace(0, 2 * np.pi, n)
+y1 = np.sin(x) + rng.normal(0, 0.3, n)
+y2 = np.cos(x) + 0.5 * np.sin(x) + rng.normal(0, 0.3, n)
+data = {"y1": y1, "y2": y2, "x": x}
+```
+
+## Fit
+
+The `formula` argument specifies the covariate structure shared by all responses. Each response gets
+its own smooth fitted independently under `correlation="independent"`.
+
+```{python}
+model = wk.MultiResponseGAM(
+    responses=["y1", "y2"],
+    formula="s(x, k=10)",
+).fit(data)
+model.summary()
+```
+
+## Predict
+
+`.predict()` returns a `MultiResponseResult` whose predictions are accessed by response name. Each
+entry holds the fitted values as a plain array.
+
+```{python}
+new_data = {"x": np.linspace(0, 2 * np.pi, 100)}
+result = model.predict(new_data)
+result["y1"].values[:5]
+```
+
+```{python}
+result["y2"].values[:5]
+```
+
+## Residual correlation
+
+Refitting with `correlation="unstructured"` estimates the full residual covariance matrix.
+`.residual_correlation()` returns the covariance and the standardized correlation alongside the
+response names.
+
+```{python}
+model_corr = wk.MultiResponseGAM(
+    responses=["y1", "y2"],
+    formula="s(x, k=10)",
+    correlation="unstructured",
+).fit(data)
+rc = model_corr.residual_correlation()
+rc.correlation
+```
+
+## Interpret
+
+The `rc.correlation` matrix shows the residual correlation between `y1` and `y2` after the smooth
+effect of `x` has been removed. A positive off-diagonal value means the two measurements tend to
+deviate from their respective smooth curves in the same direction. This indicates that something
+beyond `x` drives both outcomes together. This shared driver could represent an unmeasured
+covariate, individual-level random effects, or genuine coupling between the physiological processes
+being measured.
