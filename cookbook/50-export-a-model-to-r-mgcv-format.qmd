@@ -1,0 +1,92 @@
+---
+title: "Export a Model to R's mgcv Format"
+description: "Convert a fitted whittaker GAM to a dict that mirrors R's mgcv list structure for cross-language interoperability."
+tags: [Deployment, Serialization]
+---
+
+# Export a Model to R's mgcv Format
+
+Teams that use both Python and R often need to share fitted models across the language boundary.
+`wk.to_mgcv_dict()` converts a fitted whittaker `GAM` into a JSON-serializable dict whose keys match
+those of the list returned by R's `mgcv::gam()`, making it straightforward to reconstruct or inspect
+the model on the R side.
+
+## Fit a Model
+
+Load the `wages` dataset and fit a Gamma GAM with two smooth terms.
+
+```{python}
+import json
+import numpy as np
+import whittaker as wk
+
+# Load dataset and fit Gamma GAM
+data = wk.load_dataset("wages")
+model = wk.GAM("wage ~ s(age) + s(experience)", family=wk.Gamma()).fit(data)
+```
+
+## Export to mgcv Dict
+
+`to_mgcv_dict()` accepts any fitted `GAM` and returns a plain Python dict.
+
+```{python}
+d = wk.to_mgcv_dict(model)
+list(d.keys())
+```
+
+## Inspect Metadata
+
+The top-level keys mirror mgcv's return structure. Examine the formula string, family, observation
+count, and AIC.
+
+```{python}
+d["formula"]
+```
+
+```{python}
+d["family"]
+```
+
+```{python}
+d["n"]
+```
+
+```{python}
+d["aic"]
+```
+
+## Inspect Smooth Structure
+
+The `"smooth"` key holds a list of dicts, one per smooth term, matching mgcv's `$smooth` list.
+
+```{python}
+[s["term"] for s in d["smooth"]]
+```
+
+## Serialize to JSON
+
+The dict is fully JSON-serializable. NumPy arrays are converted with a default handler.
+
+```{python}
+json_str = json.dumps(d, default=lambda x: x.tolist() if hasattr(x, "tolist") else x)
+json_str[:200]
+```
+
+## Round-Trip Back to whittaker
+
+`from_mgcv_dict()` reconstructs a prediction-ready `GAM` when the original data is supplied to refit
+the smooth bases.
+
+```{python}
+# Reconstruct model from dict and predict
+model2 = wk.from_mgcv_dict(d, data=data)
+model2.predict({"age": np.array([30, 40, 50]), "experience": np.array([5, 10, 15])}).values
+```
+
+## Interpret
+
+`to_mgcv_dict()` produces a dict with the same keys as R's `mgcv::gam()` return value, making it
+possible to load a Python-fitted GAM into R for further analysis or reporting. The round-trip
+through `from_mgcv_dict()` is useful when you want to reload a model from a stored JSON snapshot
+without writing a binary file. Use `data=None` for a lightweight container that carries coefficients
+and metadata but cannot predict, or supply the original data to get a fully functional model back.

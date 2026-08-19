@@ -5,6 +5,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
+import whittaker as wk
 from whittaker.families.binomial import Binomial
 from whittaker.families.poisson import Poisson
 from whittaker.gam import GAM
@@ -118,51 +119,46 @@ class TestPartialEffects:
 class TestCheck:
     def test_returns_list_of_charts(self) -> None:
         model = _fitted_gaussian()
-        charts = model.check()
-        assert isinstance(charts, list)
-        for chart in charts:
-            assert isinstance(chart, (alt.Chart, alt.LayerChart))
+        chart = wk.check(model)
+        assert isinstance(chart, alt.VConcatChart)
 
     def test_has_four_panels(self) -> None:
         model = _fitted_gaussian()
-        charts = model.check()
-        assert len(charts) == 4
+        chart = wk.check(model)
+        assert len(chart.vconcat) == 4
 
     def test_unfitted_raises(self) -> None:
         model = GAM("y ~ s(x)")
         with pytest.raises(RuntimeError, match="not been fitted"):
-            model.check()
+            wk.check(model)
 
     def test_binomial_check(self) -> None:
         model = _fitted_binomial()
-        charts = model.check()
-        assert len(charts) == 4
-        for chart in charts:
-            assert chart.to_dict() is not None
+        chart = wk.check(model)
+        assert len(chart.vconcat) == 4
+        assert chart.to_dict() is not None
 
     def test_poisson_check(self) -> None:
         model = _fitted_poisson()
-        charts = model.check()
-        assert len(charts) == 4
-        for chart in charts:
-            assert chart.to_dict() is not None
+        chart = wk.check(model)
+        assert len(chart.vconcat) == 4
+        assert chart.to_dict() is not None
 
     def test_multi_smooth_check(self) -> None:
         model = _fitted_multi()
-        charts = model.check()
-        assert len(charts) == 4
-        for chart in charts:
-            assert chart.to_dict() is not None
+        chart = wk.check(model)
+        assert len(chart.vconcat) == 4
+        assert chart.to_dict() is not None
 
     def test_plots_subset(self) -> None:
         model = _fitted_gaussian()
-        charts = model.check(plots=["qq", "histogram"])
-        assert len(charts) == 2
+        chart = wk.check(model, plots=["qq", "histogram"])
+        assert len(chart.vconcat) == 2
 
     def test_unknown_plot_name_raises(self) -> None:
         model = _fitted_gaussian()
         with pytest.raises(ValueError, match="Unknown check plot"):
-            model.check(plots=["bogus"])
+            wk.check(model, plots=["bogus"])
 
 
 # ---------------------------------------------------------------------------

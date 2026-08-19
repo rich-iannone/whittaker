@@ -104,7 +104,7 @@ class TestNegativeBinomialFamily:
             fam.theta = 0.0
 
     def test_simulate_shape_and_finite(self) -> None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         mu = np.array([1.0, 5.0, 10.0, 20.0])
         y = self.fam.simulate(mu, scale=1.0, rng=rng)
         assert y.shape == mu.shape

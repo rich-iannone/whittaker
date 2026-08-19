@@ -1,0 +1,73 @@
+---
+title: "Enforce Non-Crossing Quantiles"
+description: "Prevent quantile curves from crossing by enabling the isotonic non-crossing constraint."
+tags:
+  - Prediction
+  - Inference
+---
+
+# Enforce Non-Crossing Quantiles
+
+Quantile regression estimates each curve independently. When curves are fitted separately, their
+estimates can cross. For instance, the predicted 25th percentile may exceed the predicted 75th
+percentile at some covariate values. Crossings are a logical contradiction: by definition, a lower
+quantile must lie below a higher one. The `non_crossing` option in `QuantileGAM` applies an isotonic
+projection after fitting to eliminate this problem.
+
+## Compare Unconstrained vs. Constrained
+
+Fit a model without the non-crossing constraint and measure how often crossings occur across the
+training data. The `crossing_fraction` method returns the proportion of observations where at least
+one pair of adjacent quantile curves is inverted.
+
+```{python}
+import numpy as np
+import whittaker as wk
+
+# Fit unconstrained model and measure crossing fraction
+data = wk.load_dataset("mcycle")
+model_free = wk.QuantileGAM(
+    "accel ~ s(times, k=15)",
+    non_crossing=False,
+).fit(data)
+model_free.crossing_fraction(data)
+```
+
+Now fit the same model with the constraint enabled and confirm that crossings are eliminated.
+
+```{python}
+# Fit non-crossing model and verify zero crossings
+model_nc = wk.QuantileGAM(
+    "accel ~ s(times, k=15)",
+    non_crossing=True,
+).fit(data)
+model_nc.crossing_fraction(data)
+```
+
+## Verify the Constraint
+
+Calling `crossing_fraction` a second time confirms the result is stable and not a sampling artifact.
+
+```{python}
+model_nc.crossing_fraction(data)
+```
+
+## Predict Interval Width
+
+Generate predictions on a dense grid and inspect the width of the outer interval (the gap between
+the 10th and 90th percentile curves) to confirm the constrained model produces well-ordered bounds.
+
+```{python}
+# Predict interval bounds on a dense grid
+new_data = {"times": np.linspace(data["times"].min(), data["times"].max(), 200)}
+lower, upper = model_nc.predict_interval(new_data)
+(upper - lower)[:5]
+```
+
+## Interpret
+
+`non_crossing=True` applies an isotonic projection to the predicted quantile values after each
+fitting step. The projection nudges any inverted pair back into the correct order, which may
+slightly narrow intervals relative to the unconstrained fit. The trade-off is almost always
+worthwhile: a prediction that violates the definition of a quantile is not a valid prediction
+interval, regardless of how well the individual curves fit the data.

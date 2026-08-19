@@ -327,7 +327,7 @@ best_sigma = wk.calibrate_sigma(
     formula="y ~ s(x)",
     data=data,
     tau=0.5,
-    seed=42,
+    seed=23,
 )
 
 print(f"Best sigma for tau=0.5: {best_sigma:.4f}")

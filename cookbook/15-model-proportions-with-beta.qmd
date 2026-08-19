@@ -1,0 +1,98 @@
+---
+title: "Model Proportions with Beta"
+description: "Fit a GAM when the response is a proportion strictly between 0 and 1."
+tags: [Families, Beta]
+---
+
+# Model Proportions with Beta
+
+Use the Beta family when your response is a rate or proportion that is strictly between 0 and 1
+(germination rates, survival fractions, market share, or test pass rates). A Gaussian model can
+predict values outside (0, 1) and assumes constant variance; Beta regression respects the natural
+bounds and allows variance to vary with the mean. The logit link means that each covariate has a
+multiplicative effect on the odds of the proportion.
+
+## Load data
+
+Load the proportions dataset and inspect its columns.
+
+```{python}
+import whittaker as wk
+
+data = wk.load_dataset("proportions", as_frame=True)
+data.columns.tolist()
+```
+
+The dataset contains `germination_rate`, `temperature`, and `water`.
+
+```{python}
+data.head()
+```
+
+The response `germination_rate` is already bounded in (0, 1). Verify this before fitting. The
+Beta family requires strictly interior values; zeros and ones require a zero-one-inflated extension.
+
+## Fit
+
+Fit a Beta GAM with smooths over both covariates.
+
+```{python}
+model = wk.GAM(
+    "germination_rate ~ s(temperature) + s(water)",
+    family=wk.Beta(),
+).fit(data)
+
+model.summary()
+```
+
+The EDF for each smooth indicates how non-linear the relationship is. An EDF near 1 suggests a
+roughly logistic (linear on the logit scale) relationship; higher EDF indicates more curvature.
+
+## Partial effects
+
+```{python}
+wk.partial_effects(model)
+```
+
+Partial effects are shown on the logit (link) scale. Positive values increase the expected
+germination rate; negative values decrease it. The shape of each curve reveals whether the effect
+is monotone or peaks at an intermediate covariate value.
+
+## Diagnostics
+
+```{python}
+wk.check(model)
+```
+
+For a Beta model, check that the residuals are roughly symmetric around zero and that there is no
+strong pattern in the residual-vs-fitted plot. Heteroscedasticity is less concerning here because
+the Beta family already allows non-constant variance.
+
+## Predict on the response scale
+
+Predictions from a Beta GAM are automatically constrained to (0, 1): no transformation needed.
+
+```{python}
+import pandas as pd
+
+# Build new-data over temperature and water values
+new_data = pd.DataFrame({
+    "temperature": [15.0, 20.0, 25.0],
+    "water": [30.0, 50.0, 70.0],
+})
+
+# Predict germination rates with confidence intervals
+preds = model.predict(new_data, interval="confidence")
+
+# Assemble results with prediction bounds
+pd.DataFrame({
+    "temperature": new_data["temperature"],
+    "water": new_data["water"],
+    "predicted_rate": preds.values,
+    "lower": preds.lower,
+    "upper": preds.upper,
+})
+```
+
+All predicted values and interval bounds are on the (0, 1) scale, directly interpretable as
+expected germination rates.

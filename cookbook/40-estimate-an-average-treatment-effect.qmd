@@ -1,0 +1,87 @@
+---
+title: "Estimate an Average Treatment Effect"
+description: "Use a partially linear GAM to estimate a causal average treatment effect while nonparametrically controlling for confounders."
+tags:
+  - Inference
+  - Causal inference
+---
+
+# Estimate an Average Treatment Effect
+
+Estimating a treatment effect from observational data requires removing the influence of
+confounders, which are variables that affect both treatment assignment and the outcome. A partially
+linear causal GAM handles this by modeling the confounders nonparametrically while estimating a
+single linear treatment coefficient, which is the average treatment effect (ATE).
+
+The partially linear approach is robust to misspecification of the confounder relationships because
+it lets smooth functions absorb complex nonlinear patterns, leaving the treatment coefficient
+cleanly identified.
+
+## Simulate data
+
+We generate a dataset where treatment assignment depends on age and experience (confounding), and
+the true ATE is 2.5 wage units.
+
+```{python}
+import numpy as np
+import whittaker as wk
+
+# Generate confounders and treatment assignment
+rng = np.random.default_rng(23)
+n = 500
+age = rng.uniform(25, 55, n)
+experience = rng.uniform(0, 20, n)
+p_treat = 1 / (1 + np.exp(-(0.05 * age + 0.1 * experience - 3)))
+training = rng.binomial(1, p_treat).astype(float)
+
+# Simulate wages with true ATE of 2.5
+wage = 10 + 0.3 * age + 0.5 * experience + 2.5 * training + rng.normal(0, 2, n)
+data = {"wage": wage, "training": training, "age": age, "experience": experience}
+```
+
+## Fit
+
+`CausalGAM` with `method="partially_linear"` automatically builds a smooth term for each confounder
+and estimates a linear treatment coefficient. No formula argument is needed.
+
+```{python}
+model = wk.CausalGAM(
+    outcome="wage",
+    treatment="training",
+    confounders=["age", "experience"],
+    method="partially_linear",
+).fit(data, seed=23)
+```
+
+## Extract the treatment effect
+
+Calling `.treatment_effect()` returns a `TreatmentEffect` object with the ATE and its uncertainty.
+
+```{python}
+te = model.treatment_effect()
+te.ate
+```
+
+The 95% confidence interval shows the range of plausible values for the true treatment effect.
+
+```{python}
+(te.ci_lower, te.ci_upper)
+```
+
+The p-value tests the null hypothesis that the treatment has no effect.
+
+```{python}
+te.p_value
+```
+
+## Interpret
+
+```{python}
+model.summary()
+```
+
+The ATE estimate near 2.5 recovers the true simulated effect. The confidence interval and p-value
+together confirm statistical significance: after nonparametrically removing the confounding
+influence of age and experience, workers who received training earn roughly 2.5 more wage units on
+average. A naive comparison ignoring confounders would overestimate this effect because older and
+more experienced workers are both more likely to be treated and to earn higher wages.

@@ -1,0 +1,12 @@
+{
+  "hash": "75d1b4084ccb84722d1e20ec96198558",
+  "result": {
+    "engine": "jupyter",
+    "markdown": "---\ntitle: Fit a BigGAM on a Large DataFrame\ndescription: Use BigGAM to fit a smooth model on millions of rows without materializing the full design matrix.\ntags:\n  - Scalability\n  - Model fitting\nbread-crumbs: false\n---\n\n# Fit a BigGAM on a Large DataFrame\n\nStandard GAMs build a design matrix with one row per observation, which becomes prohibitively large\nfor datasets with millions of rows. `BigGAM` sidesteps this by discretizing each covariate into bins\nbefore fitting, reducing memory from O(n·p) to O(d·p) where d is the number of bins (typically 200\nor fewer).\n\n## Generate Data\n\nSimulate a large dataset with two covariates and a response that combines a sinusoidal and a linear\neffect.\n\n::: {#43cdea17 .cell execution_count=1}\n``` {.python .cell-code}\nimport numpy as np\nimport whittaker as wk\n\nrng = np.random.default_rng(23)\nn = 500_000\nx1 = rng.uniform(0, 2 * np.pi, n)\nx2 = rng.uniform(0, 1, n)\ny = np.sin(x1) + 0.5 * x2 + rng.normal(0, 0.3, n)\ndata = {\"y\": y, \"x1\": x1, \"x2\": x2}\n```\n:::\n\n\n## Fit\n\n`BigGAM` accepts the same formula syntax as a regular `GAM`. The default method is `\"fREML\"`, which\nis better suited to discretized data than `\"REML\"`.\n\n::: {#edfec443 .cell execution_count=2}\n``` {.python .cell-code}\nmodel = wk.BigGAM(\"y ~ s(x1, k=10) + s(x2, k=10)\").fit(data)\nmodel.summary()\n```\n:::\n\n\n## Predict\n\nPrediction works identically to a standard GAM: pass a dict of arrays for the covariates of\ninterest.\n\n::: {#cf19a5b8 .cell execution_count=3}\n``` {.python .cell-code}\nnew_data = {\"x1\": np.array([0.5, 1.0, 2.0]), \"x2\": np.array([0.2, 0.5, 0.8])}\npreds = model.predict(new_data)\npreds.values\n```\n:::\n\n\n## Interpret\n\n`BigGAM` discretizes each covariate into at most `n_discrete=200` unique bins, reducing the fitting\nproblem from O(n·p) to O(d·p) where d ≪ n. The smooth estimates are essentially identical to a full\nGAM fitted on the raw data, because the precision gained from additional observations beyond the bin\nresolution is negligible. This makes `BigGAM` a practical drop-in for `GAM` when data is too large\nto hold a full design matrix in memory (typically when n exceeds a few hundred thousand rows).\n\n",
+    "supporting": [
+      "fit-a-biggam-on-a-large-dataframe_files/figure-html"
+    ],
+    "filters": [],
+    "includes": {}
+  }
+}

@@ -1,0 +1,93 @@
+---
+title: "Estimate Heterogeneous Treatment Effects (CATE)"
+description: "Estimate how treatment effects vary with individual characteristics using an interactive causal GAM."
+tags:
+  - Inference
+  - Causal inference
+---
+
+# Estimate Heterogeneous Treatment Effects (CATE)
+
+A single average treatment effect can mask important variation and the same intervention may benefit
+some people substantially and others barely at all. The conditional average treatment effect (CATE)
+captures this heterogeneity by estimating how the treatment effect changes across the values of
+individual characteristics.
+
+An interactive causal GAM models both the control surface and the treatment effect surface
+nonparametrically, allowing the effect of treatment to vary smoothly with confounders rather than
+assuming a constant additive shift.
+
+## Simulate data
+
+We generate wages where the treatment effect grows with age: older workers benefit more from the
+training program. The true CATE is `1.0 + 0.08 * age`.
+
+```{python}
+import numpy as np
+import whittaker as wk
+
+# Generate worker covariates
+rng = np.random.default_rng(23)
+n = 600
+age = rng.uniform(25, 55, n)
+experience = rng.uniform(0, 20, n)
+
+# Simulate confounded treatment assignment
+p_treat = 1 / (1 + np.exp(-(0.05 * age + 0.1 * experience - 3)))
+training = rng.binomial(1, p_treat).astype(float)
+
+# Define true CATE and generate wages
+cate_true = 1.0 + 0.08 * age
+wage = 10 + 0.3 * age + 0.5 * experience + cate_true * training + rng.normal(0, 2, n)
+data = {"wage": wage, "training": training, "age": age, "experience": experience}
+```
+
+## Fit
+
+Setting `method="interactive"` allows the treatment effect to interact with all confounders. The
+model estimates separate smooth surfaces for treated and untreated potential outcomes and computes
+their difference as the CATE.
+
+```{python}
+model = wk.CausalGAM(
+    outcome="wage",
+    treatment="training",
+    confounders=["age", "experience"],
+    method="interactive",
+).fit(data, seed=23)
+```
+
+## Extract the CATE
+
+`.cate(variable="age")` evaluates the estimated treatment effect on a grid of age values, holding
+other confounders at representative values. The result shows how the effect changes as age
+increases.
+
+```{python}
+cate = model.cate(variable="age")
+cate.cate[:5]
+```
+
+The corresponding age values on the evaluation grid show where each CATE estimate is located.
+
+```{python}
+cate.x[:5]
+```
+
+The pointwise confidence band captures uncertainty in the estimated effect at each age value.
+
+```{python}
+(cate.lower[:5], cate.upper[:5])
+```
+
+## Interpret
+
+```{python}
+model.summary()
+```
+
+The CATE curve traces the treatment effect as a function of age. Where the curve slopes upward,
+older workers gain more from training than younger ones. In this simulation, the effect rises from
+roughly 3 wage units at age 25 to about 5.4 at age 55, consistent with the true `1.0 + 0.08 * age`
+relationship. Confidence bands that remain above zero across the full age range confirm that the
+treatment benefits all subgroups, while the slope of the curve reveals who benefits most.

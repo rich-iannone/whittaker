@@ -1,0 +1,94 @@
+---
+title: "Use Select Smoothing to Shrink Away a Term"
+description: "Apply select=True or a shrinkage basis to let the GAM automatically drop irrelevant predictors."
+tags: [Model fitting]
+---
+
+# Use Select Smoothing to Shrink Away a Term
+
+Standard GAM smooths are penalised to control wiggliness, but they cannot shrink entirely to zero — a term always contributes at least a linear effect. Select smoothing adds a second penalty that pushes the entire smooth toward zero when it has no explanatory power. This lets the fitting process perform automatic variable selection, analogous to LASSO in linear models.
+
+Enable it globally with `select=True`, or per-term with the shrinkage cubic spline basis `bs='cs'`.
+
+## Set up the data
+
+Load the `wages` dataset and add a synthetic noise column — a predictor that is genuinely unrelated to wages. The goal is to show that select smoothing identifies and discards it.
+
+```{python}
+# Import libraries
+import whittaker as wk
+import numpy as np
+
+# Load data and add synthetic noise predictor
+data = wk.load_dataset("wages", as_frame=True)
+
+rng = np.random.default_rng(23)
+data["noise"] = rng.normal(0, 1, len(data))
+```
+
+## Fit without select smoothing
+
+First, fit the model in the default way so you have a baseline for comparison. All three terms will receive some EDF regardless of whether they are truly useful.
+
+```{python}
+# Fit standard GAM as baseline
+m_standard = wk.GAM("wage ~ s(age) + s(experience) + s(noise)").fit(data)
+m_standard.edf
+```
+
+Each smooth is allocated some EDF even if its contribution is negligible. The noise term will have a non-zero EDF here simply because the standard penalty cannot reach zero.
+
+## Fit with select=True
+
+Now refit using `select=True`. The extra penalty allows any smooth to be shrunk completely out of the model.
+
+```{python}
+# Refit with select=True to enable extra shrinkage penalty
+m_select = wk.GAM(
+    "wage ~ s(age) + s(experience) + s(noise)",
+).fit(data, select=True)
+m_select.edf
+```
+
+The EDF values are returned in the order the terms appear in the formula: `age`, `experience`, `noise`. The noise term's EDF should be close to zero, indicating that the penalty has effectively removed it.
+
+## Read the summary
+
+```{python}
+m_select.summary()
+```
+
+In the smooth terms table, look at the EDF column for `s(noise)`. An EDF near 0 means the term has been shrunk away and contributes almost nothing to the predictions. The real predictors — `age` and `experience` — retain meaningful EDF.
+
+## Alternative: per-term shrinkage basis
+
+Instead of the global flag, you can apply a shrinkage cubic spline (`bs='cs'`) to individual terms. This is useful when you want select behaviour on only some smooths.
+
+```{python}
+# Fit with per-term shrinkage cubic spline basis
+m_cs = wk.GAM(
+    "wage ~ s(age, bs='cs') + s(experience, bs='cs') + s(noise, bs='cs')"
+).fit(data)
+m_cs.edf
+```
+
+The result should be comparable to `select=True`. Choose `bs='cs'` when you want fine-grained control over which terms are eligible for shrinkage.
+
+## Compare EDF across approaches
+
+```{python}
+# Compare total EDF across all three approaches
+m_standard.edf_total, m_select.edf_total, m_cs.edf_total
+```
+
+The select models should have lower total EDF because the noise term has been shrunk out. A lower total EDF with similar or better deviance explained is a sign the extra penalty is doing useful work.
+
+## When to use select smoothing
+
+| Situation | Recommendation |
+|-----------|---------------|
+| Many candidate predictors, unsure which matter | `select=True` for a single pass |
+| Mixed confidence in predictors | `bs='cs'` on uncertain terms only |
+| All predictors known to be relevant | Standard smooths; select adds overhead |
+
+Select smoothing is most valuable in exploratory modelling where you have more candidate predictors than you expect to need. It does not replace domain knowledge, but it provides a principled way to let the data confirm or dismiss a term.

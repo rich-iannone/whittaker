@@ -1,0 +1,73 @@
+---
+title: "Fit a Monotone Increasing Smooth"
+description: "Constrain a smooth to be monotone increasing using bs='mpi'."
+tags: [Smooths, Shape constraints]
+---
+
+# Fit a Monotone Increasing Smooth
+
+A standard penalized spline can bend in any direction, which is appropriate when the relationship's
+shape is unknown. When economic or scientific reasoning guarantees that a predictor can only push
+the response upward (wages rising with experience, dose-response curves) imposing a monotone
+constraint protects against overfitting and produces an interpretable smooth. The `bs="mpi"` basis
+enforces monotone increase while otherwise behaving like any other GAM smooth.
+
+## Fit both models
+
+Load the `wages` dataset and fit two models side by side: one with the monotone increasing basis and
+one with the default thin-plate spline. The `experience` predictor is a natural candidate for a
+monotone constraint (wages generally rise as a worker accumulates experience, not fall).
+
+```{python}
+import whittaker as wk
+
+# Load data and fit constrained and unconstrained models
+data = wk.load_dataset("wages")
+
+m_constrained   = wk.GAM("wage ~ s(experience, bs='mpi')", family=wk.Gamma()).fit(data)
+m_unconstrained = wk.GAM("wage ~ s(experience, bs='tp')",  family=wk.Gamma()).fit(data)
+```
+
+## Summarize the constrained model
+
+The summary for the monotone smooth reports the same statistics as any other term: effective degrees
+of freedom, reference degrees of freedom, and a p-value. A lower EDF reflects the extra rigidity
+imposed by the shape constraint.
+
+```{python}
+m_constrained.summary()
+```
+
+## Compare the partial effects
+
+Call `model.plot()` on each model to compare the estimated smooths. The constrained smooth will
+never reverse direction and the unconstrained smooth can dip or rise locally wherever the data pull
+it.
+
+```{python}
+m_constrained.plot()
+```
+
+```{python}
+m_unconstrained.plot()
+```
+
+## Check diagnostics
+
+Run `wk.check()` on the constrained model to confirm the residuals look reasonable. Shape
+constraints do not change the residual structure when the constraint is consistent with the data.
+
+```{python}
+wk.check(m_constrained)
+```
+
+## When to use `bs="mpi"`
+
+| Situation | Recommendation |
+|-----------|---------------|
+| Strong prior that effect is non-decreasing | `bs="mpi"` |
+| Effect direction uncertain | `bs="tp"` (default) |
+| Enforcing monotone decrease | `bs="mpd"` |
+
+Use `bs="mpi"` when subject-matter knowledge justifies the constraint and you want the model to
+respect it even in data-sparse regions where an unconstrained smooth might wander.

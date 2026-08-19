@@ -1,0 +1,95 @@
+---
+title: "Get Confidence Intervals for Predictions"
+description: "Add pointwise confidence bands and simultaneous bands to smooth predictions."
+tags: [Prediction, Inference]
+---
+
+# Get Confidence Intervals for Predictions
+
+Whittaker supports three types of uncertainty bands via the `interval` argument to `predict()`.
+Pointwise confidence intervals cover each individual prediction point separately. Simultaneous bands
+correct for the fact that you are evaluating the entire curve at once. Prediction intervals are
+wider still, because they must cover a new observation (not just the mean) at each point.
+
+## Fit
+
+Fit the `mcycle` GAM and build the prediction grid used throughout this recipe.
+
+```{python}
+import numpy as np
+import whittaker as wk
+
+# Load data and fit the GAM
+data = wk.load_dataset("mcycle")
+model = wk.GAM("accel ~ s(times)").fit(data)
+
+# Build prediction grid
+grid = {"times": np.linspace(0, 57.6, 200)}
+```
+
+## Pointwise confidence interval
+
+Pass `interval="confidence"` to get `.lower` and `.upper` alongside `.values`. These bands have 95%
+coverage at each individual x value by default.
+
+```{python}
+preds = model.predict(grid, interval="confidence")
+preds.values[:5].round(2)
+```
+
+The fitted values show the smooth running through the data. The lower bound reveals how far the
+interval extends below the point estimate at each location.
+
+```{python}
+preds.lower[:5].round(2)
+```
+
+The upper bound is symmetric around the fitted value for Gaussian families.
+
+```{python}
+preds.upper[:5].round(2)
+```
+
+Pointwise intervals are the right choice when you are reporting a single prediction or comparing the
+smooth at a specific x value against a reference.
+
+## Simultaneous bands
+
+Using `interval="simultaneous"` widens the bands so that the entire fitted curve is covered with 95%
+probability, not just each point in isolation. Use these whenever you want to make a statement about
+the shape of the curve as a whole (e.g., claiming that the smooth is everywhere above zero).
+
+```{python}
+preds_sim = model.predict(grid, interval="simultaneous", level=0.95)
+```
+
+Comparing the mean band widths makes the difference concrete. The tuple below shows pointwise width
+first, simultaneous width second.
+
+```{python}
+# Compare mean widths: pointwise vs simultaneous
+(preds.upper - preds.lower).mean(), (preds_sim.upper - preds_sim.lower).mean()
+```
+
+Simultaneous bands are always at least as wide as pointwise intervals, often noticeably so.
+
+## Prediction interval
+
+`interval="prediction"` adds observation-level noise to the uncertainty, producing intervals that
+should contain a new individual measurement rather than the conditional mean.
+
+```{python}
+preds_pred = model.predict(grid, interval="prediction")
+(preds_pred.upper - preds_pred.lower).mean()
+```
+
+The prediction interval is wider than both confidence band types, as it must account for the
+irreducible scatter around the smooth.
+
+## Summary
+
+| CI type | Coverage guarantee | Width | When to use |
+|---|---|---|---|
+| `"confidence"` | Per-point (95% at each x) | Narrowest | Reporting a single x value |
+| `"simultaneous"` | Whole curve (95% jointly) | Wider | Inference about curve shape |
+| `"prediction"` | New observation at each x | Widest | Forecasting individual values |

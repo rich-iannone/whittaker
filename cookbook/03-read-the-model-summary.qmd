@@ -1,0 +1,71 @@
+---
+title: "Read the Model Summary"
+description: "Understand EDF, significance tests, and fit statistics at a glance."
+tags: [Basics, Diagnostics]
+---
+
+# Read the Model Summary
+
+`model.summary()` is the primary diagnostic after fitting. It reports one row per
+smooth term and a block of overall fit statistics. Learning to read it fluently takes
+about five minutes and pays off every time you fit a model.
+
+## Fit a two-smooth model
+
+The `wages` dataset records hourly wages alongside `age` and `experience`. Wages are
+positive and right-skewed, so `wk.Gamma()` is a natural choice.
+
+```{python}
+import whittaker as wk
+
+data = wk.load_dataset("wages")
+```
+
+```{python}
+# Fit two-smooth Gamma GAM
+model = wk.GAM("wage ~ s(age) + s(experience)", family=wk.Gamma()).fit(data)
+model.summary()
+```
+
+## Smooth terms table
+
+Each row in the upper block describes one smooth term.
+
+| Column | Meaning |
+|---|---|
+| **Name** | The smooth term as written in the formula, e.g. `s(age)` |
+| **EDF** | Effective degrees of freedom (how wiggly the fitted smooth actually is) |
+| **Ref.df** | Reference degrees of freedom used in the F-test denominator |
+| **F** | F-statistic testing whether the smooth differs significantly from zero |
+| **p-value** | Two-sided p-value for the F-test where small values indicate a real effect |
+
+EDF = 1 means the smooth collapsed to a straight line. EDF = 5 means it used five
+degrees of freedom to bend through the data.
+
+## Model statistics
+
+The lower block summarises overall fit.
+
+- **n**: number of observations used in the fit.
+- **Family**: the distribution and link function (e.g. `Gamma [log]`).
+- **Deviance explained**: the proportion of null deviance accounted for by the model,
+  analogous to R² in OLS.
+- **GCV score**: generalized cross-validation score used to select smoothing
+  parameters (lower is better when comparing models on the same data).
+- **Scale estimate**: estimated dispersion parameter for the family.
+
+## EDF as a diagnostic
+
+If the EDF of a smooth is close to the maximum allowed by the basis dimension `k`, the basis may be
+too small to capture the true curve shape. Whittaker will not automatically warn you, but the
+summary makes it visible: an EDF near `k − 1` is a prompt to refit with a larger `k`. Recipe 23
+covers the formal k-index test for basis dimension adequacy.
+
+The `edf` attribute holds one value per smooth term as a list of floats.
+
+```{python}
+model.edf
+```
+
+Compare these values against the default basis dimension (usually `k = 10`, giving a maximum EDF
+near 9). A value close to the ceiling is a signal to increase `k`.

@@ -1,0 +1,62 @@
+---
+title: "Fit a BigGAM on a Large DataFrame"
+description: "Use BigGAM to fit a smooth model on millions of rows without materializing the full design matrix."
+tags: [Scalability, Model fitting]
+---
+
+# Fit a BigGAM on a Large DataFrame
+
+Standard GAMs build a design matrix with one row per observation, which becomes prohibitively large
+for datasets with millions of rows. `BigGAM` sidesteps this by discretizing each covariate into bins
+before fitting, reducing memory from O(n·p) to O(d·p) where d is the number of bins (typically 200
+or fewer).
+
+## Generate Data
+
+Simulate a large dataset with two covariates and a response that combines a sinusoidal and a linear
+effect.
+
+```{python}
+#| eval: false
+import numpy as np
+import whittaker as wk
+
+# Simulate large dataset with two covariates
+rng = np.random.default_rng(23)
+n = 500_000
+x1 = rng.uniform(0, 2 * np.pi, n)
+x2 = rng.uniform(0, 1, n)
+y = np.sin(x1) + 0.5 * x2 + rng.normal(0, 0.3, n)
+data = {"y": y, "x1": x1, "x2": x2}
+```
+
+## Fit
+
+`BigGAM` accepts the same formula syntax as a regular `GAM`. The default method is `"fREML"`, which
+is better suited to discretized data than `"REML"`.
+
+```{python}
+#| eval: false
+model = wk.BigGAM("y ~ s(x1, k=10) + s(x2, k=10)").fit(data)
+model.summary()
+```
+
+## Predict
+
+Prediction works identically to a standard GAM: pass a dict of arrays for the covariates of
+interest.
+
+```{python}
+#| eval: false
+new_data = {"x1": np.array([0.5, 1.0, 2.0]), "x2": np.array([0.2, 0.5, 0.8])}
+preds = model.predict(new_data)
+preds.values
+```
+
+## Interpret
+
+`BigGAM` discretizes each covariate into at most `n_discrete=200` unique bins, reducing the fitting
+problem from O(n·p) to O(d·p) where d ≪ n. The smooth estimates are essentially identical to a full
+GAM fitted on the raw data, because the precision gained from additional observations beyond the bin
+resolution is negligible. This makes `BigGAM` a practical drop-in for `GAM` when data is too large
+to hold a full design matrix in memory (typically when n exceeds a few hundred thousand rows).

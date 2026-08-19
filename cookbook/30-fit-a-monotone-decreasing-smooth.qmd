@@ -1,0 +1,71 @@
+---
+title: "Fit a Monotone Decreasing Smooth"
+description: "Constrain a smooth to be monotone decreasing using bs='mpd'."
+tags: [Smooths, Shape constraints]
+---
+
+# Fit a Monotone Decreasing Smooth
+
+Shape-constrained smoothing is most useful when domain knowledge dictates the direction of an
+effect. Heavy metals in river floodplains dilute with distance from the source so zinc concentration
+can only decrease (or stay flat) as you move further from the river, never increase. The `bs="mpd"`
+basis encodes this prior directly in the model, preventing the smooth from producing implausible
+upward turns in regions with sparse data.
+
+## Fit
+
+Load the `meuse` dataset, which records zinc concentrations at locations across a Rhine floodplain.
+The predictor `dist` is the standardized distance from the river bank and `zinc` is the response.
+
+```{python}
+import whittaker as wk
+
+# Load data and fit monotone decreasing smooth
+data = wk.load_dataset("meuse")
+
+model = wk.GAM("zinc ~ s(dist, bs='mpd')").fit(data)
+```
+
+## Summarize
+
+The summary confirms the smooth's complexity via its effective degrees of freedom. A monotone
+constraint restricts the function space, so EDF is often lower than an unconstrained equivalent.
+
+```{python}
+model.summary()
+```
+
+## Visualize the partial effect
+
+`model.plot()` draws the estimated smooth against the predictor. The curve should decrease
+monotonically from left to right. Near the river bank, zinc is high but further away, it can only be
+equal or lower.
+
+```{python}
+model.plot()
+```
+
+## Check diagnostics
+
+Inspect the four diagnostic panels to assess whether residuals are well-behaved. Systematic
+structure in the residuals vs fitted plot would suggest the smooth is too rigid and an unconstrained
+basis might fit better.
+
+```{python}
+wk.check(model)
+```
+
+## Choosing between constrained and unconstrained
+
+Fit an unconstrained model to see whether the data actually support the monotone assumption, or
+whether the smooth would prefer a different shape when given the freedom to do so.
+
+```{python}
+# Fit unconstrained model to verify monotone assumption
+m_unconstrained = wk.GAM("zinc ~ s(dist, bs='tp')").fit(data)
+m_unconstrained.plot()
+```
+
+If the unconstrained smooth is also monotonically decreasing, the constraint and the data agree. Use
+`bs="mpd"` to enforce the shape explicitly. If the unconstrained smooth turns upward somewhere,
+investigate the cause before committing to the constraint.

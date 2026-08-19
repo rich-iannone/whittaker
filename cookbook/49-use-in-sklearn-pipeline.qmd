@@ -1,0 +1,89 @@
+---
+title: "Use a GAM in a scikit-learn Pipeline"
+description: "Wrap a GAM in a Pipeline for cross-validation and grid search."
+tags: [scikit-learn, Deployment]
+---
+
+# Use a GAM in a scikit-learn Pipeline
+
+`GAMRegressor` and `GAMClassifier` implement the full scikit-learn estimator interface (`fit()`,
+`predict()`, `score()`, and `get_params()`) so they work well with `Pipeline`, `cross_val_score()`,
+and `GridSearchCV` without any adaptation layer.
+
+## Basic pipeline
+
+Build the predictor matrix manually from `load_dataset`, then combine a `StandardScaler` with
+`GAMRegressor` in a two-step `Pipeline`. Formula predictors are named `x0`, `x1`, ... matching
+column order.
+
+```{python}
+import numpy as np
+import whittaker as wk
+from whittaker.sklearn import GAMRegressor
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import StandardScaler
+
+# Load data and build predictor matrix
+data = wk.load_dataset("wages")
+X = np.column_stack([data["age"], data["experience"]])
+y = data["wage"]
+
+# Build and fit scaler-GAM pipeline
+pipe = Pipeline([
+    ("scaler", StandardScaler()),
+    ("gam", GAMRegressor(formula="y ~ s(x0) + s(x1)")),
+]).fit(X, y)
+```
+
+The scaler operates on `X` before it reaches the GAM. The formula sees the scaled columns as `x0`
+and `x1` (the predictor names do not change). Check the in-sample R² of the fitted pipeline.
+
+```{python}
+pipe.score(X, y)
+```
+
+## Cross-validation
+
+The `cross_val_score()` function treats `GAMRegressor` like any other estimator. Each fold refits
+the pipeline from scratch, including the scaler's `fit_transform()` step.
+
+```{python}
+from sklearn.model_selection import cross_val_score
+
+# Run 5-fold cross-validation on the full pipeline
+scores = cross_val_score(pipe, X, y, cv=5, scoring="r2")
+```
+
+Inspect the per-fold R² scores to see how stable the fit is across splits.
+
+```{python}
+scores.round(3)
+```
+
+Five-fold CV gives an honest estimate of out-of-sample R² without any manual train/test split. The
+mean across folds summarizes overall generalization.
+
+```{python}
+scores.mean()
+```
+
+## Classification
+
+For binary outcomes, swap in `GAMClassifier`. It wraps a Binomial GAM and exposes `predict_proba()`,
+which returns class probabilities suitable for use with `roc_auc_score()` and similar metrics.
+
+```{python}
+# from whittaker.sklearn import GAMClassifier
+# from sklearn.model_selection import cross_val_score
+#
+# data = wk.load_dataset("credit")
+# X = np.column_stack([data["age"], data["income"]])
+# y = data["default"]
+#
+# clf = GAMClassifier(formula="y ~ s(x0) + s(x1)")
+# scores = cross_val_score(clf, X, y, cv=5, scoring="roc_auc")
+# print(f"Mean AUC: {scores.mean():.3f}")
+```
+
+`GAMClassifier` uses `family=wk.Binomial()` internally. `predict()` returns the majority class and
+`predict_proba()` returns a two-column array of class probabilities.

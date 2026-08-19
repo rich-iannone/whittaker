@@ -1,0 +1,92 @@
+---
+title: "Fit a Functional Covariate"
+description: "Model how a scalar response depends on an entire observed curve (functional predictor) using a functional GAM."
+tags:
+  - Smooths
+  - Prediction
+---
+
+# Fit a Functional Covariate
+
+Some predictors are not scalar values but entire curves. Examples include a temperature trace across
+24 hours, a spectral measurement, and a biological signal over time. A functional GAM treats each
+such curve as a single predictor by representing its contribution through a coefficient function
+β(t), which assigns a weight to each time point.
+
+The coefficient function reveals which parts of the input curve are most predictive of the response,
+making the model interpretable in a way that flattening the curve to summary statistics cannot
+match.
+
+## Simulate data
+
+Each of 200 observations is a 24-point hourly temperature curve. The true coefficient function peaks
+at noon, meaning mid-day temperature drives most of the variation in daily energy consumption.
+
+```{python}
+import numpy as np
+import whittaker as wk
+
+# Generate hourly temperature curves
+rng = np.random.default_rng(23)
+n, T = 200, 24
+hour = np.linspace(0, 1, T)
+temp_curves = (
+    rng.uniform(5, 15, (n, 1))
+    + 10 * np.sin(np.pi * hour)[np.newaxis, :]
+    + rng.normal(0, 1, (n, T))
+)
+
+# Define true coefficient function and energy response
+beta_true = np.exp(-((hour - 0.5) ** 2) / 0.05)
+energy = temp_curves @ beta_true / T + rng.normal(0, 0.5, n)
+data = {"energy": energy, "temp": temp_curves}
+```
+
+## Fit
+
+A `FunctionalTerm` describes how to represent the functional covariate: which column of `data` holds
+the curves (`"temp"`), what basis to use, and the domain of the time variable. The domain
+`(0.0, 1.0)` corresponds to the normalized hour values in `hour`.
+
+```{python}
+# Define functional basis term
+term = wk.FunctionalTerm("temp", basis="bspline", domain=(0.0, 1.0), n_basis=12)
+
+# Fit the functional GAM
+model = wk.FunctionalGAM(response="energy", functional_terms=[term]).fit(data)
+model.summary()
+```
+
+## Predict
+
+`.predict()` on a `FunctionalGAM` returns a plain NumPy array (not a `PredictionResult` object).
+Pass the same data dictionary used for fitting to get in-sample predictions.
+
+```{python}
+preds = model.predict(data)
+preds[:5]
+```
+
+## Coefficient function
+
+`.coefficient_function()` extracts β(t) evaluated on a fine grid over the domain. The result shows
+how strongly each time point contributes to predicting the response.
+
+```{python}
+cf = model.coefficient_function("temp", n_grid=100)
+cf.values[:5]
+```
+
+```{python}
+cf.grid[:5]
+```
+
+## Interpret
+
+`cf.values` is the estimated coefficient function β(t): a positive value at time `t` means that
+higher temperature at that hour increases predicted energy consumption, and a larger value means
+stronger influence. The estimated curve should peak near `grid ≈ 0.5` (noon), matching the true
+β(t) used to generate the data. Hours where the confidence band (`.lower`, `.upper`) contains zero
+contribute negligibly to prediction. This interpretability (knowing *when* temperature matters, not
+just that it does) is the core advantage of the functional covariate approach over using summary
+statistics like daily mean or maximum temperature.

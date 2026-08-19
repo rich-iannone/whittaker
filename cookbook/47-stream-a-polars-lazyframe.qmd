@@ -1,0 +1,74 @@
+---
+title: "Stream a Polars LazyFrame"
+description: "Fit a GAM on a Polars LazyFrame, deferring data loading until fit time."
+tags: [Scalability, Data input, Polars]
+---
+
+# Stream a Polars LazyFrame
+
+`PolarsGAM` integrates with Polars' lazy execution model, and you build up a query plan as a
+`LazyFrame`, then pass it directly to `fit()`. Data is materialized and streamed in chunks only when
+fitting begins, so complex transformations upstream are folded into a single efficient scan.
+
+## Prepare a LazyFrame
+
+Build a large synthetic dataset as a Polars `DataFrame`, then convert it to a `LazyFrame`. In a real
+workflow this might point at a Parquet file or a query chain that has not yet executed.
+
+```{python}
+#| eval: false
+import numpy as np
+import polars as pl
+import whittaker as wk
+
+# Build synthetic Polars DataFrame
+rng = np.random.default_rng(23)
+n = 200_000
+df = pl.DataFrame({
+    "x1": rng.uniform(0, 2 * np.pi, n),
+    "x2": rng.uniform(0, 1, n),
+    "y": np.sin(rng.uniform(0, 2 * np.pi, n)) + 0.5 * rng.uniform(0, 1, n) + rng.normal(0, 0.3, n),
+})
+
+# Convert to LazyFrame for deferred execution
+lazy = df.lazy()
+```
+
+## Fit
+
+Pass the `LazyFrame` directly to `fit()`. `PolarsGAM` triggers execution internally and streams it
+through the discretized-basis fitting algorithm.
+
+```{python}
+#| eval: false
+model = wk.PolarsGAM("y ~ s(x1, k=10) + s(x2, k=8)").fit(lazy)
+model.summary()
+```
+
+## Inspect Row Count
+
+After fitting, `n_rows` reports how many observations were processed.
+
+```{python}
+#| eval: false
+model.n_rows
+```
+
+## Predict
+
+Predictions use a plain dict of arrays, with no Polars dependency at inference time.
+
+```{python}
+#| eval: false
+new_data = {"x1": np.array([0.5, 1.5, 2.5]), "x2": np.array([0.2, 0.5, 0.8])}
+preds = model.predict(new_data)
+preds.values
+```
+
+## Interpret
+
+`PolarsGAM` uses the same discretized-basis approach as `BigGAM`, so memory usage is bounded
+regardless of `n`. Passing a `LazyFrame` defers Polars query execution until `fit()` triggers it,
+meaning any upstream filter, join, or derived-column step runs only once as part of the streaming
+scan. `PolarsGAM` also accepts file paths directly (`.parquet`, `.csv`, `.ipc`, `.arrow`, `.ndjson`,
+and `.jsonl` extensions are all supported).

@@ -1,0 +1,70 @@
+---
+title: "Fit a Spatial Smooth with a Tensor Product"
+description: "Use te(x, y) to capture spatial autocorrelation in a continuous response."
+tags: [Smooths, Spatial]
+---
+
+# Fit a Spatial Smooth with a Tensor Product
+
+When observations have known geographic coordinates, a tensor product smooth over the two
+coordinate columns captures spatial autocorrelation: the tendency of nearby locations to have
+similar values. Pair it with non-spatial covariates (here, distance from a river) to separate the
+spatial trend from the covariate effect. This avoids the inflated standard errors that arise
+when spatial correlation is ignored.
+
+## Load data
+
+Load the `meuse` dataset, which records heavy-metal concentrations measured at locations along
+the Meuse river in the Netherlands.
+
+```{python}
+import whittaker as wk
+
+data = wk.load_dataset("meuse", as_frame=True)
+data.head()
+```
+
+The columns are `zinc` (zinc concentration in ppm), `dist` (standardised distance from the
+river bank), and `x`, `y` (projected coordinates in metres).
+
+## Fit
+
+Fit a Gaussian GAM with a tensor product for the two-dimensional spatial location and a
+separate smooth for river distance. The tensor product accounts for the spatial field; `s(dist)`
+captures the well-known inverse relationship between river proximity and zinc concentration.
+
+```{python}
+# Fit spatial surface and distance smooth with REML
+model = wk.GAM(
+    "zinc ~ te(x, y) + s(dist)"
+).fit(data, method="REML")
+
+model.summary()
+```
+
+Both terms should have substantial EDF, indicating genuine non-linearity in the spatial surface
+and in the distance effect. REML is preferred for smoothing parameter selection when the model
+contains multiple smooth terms.
+
+## Partial effects
+
+```{python}
+wk.partial_effects(model)
+```
+
+The spatial panel shows the two-dimensional concentration field: high zinc near the river's
+historical flood plain, lower values further away. The `dist` panel shows a declining curve (zinc
+falls off with distance from the river) after controlling for the broader spatial pattern.
+These two panels together decompose the spatial signal into a structured distance effect and
+residual geographic variation.
+
+## Diagnostics
+
+```{python}
+wk.check(model)
+```
+
+For spatial data, the key diagnostic is whether residuals show remaining spatial structure. If
+the Q-Q plot shows heavy tails, consider whether the Gaussian family is appropriate for the
+zinc concentration data (which is right-skewed). Transforming the response or switching to a
+Gamma family may improve the fit.

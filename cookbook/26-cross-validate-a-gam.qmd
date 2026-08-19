@@ -1,0 +1,88 @@
+---
+title: "Cross-Validate a GAM"
+description: "Use k-fold cross-validation to compare models on out-of-sample predictive performance."
+tags: [Model selection, Cross-validation]
+---
+
+# Cross-Validate a GAM
+
+Cross-validation (CV) splits the data into folds, trains on all but one fold, and evaluates predictions on the held-out fold. Repeating this across all folds gives an honest estimate of how well the model will perform on new data.
+
+Use CV when predictive accuracy on unseen data is the primary goal, or when you want a model-selection criterion that does not rely on asymptotic approximations. `wk.cross_validate()` handles the fold splitting and returns a summary score.
+
+## Fit the candidate models
+
+Load the `fish` dataset, which records fish counts by temperature and depth — a natural Poisson response.
+
+```{python}
+import whittaker as wk
+
+# Load data and fit candidate models
+data = wk.load_dataset("fish")
+
+m_simple = wk.GAM("count ~ s(temperature)", family=wk.Poisson()).fit(data)
+m_full   = wk.GAM("count ~ s(temperature) + s(depth)", family=wk.Poisson()).fit(data)
+```
+
+## Cross-validate the simple model
+
+Run 5-fold CV on the simpler model. `cv_score` is the mean held-out deviance (lower is better); `cv_se` is its standard error across folds.
+
+```{python}
+# Run 5-fold CV on the simple model
+cv_simple = wk.cross_validate(
+    "count ~ s(temperature)",
+    data,
+    family=wk.Poisson(),
+    n_folds=5,
+)
+cv_simple.cv_score, cv_simple.cv_se
+```
+
+## Cross-validate the full model
+
+Repeat for the model that also includes depth.
+
+```{python}
+# Run 5-fold CV on the full model
+cv_full = wk.cross_validate(
+    "count ~ s(temperature) + s(depth)",
+    data,
+    family=wk.Poisson(),
+    n_folds=5,
+)
+cv_full.cv_score, cv_full.cv_se
+```
+
+## Compare the scores
+
+A lower `cv_score` indicates better out-of-sample fit. However, because CV is a random estimate, a difference smaller than one standard error is not meaningful — this is the "one-SE rule": the simplest model whose CV score falls within `best_score + best_se` is considered equivalent to the best model.
+
+```{python}
+# Apply one-SE rule to compare models
+threshold = cv_full.cv_score + cv_full.cv_se
+cv_simple_within_1se = cv_simple.cv_score <= threshold
+
+cv_full.cv_score, cv_simple.cv_score, threshold, cv_simple_within_1se
+```
+
+If `cv_simple_within_1se` is `True`, the simpler model is not meaningfully worse and can be preferred for parsimony. If it is `False`, the extra term earns its place.
+
+## Inspect the full model summary
+
+When the fuller model wins, examine its summary to confirm both smooths are contributing.
+
+```{python}
+m_full.summary()
+```
+
+Look at the EDF for each smooth. A term with EDF close to 1.0 is nearly linear; a term with very low EDF is barely contributing to predictions.
+
+## CV vs AIC
+
+| Criterion | Best for | Notes |
+|-----------|----------|-------|
+| AIC | Model parsimony | Fast; relies on asymptotic theory |
+| CV | Predictive accuracy | Slower; honest estimate of generalisation |
+
+Prefer CV when the deployment distribution matches your data and you care primarily about prediction. Prefer AIC when interpretability and parsimony matter most, or when data are too small for reliable fold estimation.

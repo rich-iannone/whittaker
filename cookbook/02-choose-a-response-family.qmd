@@ -1,0 +1,91 @@
+---
+title: "Choose a Response Family"
+description: "Pick the right distribution for your outcome variable."
+tags: [Basics, Families]
+---
+
+# Choose a Response Family
+
+The `family` argument tells Whittaker which probability distribution governs the response and which
+link function connects the linear predictor to the mean. Choosing the right family is the single
+most important modelling decision. A mismatched family produces biased smooths and unreliable
+standard errors.
+
+## The family table
+
+| Family | Class | Link | Use when |
+|---|---|---|---|
+| Gaussian | `wk.Gaussian()` | identity | Continuous, unbounded, roughly symmetric |
+| Poisson | `wk.Poisson()` | log | Non-negative integer counts |
+| Binomial | `wk.Binomial()` | logit | Binary (0/1) or proportion |
+| Gamma | `wk.Gamma()` | log | Positive, right-skewed (costs, durations) |
+| Negative Binomial | `wk.NegativeBinomial()` | log | Overdispersed counts |
+| Beta | `wk.Beta()` | logit | Proportions strictly in (0, 1) |
+| Tweedie | `wk.Tweedie()` | log | Zero-inflated positive (insurance) |
+| Inverse Gaussian | `wk.InverseGaussian()` | log | Positive, heavy right tail |
+
+Pass any family as a keyword argument: `wk.GAM("y ~ s(x)", family=wk.Poisson())`.
+
+## Gaussian (default)
+
+Gaussian is appropriate when the response is continuous and can take any real value. The `mcycle`
+head-acceleration data fits this description.
+
+```{python}
+import whittaker as wk
+
+data = wk.load_dataset("mcycle")
+```
+
+```{python}
+# Fit default Gaussian GAM
+model_g = wk.GAM("accel ~ s(times)").fit(data)
+model_g.summary()
+```
+
+## Poisson
+
+Use Poisson when the response is a non-negative integer count. The `fish` dataset records the number
+of fish caught at different water temperatures and depths.
+
+```{python}
+data = wk.load_dataset("fish")
+```
+
+```{python}
+# Fit Poisson GAM for count response
+model_p = wk.GAM(
+    "count ~ s(temperature) + depth",
+    family=wk.Poisson(),
+).fit(data)
+model_p.summary()
+```
+
+The log link keeps predicted counts positive. Deviance explained replaces R² as the fit statistic.
+
+## Binomial
+
+Use Binomial for binary (0/1) outcomes or proportions formed from counts. The `credit` dataset has a
+binary `default` column and continuous predictors `income` and `debt_ratio`.
+
+```{python}
+data = wk.load_dataset("credit")
+```
+
+```{python}
+# Fit Binomial GAM for binary outcome
+model_b = wk.GAM(
+    "default ~ s(income) + s(debt_ratio)",
+    family=wk.Binomial(),
+).fit(data)
+model_b.summary()
+```
+
+The logit link maps predicted probabilities into the real line. Predictions from `model_b.predict()`
+are on the probability scale by default.
+
+## Other families
+
+Every family in the table follows the same pattern (pass an instance to `family=`). No other part of
+the API changes. For overdispersed counts try `wk.NegativeBinomial()` and for strictly bounded
+proportions try out `wk.Beta()`.

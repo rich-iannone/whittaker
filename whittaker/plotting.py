@@ -179,7 +179,7 @@ def _partial_effect_1d(
         .encode(y=alt.datum(0))
     )
 
-    return (band + line + zero_rule).properties(width="container", height=300, title=title_str)
+    return (band + line + zero_rule).properties(width=640, height=300, title=title_str)
 
 
 def _partial_effect_2d(
@@ -380,13 +380,13 @@ _CHECK_PLOT_NAMES = ("qq", "residuals", "histogram", "response")
 def check(
     model: GAM,
     plots: tuple[str, ...] | list[str] | None = None,
-) -> list[alt.Chart | alt.LayerChart | alt.FacetChart]:
+) -> alt.VConcatChart:
     r"""Produce GAM diagnostic plots.
 
     Provides the standard suite of residual diagnostics used to assess GAM fit quality, analogous to
-    `mgcv::gam.check()` in R. Rather than a single composite figure, each requested diagnostic is
-    returned as its own full-width Altair chart, so callers can lay them out, select a subset, or
-    display them individually (e.g. one per tab in an interactive app). Available plots (selected
+    `mgcv::gam.check()` in R. All requested diagnostics are returned as a single vertically
+    concatenated Altair chart so calling `wk.check(model)` as the last expression in a cell
+    displays inline. Available plots (selected
     via `plots=`):
 
     - `"qq"`: QQ plot of deviance residuals against theoretical normal quantiles. Systematic
@@ -410,8 +410,8 @@ def check(
 
     Returns
     -------
-    list[altair.Chart]
-        One chart per requested diagnostic plot, in the order selected.
+    altair.VConcatChart
+        All requested diagnostic plots stacked vertically into a single chart.
 
     Examples
     --------
@@ -481,7 +481,7 @@ def check(
         )
         result.append(
             (qq_points + qq_ref).properties(
-                width="container", height=250, title="QQ plot of deviance residuals"
+                width=640, height=250, title="QQ plot of deviance residuals"
             )
         )
 
@@ -500,7 +500,7 @@ def check(
                 x=alt.X("fitted:Q").title("Fitted values"),
                 y=alt.Y("residual:Q").title("Pearson residuals"),
             )
-            .properties(width="container", height=250, title="Pearson residuals vs fitted")
+            .properties(width=640, height=250, title="Pearson residuals vs fitted")
         )
         resid_zero = (
             alt.Chart(alt.Data(values=[{}]))
@@ -518,7 +518,7 @@ def check(
                 x=alt.X("residual:Q").bin(maxbins=30).title("Deviance residuals"),
                 y=alt.Y("count()").title("Frequency"),
             )
-            .properties(width="container", height=250, title="Histogram of deviance residuals")
+            .properties(width=640, height=250, title="Histogram of deviance residuals")
         )
 
     if "response" in selected:
@@ -552,9 +552,7 @@ def check(
             .encode(x="x:Q", y="y:Q")
         )
         result.append(
-            (resp_points + resp_ref).properties(
-                width="container", height=250, title="Response vs fitted"
-            )
+            (resp_points + resp_ref).properties(width=640, height=250, title="Response vs fitted")
         )
 
-    return result
+    return alt.vconcat(*result)

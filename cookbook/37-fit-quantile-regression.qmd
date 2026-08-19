@@ -1,0 +1,70 @@
+---
+title: "Fit Quantile Regression"
+description: "Estimate multiple quantile curves simultaneously using a smooth quantile GAM."
+tags:
+  - Prediction
+  - Inference
+---
+
+# Fit Quantile Regression
+
+The `mcycle` dataset records the acceleration of a motorcycle helmet during a simulated crash.
+Variance in acceleration grows sharply during impact, making the data strongly heteroscedastic. In
+such cases, quantile regression is more informative than a mean fit: instead of a single conditional
+mean, you obtain a family of curves that reveal how the full distribution of the response shifts
+across time.
+
+## Fit
+
+Load the dataset and fit a `QuantileGAM` with the default quantile set (10th, 25th, 50th, 75th, and
+90th percentiles). The smooth term `s(times, k=15)` gives the model enough flexibility to capture
+the non-linear acceleration trajectory.
+
+```{python}
+import whittaker as wk
+
+# Load data and fit a five-quantile GAM
+data = wk.load_dataset("mcycle")
+model = wk.QuantileGAM("accel ~ s(times, k=15)").fit(data)
+model.summary()
+```
+
+## Predict
+
+Generate predictions on an evenly spaced grid across the observed time range. The result is a
+dictionary keyed by the exact quantile values; each entry holds a `PredictionResult` with a
+`.values` array.
+
+```{python}
+import numpy as np
+
+# Predict on a fine grid over observed time range
+new_data = {"times": np.linspace(data["times"].min(), data["times"].max(), 200)}
+preds = model.predict(new_data)
+preds[0.5].values[:5]
+```
+
+The 10th and 90th percentile predictions mark the outer limits of the estimated distribution at each
+time point.
+
+```{python}
+preds[0.1].values[:5]
+```
+
+```{python}
+preds[0.9].values[:5]
+```
+
+## Interpret
+
+Check empirical coverage, which is the fraction of training observations that fall between the
+outermost predicted quantiles.
+
+```{python}
+model.coverage(data)
+```
+
+The spread between the 10th and 90th quantile curves is widest during the high-impact phase of the
+crash, directly capturing the heteroscedastic nature of the data. Where the curves are tightly
+packed, the response is relatively predictable; where they fan out, uncertainty is high. This is
+information a single conditional mean cannot convey.

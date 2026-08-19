@@ -1,0 +1,94 @@
+---
+title: "Predict on New Data"
+description: "Generate fitted values for any set of covariate values after fitting."
+tags: [Prediction]
+---
+
+# Predict on New Data
+
+Once a GAM is fitted, `predict()` accepts any dict mapping predictor names to arrays of new
+covariate values. There is no need to refit. You can evaluate the model at a fine grid, at held-out
+observations, or at arbitrary hypothetical inputs.
+
+## Fit
+
+Start with the `mcycle` dataset and a single-smooth Gaussian GAM.
+
+```{python}
+import whittaker as wk
+
+# Load mcycle dataset
+data = wk.load_dataset("mcycle")
+
+# Fit single-smooth Gaussian GAM
+model = wk.GAM("accel ~ s(times)").fit(data)
+model.summary()
+```
+
+## Predict on a grid
+
+Build a 200-point grid covering the full range of `times`, then call `predict()`.
+
+```{python}
+import numpy as np
+
+# Build 200-point grid over full time range
+grid = {"times": np.linspace(0, 57.6, 200)}
+
+# Predict acceleration on the grid
+preds = model.predict(grid)
+preds.values[:5].round(2)
+```
+
+The first five fitted values show the smooth near the start of the time range. To
+see the full spread, check the minimum and maximum of the predictions.
+
+```{python}
+preds.values.min(), preds.values.max()
+```
+
+The predicted range spans a wide swath of acceleration values, reflecting the sharp impulse captured
+by the smooth. A fine grid like this is also useful for plotting a smooth curve through the data.
+
+## Multiple columns
+
+When the formula has more than one predictor, every predictor named in the formula must appear in
+the new-data dict. The `wages` dataset demonstrates this with two predictors, `age` and
+`experience`.
+
+```{python}
+# Load wages data and fit two-predictor GAM
+wages_data = wk.load_dataset("wages")
+wages_model = wk.GAM("wage ~ s(age) + s(experience)").fit(wages_data)
+```
+
+Pass both predictors together. Each position in the arrays corresponds to one new observation.
+
+```{python}
+# Build new-data with paired age and experience values
+new_data = {
+    "age": np.array([25, 35, 45, 55]),
+    "experience": np.array([2, 8, 15, 25]),
+}
+
+# Predict wages at new covariate values
+preds_wages = wages_model.predict(new_data)
+preds_wages.values.round(2)
+```
+
+Omitting any predictor named in the formula raises an error, so the dict must be complete even if
+you are only interested in varying one variable.
+
+## Link scale predictions
+
+By default, predictions are returned on the response scale (after applying the inverse link). To
+obtain the linear predictor instead (useful for manual interval construction or custom
+back-transformation) pass `type="link"`.
+
+```{python}
+preds_link = model.predict(grid, type="link")
+preds_link.values[:5].round(4)
+```
+
+For a Gaussian model the link is the identity, so response-scale and link-scale values are
+identical. The distinction matters most for Poisson and binomial families.

@@ -1,0 +1,98 @@
+---
+title: Model Count Data with Poisson
+description: Fit a GAM when the response is a non-negative integer count.
+tags: [Families, Poisson]
+---
+
+# Model Count Data with Poisson
+
+Use the Poisson family whenever your response is a non-negative integer count (e.g., fish caught per
+survey, page views per hour, defects per batch). The log link means that each covariate has a
+multiplicative effect on the expected count, so the coefficients are interpretable as log-rate
+ratios. The smooth term `s(temperature)` captures any non-linear relationship without you having to
+guess the functional form.
+
+## Load data
+
+Load the built-in fish dataset as a DataFrame and inspect its columns.
+
+```{python}
+import whittaker as wk
+
+data = wk.load_dataset("fish", as_frame=True)
+
+# column names
+data.columns.tolist()
+```
+
+The fish dataset has three columns: `temperature` (water temperature in degrees Celsius), `depth`
+(sampling depth in meters), and `count` (fish observed per transect).
+
+```{python}
+data.head()
+```
+
+Each row is one transect observation. Temperature has a curved relationship with count that a linear
+term would miss.
+
+## Fit
+
+Fit a Poisson GAM with a smooth term for temperature and a linear term for depth.
+
+```{python}
+model = wk.GAM(
+    "count ~ s(temperature) + depth",
+    family=wk.Poisson(),
+).fit(data)
+
+model.summary()
+```
+
+The summary reports the effective degrees of freedom (EDF) for `s(temperature)`. An EDF near 1
+indicates a near-linear smooth. A higher EDF signals a more wiggly curve. The `depth` term enters as
+a parametric linear predictor because depth effects are often close to linear once temperature is
+accounted for.
+
+## Partial effects
+
+Plotting the partial effects lets you see each smooth on its own scale.
+
+```{python}
+wk.partial_effects(model)
+```
+
+Each panel shows the contribution of one term to the linear predictor, holding all other terms at
+their mean. The shaded band is a 95% pointwise confidence interval. A flat band crossing zero means
+the term is not contributing meaningfully.
+
+## On the response scale
+
+Predictions are returned on the count scale automatically (there's no need to apply `exp()`
+yourself). Sweep temperature across its observed range at a fixed depth to trace the fitted count
+curve.
+
+```{python}
+import numpy as np
+
+# Build grid over temperature at fixed depth
+new_data = {
+    "temperature": np.linspace(8, 28, 50),
+    "depth": np.full(50, 10.0),
+}
+
+# Predict counts on the response scale
+preds = model.predict(new_data).values
+
+# first five predicted counts
+preds[:5]
+```
+
+Sweeping `temperature` from 8 to 28 at a fixed depth of 10 m gives a count curve that tracks the
+non-linear partial effect you saw in the plot above.
+
+## Overdispersion
+
+If the residual deviance is much larger than the residual degrees of freedom, the Poisson assumption
+of equal mean and variance may be too restrictive. In that case swap the family for
+`wk.NegativeBinomial()`, which adds a dispersion parameter and absorbs the extra variation without
+changing the formula.

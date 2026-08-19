@@ -63,7 +63,7 @@ cannot capture the true function shape. The `check()` method runs a basis dimens
 
 ```{python}
 # Run the check
-model.check();
+wk.check(model)
 ```
 
 The k-index is based on the ratio of the residual variance estimated from neighboring residuals to
@@ -78,7 +78,7 @@ If `check()` reports a k-index below 1 with a significant p-value, re-fit with a
 ```python
 model2 = wk.GAM("y ~ s(x, k=20)")
 model2.fit(data, method="REML")
-model2.check()
+wk.check(model2)
 ```
 
 Keep increasing `k` until the k-index test is no longer significant. The smoothing parameter
@@ -214,7 +214,7 @@ model_bad = wk.GAM("y ~ s(x, k=5)")
 model_bad.fit({"x": x, "y": y}, method="REML")
 
 # Check: the k-index should flag the problem
-model_bad.check();
+wk.check(model_bad)
 ```
 
 ```{python}
@@ -223,7 +223,7 @@ model_good = wk.GAM("y ~ s(x, k=20)")
 model_good.fit({"x": x, "y": y}, method="REML")
 
 # The check should now pass
-model_good.check();
+wk.check(model_good)
 ```
 
 ```{python}
@@ -260,7 +260,7 @@ sine components. The `check()` method correctly flagged the k=5 model.
 A good diagnostic workflow after fitting any GAM:
 
 1. **`model.summary()`**: check that EDF values make sense, deviance explained is reasonable
-2. **`model.check()`**: verify basis dimensions are adequate (k-index test)
+2. **`wk.check(model)`**: verify basis dimensions are adequate (k-index test)
 3. **Residuals vs. fitted**: check for patterns indicating wrong family or missing terms
 4. **QQ plot**: check the distributional assumption
 5. **If any diagnostic fails**: consider increasing `k`, changing the family, adding terms, or

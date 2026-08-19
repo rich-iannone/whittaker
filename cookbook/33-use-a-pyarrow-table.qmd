@@ -1,0 +1,70 @@
+---
+title: "Use a PyArrow Table"
+description: "Pass a PyArrow Table directly to fit() without any manual conversion."
+tags: [Data input]
+---
+
+# Use a PyArrow Table
+
+Whittaker uses [Narwhals](https://narwhals-dev.github.io/) for data ingestion, which means that
+`fit()` accepts any DataFrame format Narwhals supports (Pandas, Polars, and PyArrow Tables) all
+without any conversion step on your part. This is useful when data arrives from Arrow-native sources
+such as Parquet files, Flight streams, or DuckDB queries.
+
+## Build a PyArrow Table
+
+Load the `wages` dataset as a plain dict of NumPy arrays, then wrap it in `pa.table()`. The
+resulting PyArrow Table can be passed directly to `fit()`.
+
+```{python}
+import pyarrow as pa
+import whittaker as wk
+
+# Load dataset and wrap in a PyArrow Table
+data = wk.load_dataset("wages")
+table = pa.table(data)
+```
+
+Inspect the schema to confirm the columns and their Arrow types.
+
+```{python}
+table.schema
+```
+
+## Fit using the PyArrow Table
+
+Pass the table to `fit()` exactly as you would a dict or a Pandas DataFrame. Narwhals handles the
+translation internally so no `.to_pandas()` or `.to_pydict()` call is needed.
+
+```{python}
+model = wk.GAM("wage ~ s(age) + s(experience)", family=wk.Gamma()).fit(table)
+model.summary()
+```
+
+## Inspect model outputs
+
+The fitted model is identical to one trained on a dict or a Polars DataFrame. Effective degrees of
+freedom and deviance explained are unaffected by the data format used at fit time.
+
+```{python}
+model.edf_total
+```
+
+```{python}
+model.deviance_explained
+```
+
+## From an Arrow-native source
+
+In practice, PyArrow Tables often come from Parquet files or DuckDB result sets. The pattern is the
+same: no intermediate conversion is required.
+
+```{python}
+# import duckdb
+# table = duckdb.sql("SELECT age, experience, wage FROM 'wages.parquet'").arrow()
+# model = wk.GAM("wage ~ s(age) + s(experience)", family=wk.Gamma()).fit(table)
+```
+
+The column names in the Arrow Table become the predictor names used in the formula. Whittaker reads
+only the columns referenced in the formula, so the table may contain additional columns without
+error.

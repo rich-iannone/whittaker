@@ -1,0 +1,82 @@
+---
+title: "Handle Overdispersed Counts with Negative Binomial"
+description: "Detect Poisson overdispersion and refit with Negative Binomial to absorb extra variation."
+tags: [Families, Poisson]
+---
+
+# Handle Overdispersed Counts with Negative Binomial
+
+Count data often violates the Poisson assumption that the variance equals the mean. When the
+observed variance is substantially larger (a condition called overdispersion) a Poisson GAM
+underestimates uncertainty and produces confidence intervals that are too narrow. The Negative
+Binomial family adds a dispersion parameter that absorbs the extra variation, giving honest standard
+errors and better-calibrated predictions.
+
+## Load data
+
+Load the fish dataset and inspect it.
+
+```{python}
+import whittaker as wk
+
+data = wk.load_dataset("fish", as_frame=True)
+data.columns.tolist()
+```
+
+```{python}
+data.head()
+```
+
+## Fit a Poisson model first
+
+Start with Poisson to establish a baseline and check for overdispersion.
+
+```{python}
+poisson_model = wk.GAM(
+    "count ~ s(temperature) + s(depth)",
+    family=wk.Poisson(),
+).fit(data)
+
+poisson_model.summary()
+```
+
+Look at the summary's residual deviance relative to the residual degrees of freedom. A ratio
+well above 1 (sometimes called the dispersion ratio) signals overdispersion. When the ratio is
+large, Poisson confidence intervals are too narrow and p-values are anti-conservative.
+
+## Fit a Negative Binomial model
+
+Refit with `wk.NegativeBinomial()`, which estimates the extra dispersion parameter automatically.
+
+```{python}
+nb_model = wk.GAM(
+    "count ~ s(temperature) + s(depth)",
+    family=wk.NegativeBinomial(),
+).fit(data)
+
+nb_model.summary()
+```
+
+Compare the deviance explained between the two models. The Negative Binomial typically shows a
+lower (more honest) deviance explained because it no longer tries to explain variance that is
+simply inherent noise. The estimated dispersion parameter appears in the summary. A value near
+zero indicates little overdispersion, a large value indicates substantial overdispersion.
+
+## Partial effects
+
+```{python}
+wk.partial_effects(nb_model)
+```
+
+The partial effect plots show the relationship between each covariate and the log-expected count.
+Confidence bands will generally be wider than those from the Poisson model, reflecting the
+additional uncertainty that overdispersion introduces.
+
+## Diagnostics
+
+```{python}
+wk.check(nb_model)
+```
+
+A well-fitting Negative Binomial model should show residuals with no strong pattern against fitted
+values, and a Q-Q plot closer to the diagonal than the Poisson model produced.

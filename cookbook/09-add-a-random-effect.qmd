@@ -1,0 +1,83 @@
+---
+title: "Add a Random Effect"
+description: "Use bs='re' to model grouped data with a random intercept that shrinks group means toward the global mean."
+tags: [Smooths, Random effects]
+---
+
+# Add a Random Effect
+
+A random effect smooth `s(group_id, bs='re')` treats group-level intercepts as penalised
+deviations from the global mean. This is equivalent to a classical random intercept: groups
+with little data get pulled strongly toward the overall mean (shrinkage), while well-observed
+groups stay closer to their empirical mean. Use this when you have repeated observations on
+many subjects or clusters and want to account for between-group variation without overfitting.
+
+## Generate data
+
+Simulate 10 subjects, each with a different underlying intercept and a small number of
+observations. The true intercepts are drawn from a normal distribution, exactly what the
+random effect prior assumes.
+
+```{python}
+import whittaker as wk
+import numpy as np
+
+# Set subject and observation counts
+rng = np.random.default_rng(7)
+n_subjects = 10
+obs_per_subject = 8
+n = n_subjects * obs_per_subject
+
+# Draw random subject intercepts and predictors
+subject_id = np.repeat(np.arange(n_subjects), obs_per_subject)
+subject_intercepts = rng.normal(0, 2, size=n_subjects)
+x = rng.uniform(0, 5, size=n)
+
+# Simulate response with linear trend and subject offsets
+y = (
+    2 + 0.5 * x
+    + subject_intercepts[subject_id]
+    + rng.normal(0, 0.5, size=n)
+)
+
+data = {"y": y, "x": x, "subject_id": subject_id}
+```
+
+Each subject has its own random offset on top of a linear trend. Without accounting for this
+grouping, the residuals would be correlated within subjects.
+
+## Fit
+
+Fit a model with a linear effect of `x` and a random effect for `subject_id`.
+
+```{python}
+# Fit linear trend with random subject intercepts
+model = wk.GAM("y ~ x + s(subject_id, bs='re')").fit(data)
+
+model.summary()
+```
+
+The random effect appears as a single smooth term in the summary. Its EDF reflects how much
+variation exists across groups relative to the penalty. More between-subject variation leads
+to a higher EDF (less shrinkage). Check that the linear term for `x` has a coefficient close
+to the true value of 0.5.
+
+## Partial effects
+
+```{python}
+wk.partial_effects(model)
+```
+
+The partial effects plot for `x` shows the linear trend. The random effect panel shows the
+estimated subject-level deviations, each shrunk toward zero. Subjects with fewer observations
+or noisier data will be pulled more strongly toward the centre.
+
+## Diagnostics
+
+```{python}
+wk.check(model)
+```
+
+With a correctly specified random effect, the Q-Q plot should be straight and the residuals
+should show no remaining within-subject pattern. Systematic curvature in the residual plots
+would suggest the linear `x` term needs to be replaced with a smooth.

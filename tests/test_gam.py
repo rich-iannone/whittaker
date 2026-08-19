@@ -6,6 +6,7 @@ import numpy as np
 import pytest
 from numpy.testing import assert_allclose
 
+import whittaker as wk
 from whittaker.families.binomial import Binomial
 from whittaker.families.poisson import Poisson
 from whittaker.gam import GAM, PredictionResult
@@ -716,5 +717,6 @@ class TestCheckDisplayFallback:
         monkeypatch.setitem(sys.modules, "IPython", None)
         monkeypatch.setitem(sys.modules, "IPython.display", None)
 
-        charts = model.check(plots=["qq"])
-        assert len(charts) == 1
+        pytest.importorskip("altair")
+        chart = wk.check(model, plots=["qq"])
+        assert len(chart.vconcat) == 1

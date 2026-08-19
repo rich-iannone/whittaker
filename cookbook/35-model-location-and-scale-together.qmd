@@ -1,0 +1,90 @@
+---
+title: "Model Location and Scale Together (GAMLSS)"
+description: "Fit both the mean and variance as smooth functions of covariates using a Gaussian location-scale model."
+tags: [Families, Gaussian]
+---
+
+# Model Location and Scale Together (GAMLSS)
+
+A standard GAM models only the mean of the response. Generalized Additive Models for Location,
+Scale, and Shape (GAMLSS) go further: every distributional parameter gets its own linear predictor.
+This is essential when the variance itself depends on covariates. Ignoring that structure produces
+inefficient estimates and misleading confidence intervals.
+
+The `climate` dataset records monthly temperatures across weather stations that vary widely in
+altitude and latitude. Mountainous stations and high-latitude stations tend to be not just colder on
+average but also more variable (a pattern that a standard model cannot capture).
+
+## Fit
+
+Load the dataset and fit a `GAMLSS` with a `GaussianLS()` family. The `mu` formula captures the
+smooth mean trend. The `sigma` formula captures how spread changes with geography.
+
+```{python}
+import whittaker as wk
+
+data = wk.load_dataset("climate")
+
+# Fit GAMLSS with separate mu and sigma formulas
+model = wk.GAMLSS(
+    formulas={
+        "mu":    "temperature ~ s(altitude) + s(latitude) + month",
+        "sigma": "temperature ~ altitude + latitude",
+    },
+    family=wk.GaussianLS(),
+).fit(data, method="GCV")
+```
+
+## Summarize
+
+Inspect the fitted model. The summary reports effective degrees of freedom for each smooth in `mu`,
+coefficient estimates for `sigma`, and overall fit statistics.
+
+```{python}
+model.summary()
+```
+
+Check `model.converged` and `model.n_iter` to confirm the alternating estimation algorithm reached a
+stable solution.
+
+```{python}
+model.converged, model.n_iter
+```
+
+## Predict across an altitude gradient
+
+Build a prediction grid that holds latitude and month fixed while sweeping altitude.
+`model.predict()` returns a `GAMLSSPrediction` object whose `.values` dict contains one array per
+parameter.
+
+```{python}
+import numpy as np
+
+# Build prediction grid across altitude gradient
+new_data = {
+    "altitude": np.linspace(0, 2000, 50),
+    "latitude": np.full(50, 50.0),
+    "month":    np.full(50, 7),
+}
+
+# Predict and inspect mean temperature values
+pred = model.predict(new_data)
+pred.values["mu"][:5]
+```
+
+## Inspect predicted scale
+
+The `sigma` predictions show how temperature variability grows with altitude, independent of the
+mean.
+
+```{python}
+pred.values["sigma"][:5]
+```
+
+## Interpret
+
+Higher altitude drives `mu` downward (temperatures are colder) while `sigma` tends to increase,
+reflecting greater day-to-day variability at elevation. A standard Gaussian GAM would fix the
+residual variance at a single global value, masking this pattern entirely. By modelling both
+parameters simultaneously, GAMLSS produces better-calibrated prediction intervals at every altitude
+level.

@@ -1,0 +1,92 @@
+---
+title: "Save and Load a Fitted Model"
+description: "Persist a fitted model to disk and restore it for inference without re-fitting."
+tags: [Serialization, Deployment]
+---
+
+# Save and Load a Fitted Model
+
+Re-fitting a GAM every time you need a prediction is wasteful and fragile. Whittaker provides
+`save_gam()` and `load_gam()` to persist a fitted model to a compact `.npz` archive. The loaded
+model is fully functional: `predict()`, `summary()`, and `check()` all work immediately without
+re-fitting.
+
+## Fit and save
+
+Fit a Gamma GAM on the `wages` dataset.
+
+```{python}
+import whittaker as wk
+
+# Load dataset and fit Gamma GAM
+data = wk.load_dataset("wages")
+model = wk.GAM("wage ~ s(age) + s(experience)", family=wk.Gamma()).fit(data)
+model.summary()
+```
+
+Write the fitted model to disk as a `.npz` archive.
+
+```{python}
+wk.save_gam(model, "wages_model.npz")
+```
+
+The `.npz` format is a NumPy archive. This is a single compressed file, it has no external
+dependencies, and it is small enough to commit to a repository or attach to a release.
+
+## Load and predict
+
+The `load_gam()` function reconstructs the fitted model from the archive. No training data is
+required at load time.
+
+```{python}
+import numpy as np
+
+loaded = wk.load_gam("wages_model.npz")
+```
+
+Verify the loaded model preserved the original fit by comparing the total EDF.
+
+```{python}
+loaded.edf_total
+```
+
+```{python}
+model.edf_total
+```
+
+The values are identical, confirming the archive captured all post-fit state. Now generate
+predictions from the loaded model for a handful of new observations.
+
+```{python}
+# Define new observations and predict
+new_data = {
+    "age": np.array([25, 35, 45, 55]),
+    "experience": np.array([3, 10, 18, 25]),
+}
+preds = loaded.predict(new_data)
+```
+
+```{python}
+preds.values.round(2)
+```
+
+Confirm the predictions are numerically identical to those from the original model.
+
+```{python}
+# Confirm predictions match original model
+orig_preds = model.predict(new_data)
+np.allclose(orig_preds.values, preds.values)
+```
+
+## What is preserved
+
+The `.npz` archive captures everything needed for post-fit operations:
+
+- **Formula and family**: the model specification, including the link function
+- **Coefficients**: the fitted parameter vector
+- **Smoothing parameters**: the selected λ values
+- **Basis state**: knot locations, penalty matrices, and basis type for each smooth
+- **Training statistics**: EDF, deviance explained, scale estimate, convergence flag
+
+Nothing from the training data itself is stored, so the archive contains no raw
+observations. If you need to refit or add data, keep the original dataset separately.

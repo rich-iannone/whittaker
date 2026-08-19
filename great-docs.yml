@@ -41,6 +41,37 @@ nav_icons:
     "Saving and loading models": save
     "Glossary": book-open
 
+# Page Tags
+# ---------
+tags:
+  enabled: true
+  icons:
+    Basics: rocket
+    Smooths: chart-spline
+    Diagnostics: stethoscope
+    Families: layers
+    Gaussian: wave
+    Poisson: hash
+    Binomial: toggle-left
+    Gamma: triangle-right
+    Beta: percent
+    Survival: heart-pulse
+    Interactions: git-merge
+    Time series: clock
+    Spatial: map-pin
+    Random effects: users
+    Model fitting: cpu
+    Model selection: list-checks
+    Prediction: telescope
+    Inference: search
+    Interpretation: lightbulb
+    Cross-validation: repeat
+    Data input: database
+    Polars: zap
+    Serialization: save
+    Deployment: cloud-upload
+    scikit-learn: puzzle
+
 authors:
   - name: Richard Iannone
     role: Maintainer
@@ -286,6 +317,12 @@ reference:
       - from_mgcv_dict
       - to_mgcv_dict
 
+  - title: Datasets
+    desc: Built-in synthetic datasets for testing and examples.
+    contents:
+      - load_dataset
+      - list_datasets
+
   - title: Model matrix
     desc: Low-level model matrix construction from formulas and data.
     contents:
@@ -295,3 +332,79 @@ reference:
         members: true
       - name: SmoothInfo
         members: true
+
+sections:
+  - title: Cookbook
+    dir: cookbook
+    navbar_after: User Guide
+    sidebar_groups:
+      - section: Getting started
+        contents:
+          - fit-your-first-smooth.qmd
+          - choose-a-response-family.qmd
+          - read-the-model-summary.qmd
+      - section: Smooth terms
+        contents:
+          - fit-a-thin-plate-regression-spline.qmd
+          - control-basis-dimension.qmd
+          - fit-a-cyclic-smooth.qmd
+          - add-a-tensor-product.qmd
+          - use-a-by-variable-smooth.qmd
+          - add-a-random-effect.qmd
+          - fit-a-spatial-smooth.qmd
+      - section: Response families
+        contents:
+          - model-count-data-with-poisson.qmd
+          - model-binary-outcomes-with-binomial.qmd
+          - model-skewed-positive-data-with-gamma.qmd
+          - handle-overdispersed-counts-with-negative-binomial.qmd
+          - model-proportions-with-beta.qmd
+          - estimate-a-survival-curve-with-cox-ph.qmd
+      - section: Prediction and inference
+        contents:
+          - predict-on-new-data.qmd
+          - get-confidence-intervals.qmd
+          - get-simultaneous-confidence-bands.qmd
+          - get-prediction-intervals.qmd
+          - extract-term-level-contributions.qmd
+          - predict-on-the-link-scale.qmd
+      - section: Diagnostics and model selection
+        contents:
+          - check-basis-dimension.qmd
+          - inspect-residuals.qmd
+          - compare-models-with-aic.qmd
+          - cross-validate-a-gam.qmd
+          - choose-a-smoothing-method.qmd
+          - use-select-smoothing.qmd
+      - section: Shape constraints
+        contents:
+          - fit-a-monotone-increasing-smooth.qmd
+          - fit-a-monotone-decreasing-smooth.qmd
+          - fit-a-convex-smooth.qmd
+      - section: Data input
+        contents:
+          - use-a-polars-dataframe.qmd
+          - use-a-pyarrow-table.qmd
+          - use-an-offset-term-for-exposure.qmd
+      - section: Advanced models
+        contents:
+          - model-location-and-scale-together.qmd
+          - model-zero-inflated-counts.qmd
+          - fit-quantile-regression.qmd
+          - enforce-non-crossing-quantiles.qmd
+          - build-conformal-prediction-intervals.qmd
+          - estimate-an-average-treatment-effect.qmd
+          - estimate-heterogeneous-treatment-effects.qmd
+          - fit-a-multi-response-gam.qmd
+          - fit-a-functional-covariate.qmd
+          - update-a-streaming-gam-incrementally.qmd
+      - section: Large datasets
+        contents:
+          - fit-a-biggam-on-a-large-dataframe.qmd
+          - query-with-duckdb-and-fit-in-database.qmd
+          - stream-a-polars-lazyframe.qmd
+      - section: Deployment
+        contents:
+          - save-and-load-a-model.qmd
+          - use-in-sklearn-pipeline.qmd
+          - export-a-model-to-r-mgcv-format.qmd

@@ -148,6 +148,27 @@ class GamCheckResult:
         return "\n".join(lines)
 
 
+class ModelSummary:
+    """Rich-display wrapper returned by `GAM.summary()`.
+
+    Renders as plain text in terminals and Quarto/Jupyter cells; calling
+    `model.summary()` as the last expression in a cell produces readable output
+    without needing `print()`.
+    """
+
+    def __init__(self, text: str) -> None:
+        self._text = text
+
+    def __repr__(self) -> str:
+        return self._text
+
+    def __str__(self) -> str:
+        return self._text
+
+    def __contains__(self, item: str) -> bool:  # type: ignore[override]
+        return item in self._text
+
+
 class GAM:
     r"""Generalized Additive Model with automatic smoothness selection.
 
@@ -1334,7 +1355,7 @@ class GAM:
         model_pairs = tuple((g._fit_result, g._model_matrix) for g in all_gams)
         return anova_gam(*model_pairs, scale_known=self._family.scale_known)
 
-    def summary(self) -> str:
+    def summary(self) -> ModelSummary:
         """Return a text summary of the fitted model, analogous to `summary.gam()` in R's mgcv.
 
         The summary reports, in order: the formula and family; a table of parametric
@@ -1350,8 +1371,9 @@ class GAM:
 
         Returns
         -------
-        str
-            Multi-line text summary suitable for printing.
+        ModelSummary
+            Multi-line text summary. Displays cleanly as the last expression in a
+            Jupyter or Quarto cell without needing `print()`.
         """
         self._check_fitted()
         r = self._fit_result
@@ -1418,7 +1440,7 @@ class GAM:
         )
 
         text = "\n".join(lines)
-        return text
+        return ModelSummary(text)
 
     def plot(
         self,
@@ -1466,67 +1488,6 @@ class GAM:
         from whittaker.plotting import partial_effects
 
         return partial_effects(self, n_points=n_points, level=level)
-
-    def check(
-        self,
-        plots: tuple[str, ...] | list[str] | None = None,
-    ) -> list:
-        """Produce a standard set of residual diagnostic plots for the fitted model.
-
-        This is the visual counterpart to `gam_check()`: rather than a textual report, it
-        renders one chart per diagnostic so that residual behavior can be inspected at a glance.
-        The available diagnostics are:
-
-        - `"qq"`: a Q-Q plot of the deviance residuals against theoretical normal quantiles, for
-          checking distributional adequacy.
-        - `"residuals"`: deviance residuals plotted against fitted values (linear predictor
-          scale), for checking non-constant variance or missed structure.
-        - `"histogram"`: a histogram of the deviance residuals.
-        - `"response"`: fitted values plotted against observed response values, for checking
-          overall calibration.
-
-        Each chart is returned as an individual, full-width Altair chart rather than a single
-        combined grid, so that in a notebook each one renders with its own independent
-        interactive controls (zoom, tooltip, etc.).
-
-        Parameters
-        ----------
-        plots : tuple[str, ...] or list[str] or None
-            Which diagnostics to produce. A sequence of names chosen from `"qq"`, `"residuals"`,
-            `"histogram"`, `"response"`. `None` (default) produces all four, in that order.
-
-        Returns
-        -------
-        list[altair.Chart]
-            One chart per requested diagnostic, in the order given by `plots` (or the default
-            order `["qq", "residuals", "histogram", "response"]`).
-
-        Examples
-        --------
-        ```{python}
-        import numpy as np
-        from whittaker import GAM
-
-        rng = np.random.default_rng(0)
-        x = np.sort(rng.uniform(0, 10, 200))
-        y = np.sin(x) + rng.normal(scale=0.2, size=200)
-
-        gam = GAM("y ~ s(x)").fit({"x": x, "y": y})
-        charts = gam.check(plots=["qq", "residuals"])
-        len(charts)
-        ```
-        """
-        from whittaker.plotting import check as _check
-
-        charts = _check(self, plots=plots)
-        try:
-            from IPython.display import display  # type: ignore[import-not-found]
-
-            for chart in charts:
-                display(chart)
-        except ImportError:
-            pass
-        return charts
 
     def influence(self) -> object:
         """Compute hat values and Cook's distance for each observation.
