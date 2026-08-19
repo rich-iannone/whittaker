@@ -50,9 +50,8 @@ the pipeline from scratch, including the scaler's `fit_transform()` step.
 ```{python}
 from sklearn.model_selection import cross_val_score
 
-# Run 5-fold cross-validation
-reg = GAMRegressor(formula="y ~ s(x0) + s(x1)")
-scores = cross_val_score(reg, X, y, cv=5, scoring="r2")
+# Run 5-fold cross-validation on the full pipeline
+scores = cross_val_score(pipe, X, y, cv=5, scoring="r2")
 ```
 
 Inspect the per-fold R² scores to see how stable the fit is across splits.
