@@ -165,7 +165,7 @@ class ModelSummary:
     def __str__(self) -> str:
         return self._text
 
-    def __contains__(self, item: object) -> bool:
+    def __contains__(self, item: str) -> bool:  # type: ignore[override]
         return item in self._text
 
 
