@@ -1,0 +1,122 @@
+---
+title: "Predict on the Link Scale"
+description: "Obtain predictions on the linear predictor scale instead of the response scale, and manually back-transform to confirm the relationship."
+tags: [Prediction]
+---
+
+# Predict on the Link Scale
+
+By default, `predict()` returns fitted values on the response scale (counts for Poisson,
+probabilities for Binomial). Passing `type="link"` returns predictions on the linear predictor scale
+instead (log for Poisson, log-odds for Binomial). Link-scale predictions are useful when building
+custom intervals, combining outputs from multiple models, or communicating on an additive scale
+where smooth contributions are simply summed.
+
+## Poisson example: fish counts
+
+Fit a Poisson GAM on fish count data with two predictors.
+
+```{python}
+import whittaker as wk
+import numpy as np
+
+data = wk.load_dataset("fish")
+model = wk.GAM("count ~ s(temperature) + s(depth)", family=wk.Poisson()).fit(data)
+model.summary()
+```
+
+## Response-scale predictions (default)
+
+The default `predict()` returns expected counts.
+
+```{python}
+grid = {"temperature": np.array([10.0, 15.0, 20.0]), "depth": np.array([5.0, 10.0, 15.0])}
+resp = model.predict(grid)
+resp.values.round(4)
+```
+
+These are expected fish counts (positive real numbers on the original scale).
+
+## Link-scale predictions
+
+Pass `type="link"` to get the log-scale linear predictor.
+
+```{python}
+link = model.predict(grid, type="link")
+link.values.round(4)
+```
+
+These are log expected counts. Negative values are valid and simply represent counts below 1.
+
+## Manual back-transform
+
+Apply `np.exp()` to the link-scale values and confirm they match the response-scale predictions.
+
+```{python}
+np.exp(link.values).round(4)
+```
+
+The values match `resp.values` exactly. For a Poisson model with a log link, `exp(η) == μ`
+where η is the linear predictor and μ is the expected count.
+
+## Confidence intervals on the link scale
+
+Requesting `interval="confidence"` with `type="link"` gives symmetric intervals on the log
+scale. Back-transforming these produces asymmetric intervals on the count scale, which is
+preferable to computing symmetric intervals directly on counts (which can yield negative lower
+bounds).
+
+```{python}
+link_ci = model.predict(grid, type="link", interval="confidence")
+count_lower = np.exp(link_ci.lower).round(4)
+count_upper = np.exp(link_ci.upper).round(4)
+np.column_stack([count_lower, count_upper])
+```
+
+Both bounds are positive, even when the fitted count is small.
+
+## Binomial example: default probability
+
+Fit a Binomial GAM on the credit dataset.
+
+```{python}
+credit = wk.load_dataset("credit")
+bin_model = wk.GAM("default ~ s(income) + s(debt_ratio) + s(age)", family=wk.Binomial()).fit(credit)
+bin_model.summary()
+```
+
+## Link scale gives log-odds
+
+```{python}
+new_obs = {"income": np.array([40.0, 80.0]), "debt_ratio": np.array([0.3, 0.6]), "age": np.array([30.0, 50.0])}
+log_odds = bin_model.predict(new_obs, type="link")
+log_odds.values.round(4)
+```
+
+Negative log-odds correspond to probabilities below 0.5. Positive log-odds correspond to
+probabilities above 0.5.
+
+## Response scale gives probabilities
+
+```{python}
+probs = bin_model.predict(new_obs)
+probs.values.round(4)
+```
+
+Apply the logistic function manually to confirm the relationship.
+
+```{python}
+(1 / (1 + np.exp(-log_odds.values))).round(4)
+```
+
+The values match `probs.values`. The logit link means `μ = 1 / (1 + exp(-η))`.
+
+## When to use link-scale predictions
+
+- **Custom back-transforms:** apply a non-standard transformation after retrieving η.
+- **Interval construction:** compute symmetric intervals on the link scale, then
+  back-transform to avoid impossible values (negative counts, probabilities outside [0, 1]).
+- **Model combination:** average or stack linear predictors from multiple models before
+  back-transforming.
+- **Additive interpretation:** report the contribution of each smooth on a common additive
+  scale using `terms=True` alongside `type="link"`.
