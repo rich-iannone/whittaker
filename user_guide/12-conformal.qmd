@@ -89,7 +89,7 @@ predictor_split = wk.conformal_fit(
     method="split",
     level=0.95,
     cal_fraction=0.25,
-    seed=42,
+    seed=23,
 )
 
 # Predict on a fine grid
@@ -196,7 +196,7 @@ predictor_cv = wk.conformal_fit(
     method="cv+",
     level=0.95,
     n_folds=5,
-    seed=42,
+    seed=23,
 )
 
 # Predict on the same grid
@@ -256,7 +256,7 @@ predictor_jk = wk.conformal_fit(
     {"x": x_small, "y": y_small},
     method="jackknife+",
     level=0.95,
-    seed=42,
+    seed=23,
 )
 
 result_jk = predictor_jk.predict({"x": x_new})
@@ -366,7 +366,7 @@ predictor_pois = wk.conformal_fit(
     level=0.95,
     family=wk.Poisson(),
     n_folds=5,
-    seed=42,
+    seed=23,
 )
 
 # Predict on a grid
