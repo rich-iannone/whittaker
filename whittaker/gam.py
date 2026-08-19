@@ -165,6 +165,9 @@ class ModelSummary:
     def __str__(self) -> str:
         return self._text
 
+    def __contains__(self, item: object) -> bool:
+        return item in self._text
+
 
 class GAM:
     r"""Generalized Additive Model with automatic smoothness selection.
