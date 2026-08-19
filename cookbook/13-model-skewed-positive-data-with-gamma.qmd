@@ -18,7 +18,6 @@ Load the built-in wages dataset and inspect its columns.
 
 ```{python}
 import whittaker as wk
-import numpy as np
 
 data = wk.load_dataset("wages", as_frame=True)
 data.columns.tolist()
