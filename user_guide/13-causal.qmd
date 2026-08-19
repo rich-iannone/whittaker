@@ -391,7 +391,7 @@ med_result = wk.mediation_analysis(
     confounders=["x1"],
     data=med_data,
     n_simulations=500,
-    seed=42,
+    seed=23,
 )
 
 print(f"Total effect:         {med_result.total_effect:.3f} (SE: {med_result.total_se:.3f})")
