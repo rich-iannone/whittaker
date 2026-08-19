@@ -19,6 +19,7 @@ The `load_dataset()` function returns a plain dict of NumPy arrays. You can wrap
 import polars as pl
 import whittaker as wk
 
+# Load dataset and convert to Polars DataFrame
 data = wk.load_dataset("wages")
 df = pl.DataFrame(data)
 ```
@@ -39,6 +40,7 @@ df.head(3)
 Now fit a Gamma GAM using the Polars DataFrame directly.
 
 ```{python}
+# Fit Gamma GAM with two smooth predictors
 model = wk.GAM("wage ~ s(age) + s(experience)", family=wk.Gamma()).fit(df)
 model.summary()
 ```
@@ -88,6 +90,7 @@ floating-point or integer columns. If a column is stored as `Utf8` (string) or `
 it before fitting.
 
 ```{python}
+# Cast column type and refit single-predictor model
 df_cast = df.with_columns(pl.col("age").cast(pl.Float64))
 model2 = wk.GAM("wage ~ s(age)", family=wk.Gamma()).fit(df_cast)
 ```

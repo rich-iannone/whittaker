@@ -38,6 +38,7 @@ data = wk.load_dataset("mcycle")
 ```
 
 ```{python}
+# Fit default Gaussian GAM
 model_g = wk.GAM("accel ~ s(times)").fit(data)
 model_g.summary()
 ```
@@ -52,6 +53,7 @@ data = wk.load_dataset("fish")
 ```
 
 ```{python}
+# Fit Poisson GAM for count response
 model_p = wk.GAM(
     "count ~ s(temperature) + depth",
     family=wk.Poisson(),
@@ -71,6 +73,7 @@ data = wk.load_dataset("credit")
 ```
 
 ```{python}
+# Fit Binomial GAM for binary outcome
 model_b = wk.GAM(
     "default ~ s(income) + s(debt_ratio)",
     family=wk.Binomial(),

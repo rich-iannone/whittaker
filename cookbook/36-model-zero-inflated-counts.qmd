@@ -26,14 +26,17 @@ otherwise inhospitable). The data-generating process encodes that structure expl
 import numpy as np
 import whittaker as wk
 
+# Generate covariates for fish survey sites
 rng = np.random.default_rng(23)
 n = 400
 temperature = rng.uniform(5, 25, n)
 depth = rng.uniform(1, 20, n)
 
+# Compute true Poisson rate and zero-inflation probability
 log_mu = -1.0 + 0.15 * temperature - 0.04 * depth
 pi_true = 1 / (1 + np.exp(-(0.5 - 0.08 * temperature)))
 
+# Draw counts with structural zeros
 is_structural_zero = rng.binomial(1, pi_true).astype(bool)
 count = np.where(is_structural_zero, 0, rng.poisson(np.exp(log_mu)))
 
@@ -72,11 +75,13 @@ Build a grid across the observed temperature range at a fixed mid-range depth, t
 predicted `pi`, which is the probability that a site generates no fish regardless of conditions.
 
 ```{python}
+# Build temperature grid at fixed mid-range depth
 new_data = {
     "temperature": np.linspace(5, 25, 50),
     "depth":       np.full(50, 10.0),
 }
 
+# Predict and inspect zero-inflation probabilities
 pred = model.predict(new_data)
 pred.values["pi"][:5]
 ```

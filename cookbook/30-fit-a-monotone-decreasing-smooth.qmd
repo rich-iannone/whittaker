@@ -20,6 +20,7 @@ The predictor `dist` is the standardized distance from the river bank and `zinc`
 ```{python}
 import whittaker as wk
 
+# Load data and fit monotone decreasing smooth
 data = wk.load_dataset("meuse")
 
 model = wk.GAM("zinc ~ s(dist, bs='mpd')").fit(data)
@@ -60,6 +61,7 @@ Fit an unconstrained model to see whether the data actually support the monotone
 whether the smooth would prefer a different shape when given the freedom to do so.
 
 ```{python}
+# Fit unconstrained model to verify monotone assumption
 m_unconstrained = wk.GAM("zinc ~ s(dist, bs='tp')").fit(data)
 m_unconstrained.plot()
 ```

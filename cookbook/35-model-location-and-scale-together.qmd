@@ -25,6 +25,7 @@ import whittaker as wk
 
 data = wk.load_dataset("climate")
 
+# Fit GAMLSS with separate mu and sigma formulas
 model = wk.GAMLSS(
     formulas={
         "mu":    "temperature ~ s(altitude) + s(latitude) + month",
@@ -59,12 +60,14 @@ parameter.
 ```{python}
 import numpy as np
 
+# Build prediction grid across altitude gradient
 new_data = {
     "altitude": np.linspace(0, 2000, 50),
     "latitude": np.full(50, 50.0),
     "month":    np.full(50, 7),
 }
 
+# Predict and inspect mean temperature values
 pred = model.predict(new_data)
 pred.values["mu"][:5]
 ```

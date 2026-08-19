@@ -71,10 +71,13 @@ Pass a dictionary of new covariate values to get back predicted default probabil
 are in [0, 1] (no sigmoid transformation is needed).
 
 ```{python}
+# Build new-data points at varying income levels
 new_data = {
     "income": [50.0, 100.0, 150.0],
     "debt_ratio": [0.3, 0.3, 0.3],
 }
+
+# Predict default probabilities
 probs = model.predict(new_data).values
 
 probs

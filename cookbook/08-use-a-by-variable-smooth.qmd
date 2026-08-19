@@ -21,15 +21,18 @@ follows a falling curve. Dummy-code the groups into separate binary columns.
 import whittaker as wk
 import numpy as np
 
+# Simulate x values for two equal-size groups
 rng = np.random.default_rng(23)
 n = 100
 x = rng.uniform(0, 1, size=2 * n)
 
+# Build opposing group-specific response shapes
 y = np.concatenate([
     np.sin(np.pi * x[:n]) + rng.normal(0, 0.15, n),       # group A: hump
     -np.sin(np.pi * x[n:]) + rng.normal(0, 0.15, n),      # group B: inverted hump
 ])
 
+# Dummy-code groups into binary indicator columns
 group_a = np.concatenate([np.ones(n), np.zeros(n)])
 group_b = np.concatenate([np.zeros(n), np.ones(n)])
 
@@ -45,6 +48,7 @@ Fit a model with two by-variable smooths: one for each group. The `by=group_a` t
 smooth that is active only where `group_a == 1`, and similarly for `group_b`.
 
 ```{python}
+# Fit separate smooth per group
 model = wk.GAM(
     "y ~ s(x, by=group_a) + s(x, by=group_b)"
 ).fit(data)

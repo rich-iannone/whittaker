@@ -19,6 +19,7 @@ Fit a simple GAM as a starting point.
 ```{python}
 import whittaker as wk
 
+# Load data and fit single-smooth GAM
 data = wk.load_dataset("mcycle")
 model = wk.GAM("accel ~ s(times)").fit(data)
 ```
@@ -59,6 +60,7 @@ If either diagnostic raises a concern, refit with a larger `k` inside the `s()` 
 are 20 or 30.
 
 ```{python}
+# Refit with a larger basis dimension
 model_k20 = wk.GAM("accel ~ s(times, k=20)").fit(data)
 kc20 = model_k20.k_check()
 ```

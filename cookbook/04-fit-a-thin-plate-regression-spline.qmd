@@ -31,6 +31,7 @@ Fit a Gaussian GAM with a TPRS smooth on `times`. The `bs='tp'` argument is show
 here but is the default (both formulas produce the same model).
 
 ```{python}
+# Fit TPRS smooth on times
 model = wk.GAM("accel ~ s(times, bs='tp')").fit(data)
 
 model.summary()

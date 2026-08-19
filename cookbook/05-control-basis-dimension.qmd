@@ -26,6 +26,7 @@ data.head()
 Fit with `k=4` (far too few basis functions for the complex shape in `mcycle`).
 
 ```{python}
+# Fit with k too small
 model_small = wk.GAM("accel ~ s(times, k=4)").fit(data)
 
 model_small.summary()
@@ -49,6 +50,7 @@ that the model cannot capture.
 Raise `k` to 15 to give the smooth enough room.
 
 ```{python}
+# Fit with adequate k
 model_ok = wk.GAM("accel ~ s(times, k=15)").fit(data)
 
 model_ok.summary()
@@ -70,6 +72,7 @@ computation time).
 ## Compare AIC
 
 ```{python}
+# Compare AIC across models
 {"k=4 AIC": model_small.aic, "k=15 AIC": model_ok.aic}
 ```
 

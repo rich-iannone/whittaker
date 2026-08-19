@@ -20,9 +20,11 @@ import duckdb
 import numpy as np
 import whittaker as wk
 
+# Open in-memory DuckDB connection
 rng = np.random.default_rng(23)
 conn = duckdb.connect()
 
+# Create synthetic sensor table
 conn.execute(
     "CREATE TABLE sensor AS "
     "SELECT i AS id, "

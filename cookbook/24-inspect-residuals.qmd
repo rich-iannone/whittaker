@@ -18,6 +18,7 @@ Fit a simple GAM to get started.
 ```{python}
 import whittaker as wk
 
+# Load data and fit GAM
 data = wk.load_dataset("mcycle")
 model = wk.GAM("accel ~ s(times)").fit(data)
 ```

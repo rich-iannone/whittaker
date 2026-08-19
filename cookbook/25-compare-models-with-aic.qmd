@@ -17,6 +17,7 @@ Load the `abalone` dataset and fit three nested models, starting with a single s
 ```{python}
 import whittaker as wk
 
+# Load data and fit nested candidate models
 data = wk.load_dataset("abalone")
 
 m1 = wk.GAM("rings ~ s(length)").fit(data)
@@ -29,6 +30,7 @@ m3 = wk.GAM("rings ~ s(length) + s(diameter) + s(height) + s(shucked_weight)").f
 Extract the `.aic` attribute from each model and display them together.
 
 ```{python}
+# Compare AIC values across models
 m1.aic, m2.aic, m3.aic
 ```
 
@@ -39,6 +41,7 @@ Lower AIC is better. A difference (ΔAIC) of less than 2 means the models are es
 AIC penalises via total EDF, so it is worth inspecting how complex each model actually is.
 
 ```{python}
+# Compare total EDF across models
 m1.edf_total, m2.edf_total, m3.edf_total
 ```
 

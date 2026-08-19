@@ -15,9 +15,11 @@ Enable it globally with `select=True`, or per-term with the shrinkage cubic spli
 Load the `wages` dataset and add a synthetic noise column — a predictor that is genuinely unrelated to wages. The goal is to show that select smoothing identifies and discards it.
 
 ```{python}
+# Import libraries
 import whittaker as wk
 import numpy as np
 
+# Load data and add synthetic noise predictor
 data = wk.load_dataset("wages", as_frame=True)
 
 rng = np.random.default_rng(23)
@@ -29,6 +31,7 @@ data["noise"] = rng.normal(0, 1, len(data))
 First, fit the model in the default way so you have a baseline for comparison. All three terms will receive some EDF regardless of whether they are truly useful.
 
 ```{python}
+# Fit standard GAM as baseline
 m_standard = wk.GAM("wage ~ s(age) + s(experience) + s(noise)").fit(data)
 m_standard.edf
 ```
@@ -40,6 +43,7 @@ Each smooth is allocated some EDF even if its contribution is negligible. The no
 Now refit using `select=True`. The extra penalty allows any smooth to be shrunk completely out of the model.
 
 ```{python}
+# Refit with select=True to enable extra shrinkage penalty
 m_select = wk.GAM(
     "wage ~ s(age) + s(experience) + s(noise)",
 ).fit(data, select=True)
@@ -61,6 +65,7 @@ In the smooth terms table, look at the EDF column for `s(noise)`. An EDF near 0 
 Instead of the global flag, you can apply a shrinkage cubic spline (`bs='cs'`) to individual terms. This is useful when you want select behaviour on only some smooths.
 
 ```{python}
+# Fit with per-term shrinkage cubic spline basis
 m_cs = wk.GAM(
     "wage ~ s(age, bs='cs') + s(experience, bs='cs') + s(noise, bs='cs')"
 ).fit(data)
@@ -72,6 +77,7 @@ The result should be comparable to `select=True`. Choose `bs='cs'` when you want
 ## Compare EDF across approaches
 
 ```{python}
+# Compare total EDF across all three approaches
 m_standard.edf_total, m_select.edf_total, m_cs.edf_total
 ```
 

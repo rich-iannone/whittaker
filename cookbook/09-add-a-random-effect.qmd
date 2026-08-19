@@ -22,15 +22,18 @@ random effect prior assumes.
 import whittaker as wk
 import numpy as np
 
+# Set subject and observation counts
 rng = np.random.default_rng(7)
 n_subjects = 10
 obs_per_subject = 8
 n = n_subjects * obs_per_subject
 
+# Draw random subject intercepts and predictors
 subject_id = np.repeat(np.arange(n_subjects), obs_per_subject)
 subject_intercepts = rng.normal(0, 2, size=n_subjects)
 x = rng.uniform(0, 5, size=n)
 
+# Simulate response with linear trend and subject offsets
 y = (
     2 + 0.5 * x
     + subject_intercepts[subject_id]
@@ -48,6 +51,7 @@ grouping, the residuals would be correlated within subjects.
 Fit a model with a linear effect of `x` and a random effect for `subject_id`.
 
 ```{python}
+# Fit linear trend with random subject intercepts
 model = wk.GAM("y ~ x + s(subject_id, bs='re')").fit(data)
 
 model.summary()

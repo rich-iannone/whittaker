@@ -17,9 +17,11 @@ where smooth contributions are simply summed.
 Fit a Poisson GAM on fish count data with two predictors.
 
 ```{python}
+# Import libraries
 import whittaker as wk
 import numpy as np
 
+# Load data and fit Poisson GAM
 data = wk.load_dataset("fish")
 model = wk.GAM("count ~ s(temperature) + s(depth)", family=wk.Poisson()).fit(data)
 model.summary()
@@ -30,6 +32,7 @@ model.summary()
 The default `predict()` returns expected counts.
 
 ```{python}
+# Define prediction grid
 grid = {"temperature": np.array([10.0, 15.0, 20.0]), "depth": np.array([5.0, 10.0, 15.0])}
 resp = model.predict(grid)
 resp.values.round(4)
@@ -67,7 +70,9 @@ preferable to computing symmetric intervals directly on counts (which can yield 
 bounds).
 
 ```{python}
+# Predict with link-scale confidence intervals
 link_ci = model.predict(grid, type="link", interval="confidence")
+# Back-transform bounds to count scale
 count_lower = np.exp(link_ci.lower).round(4)
 count_upper = np.exp(link_ci.upper).round(4)
 np.column_stack([count_lower, count_upper])
@@ -80,6 +85,7 @@ Both bounds are positive, even when the fitted count is small.
 Fit a Binomial GAM on the credit dataset.
 
 ```{python}
+# Load credit data and fit Binomial GAM
 credit = wk.load_dataset("credit")
 bin_model = wk.GAM("default ~ s(income) + s(debt_ratio) + s(age)", family=wk.Binomial()).fit(credit)
 bin_model.summary()
@@ -88,6 +94,7 @@ bin_model.summary()
 ## Link scale gives log-odds
 
 ```{python}
+# Define new observations and predict on log-odds scale
 new_obs = {"income": np.array([40.0, 80.0]), "debt_ratio": np.array([0.3, 0.6]), "age": np.array([30.0, 50.0])}
 log_odds = bin_model.predict(new_obs, type="link")
 log_odds.values.round(4)

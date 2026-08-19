@@ -18,6 +18,7 @@ Fit a Gamma GAM on the `wages` dataset.
 ```{python}
 import whittaker as wk
 
+# Load dataset and fit Gamma GAM
 data = wk.load_dataset("wages")
 model = wk.GAM("wage ~ s(age) + s(experience)", family=wk.Gamma()).fit(data)
 model.summary()
@@ -57,6 +58,7 @@ The values are identical, confirming the archive captured all post-fit state. No
 predictions from the loaded model for a handful of new observations.
 
 ```{python}
+# Define new observations and predict
 new_data = {
     "age": np.array([25, 35, 45, 55]),
     "experience": np.array([3, 10, 18, 25]),
@@ -71,6 +73,7 @@ preds.values.round(2)
 Confirm the predictions are numerically identical to those from the original model.
 
 ```{python}
+# Confirm predictions match original model
 orig_preds = model.predict(new_data)
 np.allclose(orig_preds.values, preds.values)
 ```

@@ -23,6 +23,7 @@ the non-linear acceleration trajectory.
 ```{python}
 import whittaker as wk
 
+# Load data and fit a five-quantile GAM
 data = wk.load_dataset("mcycle")
 model = wk.QuantileGAM("accel ~ s(times, k=15)").fit(data)
 model.summary()
@@ -37,6 +38,7 @@ dictionary keyed by the exact quantile values; each entry holds a `PredictionRes
 ```{python}
 import numpy as np
 
+# Predict on a fine grid over observed time range
 new_data = {"times": np.linspace(data["times"].min(), data["times"].max(), 200)}
 preds = model.predict(new_data)
 preds[0.5].values[:5]

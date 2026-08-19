@@ -39,6 +39,7 @@ The `s()` wrapper requests a penalized spline. With no `family` argument, Whitta
 `wk.Gaussian()`.
 
 ```{python}
+# Fit a single-smooth Gaussian GAM
 model = wk.GAM("accel ~ s(times)").fit(data)
 model.edf_total
 ```

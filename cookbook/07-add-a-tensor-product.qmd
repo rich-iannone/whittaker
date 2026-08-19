@@ -34,6 +34,7 @@ Fit a Gamma GAM with a tensor product of `age` and `experience`. The Gamma famil
 appropriate for wages because the response is strictly positive and often right-skewed.
 
 ```{python}
+# Fit tensor product interaction surface
 model = wk.GAM(
     "wage ~ te(age, experience)",
     family=wk.Gamma(),

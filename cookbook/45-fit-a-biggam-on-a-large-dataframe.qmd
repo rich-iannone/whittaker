@@ -21,6 +21,7 @@ effect.
 import numpy as np
 import whittaker as wk
 
+# Simulate large dataset with two covariates
 rng = np.random.default_rng(23)
 n = 500_000
 x1 = rng.uniform(0, 2 * np.pi, n)

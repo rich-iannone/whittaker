@@ -17,6 +17,7 @@ Load the `fish` dataset, which records fish counts by temperature and depth — 
 ```{python}
 import whittaker as wk
 
+# Load data and fit candidate models
 data = wk.load_dataset("fish")
 
 m_simple = wk.GAM("count ~ s(temperature)", family=wk.Poisson()).fit(data)
@@ -28,6 +29,7 @@ m_full   = wk.GAM("count ~ s(temperature) + s(depth)", family=wk.Poisson()).fit(
 Run 5-fold CV on the simpler model. `cv_score` is the mean held-out deviance (lower is better); `cv_se` is its standard error across folds.
 
 ```{python}
+# Run 5-fold CV on the simple model
 cv_simple = wk.cross_validate(
     "count ~ s(temperature)",
     data,
@@ -42,6 +44,7 @@ cv_simple.cv_score, cv_simple.cv_se
 Repeat for the model that also includes depth.
 
 ```{python}
+# Run 5-fold CV on the full model
 cv_full = wk.cross_validate(
     "count ~ s(temperature) + s(depth)",
     data,
@@ -56,6 +59,7 @@ cv_full.cv_score, cv_full.cv_se
 A lower `cv_score` indicates better out-of-sample fit. However, because CV is a random estimate, a difference smaller than one standard error is not meaningful — this is the "one-SE rule": the simplest model whose CV score falls within `best_score + best_se` is considered equivalent to the best model.
 
 ```{python}
+# Apply one-SE rule to compare models
 threshold = cv_full.cv_score + cv_full.cv_se
 cv_simple_within_1se = cv_simple.cv_score <= threshold
 

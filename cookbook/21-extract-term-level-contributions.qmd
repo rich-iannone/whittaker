@@ -16,9 +16,11 @@ high or low fitted value.
 Fit a two-smooth Gaussian GAM on the wages dataset.
 
 ```{python}
+# Import libraries
 import whittaker as wk
 import numpy as np
 
+# Load data and fit two-smooth GAM
 data = wk.load_dataset("wages")
 model = wk.GAM("wage ~ s(age) + s(experience)").fit(data)
 model.summary()
@@ -30,7 +32,9 @@ Pass `type="terms"` to `predict()`. The return type is `TermsPredictionResult` w
 dict and a `.labels` list.
 
 ```{python}
+# Define new observations
 new_data = {"age": np.array([25, 35, 45, 55]), "experience": np.array([2, 10, 18, 28])}
+# Extract term-level contributions
 preds_terms = model.predict(new_data, type="terms")
 preds_terms.labels
 ```
@@ -66,6 +70,7 @@ To compare with the full link-scale prediction (which adds the intercept), call 
 `type="link"`.
 
 ```{python}
+# Predict on the link scale
 link_preds = model.predict(new_data, type="link")
 link_preds.values.round(3)
 ```
@@ -83,6 +88,7 @@ The constant difference confirms the identity: `link prediction = intercept + su
 Stack the two smooth contributions side by side to see which predictor dominates at each point.
 
 ```{python}
+# Stack both smooth contributions side by side
 np.column_stack([
     preds_terms.terms["s(age)"].round(3),
     preds_terms.terms["s(experience)"].round(3),

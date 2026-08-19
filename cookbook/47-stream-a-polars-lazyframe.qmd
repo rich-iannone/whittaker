@@ -21,6 +21,7 @@ import numpy as np
 import polars as pl
 import whittaker as wk
 
+# Build synthetic Polars DataFrame
 rng = np.random.default_rng(23)
 n = 200_000
 df = pl.DataFrame({
@@ -28,6 +29,8 @@ df = pl.DataFrame({
     "x2": rng.uniform(0, 1, n),
     "y": np.sin(rng.uniform(0, 2 * np.pi, n)) + 0.5 * rng.uniform(0, 1, n) + rng.normal(0, 0.3, n),
 })
+
+# Convert to LazyFrame for deferred execution
 lazy = df.lazy()
 ```
 

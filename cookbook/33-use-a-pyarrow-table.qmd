@@ -20,6 +20,7 @@ resulting PyArrow Table can be passed directly to `fit()`.
 import pyarrow as pa
 import whittaker as wk
 
+# Load dataset and wrap in a PyArrow Table
 data = wk.load_dataset("wages")
 table = pa.table(data)
 ```

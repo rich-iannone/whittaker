@@ -20,6 +20,7 @@ import json
 import numpy as np
 import whittaker as wk
 
+# Load dataset and fit Gamma GAM
 data = wk.load_dataset("wages")
 model = wk.GAM("wage ~ s(age) + s(experience)", family=wk.Gamma()).fit(data)
 ```
@@ -77,6 +78,7 @@ json_str[:200]
 the smooth bases.
 
 ```{python}
+# Reconstruct model from dict and predict
 model2 = wk.from_mgcv_dict(d, data=data)
 model2.predict({"age": np.array([30, 40, 50]), "experience": np.array([5, 10, 15])}).values
 ```

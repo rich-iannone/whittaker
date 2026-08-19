@@ -39,6 +39,7 @@ Fit a Gamma GAM with REML smoothness selection. REML is generally preferred for 
 because it is less prone to under-smoothing than GCV.
 
 ```{python}
+# Fit Gamma GAM with REML selection
 model = wk.GAM(
     "wage ~ s(age) + s(experience)",
     family=wk.Gamma(),
@@ -77,12 +78,16 @@ confidence intervals.
 ```{python}
 import pandas as pd
 
+# Build new-data over age-experience pairs
 new_data = pd.DataFrame({
     "age": [25, 35, 45],
     "experience": [2, 10, 20],
 })
 
+# Predict wages with confidence intervals
 preds = model.predict(new_data, interval="confidence")
+
+# Assemble results with prediction bounds
 pd.DataFrame({
     "age": new_data["age"],
     "experience": new_data["experience"],

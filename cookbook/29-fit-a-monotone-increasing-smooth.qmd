@@ -21,6 +21,7 @@ monotone constraint (wages generally rise as a worker accumulates experience, no
 ```{python}
 import whittaker as wk
 
+# Load data and fit constrained and unconstrained models
 data = wk.load_dataset("wages")
 
 m_constrained   = wk.GAM("wage ~ s(experience, bs='mpi')", family=wk.Gamma()).fit(data)

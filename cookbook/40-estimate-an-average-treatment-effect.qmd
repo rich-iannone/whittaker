@@ -26,12 +26,15 @@ the true ATE is 2.5 wage units.
 import numpy as np
 import whittaker as wk
 
+# Generate confounders and treatment assignment
 rng = np.random.default_rng(23)
 n = 500
 age = rng.uniform(25, 55, n)
 experience = rng.uniform(0, 20, n)
 p_treat = 1 / (1 + np.exp(-(0.05 * age + 0.1 * experience - 3)))
 training = rng.binomial(1, p_treat).astype(float)
+
+# Simulate wages with true ATE of 2.5
 wage = 10 + 0.3 * age + 0.5 * experience + 2.5 * training + rng.normal(0, 2, n)
 data = {"wage": wage, "training": training, "age": age, "experience": experience}
 ```

@@ -26,6 +26,7 @@ at noon, meaning mid-day temperature drives most of the variation in daily energ
 import numpy as np
 import whittaker as wk
 
+# Generate hourly temperature curves
 rng = np.random.default_rng(23)
 n, T = 200, 24
 hour = np.linspace(0, 1, T)
@@ -34,6 +35,8 @@ temp_curves = (
     + 10 * np.sin(np.pi * hour)[np.newaxis, :]
     + rng.normal(0, 1, (n, T))
 )
+
+# Define true coefficient function and energy response
 beta_true = np.exp(-((hour - 0.5) ** 2) / 0.05)
 energy = temp_curves @ beta_true / T + rng.normal(0, 0.5, n)
 data = {"energy": energy, "temp": temp_curves}
@@ -46,7 +49,10 @@ the curves (`"temp"`), what basis to use, and the domain of the time variable. T
 `(0.0, 1.0)` corresponds to the normalized hour values in `hour`.
 
 ```{python}
+# Define functional basis term
 term = wk.FunctionalTerm("temp", basis="bspline", domain=(0.0, 1.0), n_basis=12)
+
+# Fit the functional GAM
 model = wk.FunctionalGAM(response="energy", functional_terms=[term]).fit(data)
 model.summary()
 ```

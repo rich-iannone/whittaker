@@ -24,6 +24,7 @@ coverage level. The `seed` argument ensures reproducibility of the train/calibra
 import numpy as np
 import whittaker as wk
 
+# Fit a split conformal predictor at 95% coverage
 data = wk.load_dataset("mcycle")
 predictor = wk.conformal_fit(
     "accel ~ s(times, k=15)",
@@ -40,6 +41,7 @@ Generate predictions on an evenly spaced grid across the observed time range. Th
 `ConformalResult` with point predictions and interval bounds.
 
 ```{python}
+# Predict on a fine grid and inspect point estimates
 new_data = {"times": np.linspace(data["times"].min(), data["times"].max(), 200)}
 result = predictor.predict(new_data)
 result.values[:5]

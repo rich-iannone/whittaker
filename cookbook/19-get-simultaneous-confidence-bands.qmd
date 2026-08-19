@@ -38,7 +38,10 @@ grid = {"times": np.linspace(data["times"].min(), data["times"].max(), 300)}
 Pass `interval="confidence"` to get the standard pointwise band.
 
 ```{python}
+# Predict with pointwise confidence intervals
 pw = model.predict(grid, interval="confidence")
+
+# Compute mean band width
 pw_width = (pw.upper - pw.lower).mean().round(3)
 pw_width
 ```
@@ -50,7 +53,10 @@ This is the average width of the pointwise interval across the grid.
 Pass `interval="simultaneous"` to get the wider joint-coverage band.
 
 ```{python}
+# Predict with simultaneous confidence bands
 sim = model.predict(grid, interval="simultaneous")
+
+# Compute mean band width
 sim_width = (sim.upper - sim.lower).mean().round(3)
 sim_width
 ```
@@ -59,6 +65,7 @@ The simultaneous band is uniformly wider. The ratio below shows how much the cor
 the interval to achieve joint coverage.
 
 ```{python}
+# Compute width inflation ratio
 round(sim_width / pw_width, 3)
 ```
 
@@ -71,7 +78,10 @@ correction).
 Look at the width difference across the curve to see where the inflation is largest.
 
 ```{python}
+# Compute pointwise width difference across the grid
 width_diff = (sim.upper - sim.lower) - (pw.upper - pw.lower)
+
+# Show range of the difference
 (width_diff.min().round(3), width_diff.max().round(3))
 ```
 

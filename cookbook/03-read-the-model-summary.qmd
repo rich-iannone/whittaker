@@ -22,6 +22,7 @@ data = wk.load_dataset("wages")
 ```
 
 ```{python}
+# Fit two-smooth Gamma GAM
 model = wk.GAM("wage ~ s(age) + s(experience)", family=wk.Gamma()).fit(data)
 model.summary()
 ```

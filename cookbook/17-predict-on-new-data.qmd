@@ -17,7 +17,10 @@ Start with the `mcycle` dataset and a single-smooth Gaussian GAM.
 ```{python}
 import whittaker as wk
 
+# Load mcycle dataset
 data = wk.load_dataset("mcycle")
+
+# Fit single-smooth Gaussian GAM
 model = wk.GAM("accel ~ s(times)").fit(data)
 model.summary()
 ```
@@ -29,7 +32,10 @@ Build a 200-point grid covering the full range of `times`, then call `predict()`
 ```{python}
 import numpy as np
 
+# Build 200-point grid over full time range
 grid = {"times": np.linspace(0, 57.6, 200)}
+
+# Predict acceleration on the grid
 preds = model.predict(grid)
 preds.values[:5].round(2)
 ```
@@ -51,6 +57,7 @@ the new-data dict. The `wages` dataset demonstrates this with two predictors, `a
 `experience`.
 
 ```{python}
+# Load wages data and fit two-predictor GAM
 wages_data = wk.load_dataset("wages")
 wages_model = wk.GAM("wage ~ s(age) + s(experience)").fit(wages_data)
 ```
@@ -58,10 +65,13 @@ wages_model = wk.GAM("wage ~ s(age) + s(experience)").fit(wages_data)
 Pass both predictors together. Each position in the arrays corresponds to one new observation.
 
 ```{python}
+# Build new-data with paired age and experience values
 new_data = {
     "age": np.array([25, 35, 45, 55]),
     "experience": np.array([2, 8, 15, 25]),
 }
+
+# Predict wages at new covariate values
 preds_wages = wages_model.predict(new_data)
 preds_wages.values.round(2)
 ```

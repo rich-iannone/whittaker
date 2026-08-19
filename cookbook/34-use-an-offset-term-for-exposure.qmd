@@ -23,13 +23,17 @@ misspecified.
 import numpy as np
 import whittaker as wk
 
+# Simulate trap deployments with varying exposure
 rng = np.random.default_rng(23)
 n = 300
 temperature = rng.uniform(5, 25, n)
 exposure = rng.choice([1, 2, 3, 7], n)
+
+# Compute true log-rate and draw Poisson counts
 log_rate = -0.5 + 0.1 * temperature - 0.003 * temperature**2
 count = rng.poisson(np.exp(log_rate) * exposure)
 
+# Assemble data with pre-computed log-exposure
 data = {"temperature": temperature, "exposure": exposure,
         "log_exposure": np.log(exposure), "count": count}
 ```

@@ -19,6 +19,7 @@ acceleration over time during a simulated crash.
 ```{python}
 import whittaker as wk
 
+# Load data and fit with each smoothing method
 data = wk.load_dataset("mcycle")
 
 model_reml = wk.GAM("accel ~ s(times)").fit(data, method="REML")

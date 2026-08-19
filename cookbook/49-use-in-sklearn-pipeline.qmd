@@ -23,10 +23,12 @@ from whittaker.sklearn import GAMRegressor
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 
+# Load data and build predictor matrix
 data = wk.load_dataset("wages")
 X = np.column_stack([data["age"], data["experience"]])
 y = data["wage"]
 
+# Build and fit scaler-GAM pipeline
 pipe = Pipeline([
     ("scaler", StandardScaler()),
     ("gam", GAMRegressor(formula="y ~ s(x0) + s(x1)")),
@@ -48,6 +50,7 @@ the pipeline from scratch, including the scaler's `fit_transform()` step.
 ```{python}
 from sklearn.model_selection import cross_val_score
 
+# Run 5-fold cross-validation
 reg = GAMRegressor(formula="y ~ s(x0) + s(x1)")
 scores = cross_val_score(reg, X, y, cv=5, scoring="r2")
 ```

@@ -34,6 +34,7 @@ separate smooth for river distance. The tensor product accounts for the spatial 
 captures the well-known inverse relationship between river proximity and zinc concentration.
 
 ```{python}
+# Fit spatial surface and distance smooth with REML
 model = wk.GAM(
     "zinc ~ te(x, y) + s(dist)"
 ).fit(data, method="REML")

@@ -19,8 +19,11 @@ Fit the `mcycle` GAM and build the prediction grid used throughout this recipe.
 import numpy as np
 import whittaker as wk
 
+# Load data and fit the GAM
 data = wk.load_dataset("mcycle")
 model = wk.GAM("accel ~ s(times)").fit(data)
+
+# Build prediction grid
 grid = {"times": np.linspace(0, 57.6, 200)}
 ```
 
@@ -64,6 +67,7 @@ Comparing the mean band widths makes the difference concrete. The tuple below sh
 first, simultaneous width second.
 
 ```{python}
+# Compare mean widths: pointwise vs simultaneous
 (preds.upper - preds.lower).mean(), (preds_sim.upper - preds_sim.lower).mean()
 ```
 

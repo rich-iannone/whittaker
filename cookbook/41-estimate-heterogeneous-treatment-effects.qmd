@@ -26,12 +26,17 @@ training program. The true CATE is `1.0 + 0.08 * age`.
 import numpy as np
 import whittaker as wk
 
+# Generate worker covariates
 rng = np.random.default_rng(23)
 n = 600
 age = rng.uniform(25, 55, n)
 experience = rng.uniform(0, 20, n)
+
+# Simulate confounded treatment assignment
 p_treat = 1 / (1 + np.exp(-(0.05 * age + 0.1 * experience - 3)))
 training = rng.binomial(1, p_treat).astype(float)
+
+# Define true CATE and generate wages
 cate_true = 1.0 + 0.08 * age
 wage = 10 + 0.3 * age + 0.5 * experience + cate_true * training + rng.normal(0, 2, n)
 data = {"wage": wage, "training": training, "age": age, "experience": experience}

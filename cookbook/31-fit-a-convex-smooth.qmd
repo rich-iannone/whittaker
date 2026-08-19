@@ -22,6 +22,7 @@ import whittaker as wk
 
 data = wk.load_dataset("mcycle")
 
+# Fit convex-constrained and unconstrained models
 m_convex = wk.GAM("accel ~ s(times, bs='cx')").fit(data)
 m_free   = wk.GAM("accel ~ s(times, bs='tp')").fit(data)
 ```

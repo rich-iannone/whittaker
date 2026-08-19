@@ -74,10 +74,13 @@ curve.
 ```{python}
 import numpy as np
 
+# Build grid over temperature at fixed depth
 new_data = {
     "temperature": np.linspace(8, 28, 50),
     "depth": np.full(50, 10.0),
 }
+
+# Predict counts on the response scale
 preds = model.predict(new_data).values
 
 # first five predicted counts

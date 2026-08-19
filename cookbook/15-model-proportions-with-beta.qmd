@@ -75,12 +75,16 @@ Predictions from a Beta GAM are automatically constrained to (0, 1): no transfor
 ```{python}
 import pandas as pd
 
+# Build new-data over temperature and water values
 new_data = pd.DataFrame({
     "temperature": [15.0, 20.0, 25.0],
     "water": [30.0, 50.0, 70.0],
 })
 
+# Predict germination rates with confidence intervals
 preds = model.predict(new_data, interval="confidence")
+
+# Assemble results with prediction bounds
 pd.DataFrame({
     "temperature": new_data["temperature"],
     "water": new_data["water"],

@@ -24,6 +24,7 @@ one pair of adjacent quantile curves is inverted.
 import numpy as np
 import whittaker as wk
 
+# Fit unconstrained model and measure crossing fraction
 data = wk.load_dataset("mcycle")
 model_free = wk.QuantileGAM(
     "accel ~ s(times, k=15)",
@@ -35,6 +36,7 @@ model_free.crossing_fraction(data)
 Now fit the same model with the constraint enabled and confirm that crossings are eliminated.
 
 ```{python}
+# Fit non-crossing model and verify zero crossings
 model_nc = wk.QuantileGAM(
     "accel ~ s(times, k=15)",
     non_crossing=True,
@@ -56,6 +58,7 @@ Generate predictions on a dense grid and inspect the width of the outer interval
 the 10th and 90th percentile curves) to confirm the constrained model produces well-ordered bounds.
 
 ```{python}
+# Predict interval bounds on a dense grid
 new_data = {"times": np.linspace(data["times"].min(), data["times"].max(), 200)}
 lower, upper = model_nc.predict_interval(new_data)
 (upper - lower)[:5]

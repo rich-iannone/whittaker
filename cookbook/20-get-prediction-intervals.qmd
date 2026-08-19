@@ -38,7 +38,10 @@ grid = {"times": np.linspace(data["times"].min(), data["times"].max(), 200)}
 Pass `interval="confidence"` to quantify uncertainty about the mean curve.
 
 ```{python}
+# Predict with confidence intervals
 ci = model.predict(grid, interval="confidence")
+
+# Compute mean CI width
 ci_width = (ci.upper - ci.lower).mean().round(3)
 ci_width
 ```
@@ -51,7 +54,10 @@ Pass `interval="prediction"` to quantify where individual future observations ar
 land.
 
 ```{python}
+# Predict with prediction intervals
 pi = model.predict(grid, interval="prediction")
+
+# Compute mean PI width
 pi_width = (pi.upper - pi.lower).mean().round(3)
 pi_width
 ```

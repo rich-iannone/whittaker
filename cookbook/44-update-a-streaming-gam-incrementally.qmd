@@ -23,8 +23,10 @@ import whittaker as wk
 rng = np.random.default_rng(23)
 n_per_batch = 200
 
+# Initialize streaming model
 model = wk.StreamingGAM("y ~ s(x, k=10)")
 
+# Feed batches and solve incrementally
 for i in range(5):
     x = rng.uniform(0, 2 * np.pi, n_per_batch)
     y = np.sin(x) + rng.normal(0, 0.3, n_per_batch)
