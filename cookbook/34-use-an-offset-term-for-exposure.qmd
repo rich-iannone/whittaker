@@ -1,0 +1,99 @@
+---
+title: "Use an Offset Term for Exposure"
+description: "Model event rates with a Poisson GAM by adding an offset for varying exposure."
+tags: [Data input, Families, Poisson]
+---
+
+# Use an Offset Term for Exposure
+
+A Poisson GAM models expected counts, but raw counts conflate the underlying rate with how long (or
+how much) each unit was observed. Fish traps left in the water for seven days will catch more fish
+than traps left for one day, even if the true catch rate at that location is identical. The offset
+term corrects for this: by pre-computing `log(exposure)` and adding `offset(log_exposure)` to the
+formula, the model estimates the log-rate rather than the log-count, with the coefficient on the
+log-exposure fixed to exactly one.
+
+## Generate synthetic data
+
+Create a dataset of fish trap deployments where each trap is monitored for a variable number of
+days. The true count-generating process depends on exposure, so a model that ignores it will be
+misspecified.
+
+```{python}
+import numpy as np
+import whittaker as wk
+
+rng = np.random.default_rng(23)
+n = 300
+temperature = rng.uniform(5, 25, n)
+exposure = rng.choice([1, 2, 3, 7], n)
+log_rate = -0.5 + 0.1 * temperature - 0.003 * temperature**2
+count = rng.poisson(np.exp(log_rate) * exposure)
+
+data = {"temperature": temperature, "exposure": exposure,
+        "log_exposure": np.log(exposure), "count": count}
+```
+
+## Fit without an offset (incorrect)
+
+The naive model treats all traps as if they were observed for the same duration. The smooth for
+temperature will absorb some of the exposure variation, biasing the estimated effect.
+
+```{python}
+m_naive = wk.GAM("count ~ s(temperature)", family=wk.Poisson()).fit(data)
+m_naive.summary()
+```
+
+## Fit with an offset (correct)
+
+Adding `offset(log_exposure)` to the formula fixes the log-exposure coefficient to one. The offset
+column must be pre-computed and present in the data (the formula parser treats the argument as a
+column name, not an expression). The smooth for temperature now estimates the log-rate, which is the
+quantity of genuine scientific interest.
+
+```{python}
+m_offset = wk.GAM(
+    "count ~ s(temperature) + offset(log_exposure)",
+    family=wk.Poisson(),
+).fit(data)
+m_offset.summary()
+```
+
+## Visualize the rate smooth
+
+`model.plot()` shows the partial effect of temperature on the log-rate scale. The inverted-U shape
+reflects the quadratic log-rate used when generating the data.
+
+```{python}
+m_offset.plot()
+```
+
+## Check diagnostics
+
+Inspect the residuals for the offset model. If the naive model were used instead, the residuals vs
+fitted plot would show a systematic trend driven by the unmodeled exposure variation.
+
+```{python}
+wk.check(m_offset)
+```
+
+## Compare deviance explained
+
+The offset model should explain more deviance than the naive model, because it correctly accounts
+for the exposure structure in the data.
+
+```{python}
+m_naive.deviance_explained, m_offset.deviance_explained
+```
+
+## When to use an offset
+
+| Scenario | Offset |
+|----------|--------|
+| Fish counts; traps monitored for varying days | `offset(log_days)` |
+| Insurance claims; policies with varying coverage periods | `offset(log_years_exposed)` |
+| Disease incidence; areas with different population sizes | `offset(log_population)` |
+
+Use an offset whenever the count response reflects a rate multiplied by a known, varying exposure.
+Without the offset, the smooth must work harder to explain variance that is purely a measurement
+artifact.
