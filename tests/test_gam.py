@@ -717,6 +717,6 @@ class TestCheckDisplayFallback:
         monkeypatch.setitem(sys.modules, "IPython", None)
         monkeypatch.setitem(sys.modules, "IPython.display", None)
 
-        alt = pytest.importorskip("altair")
+        pytest.importorskip("altair")
         chart = wk.check(model, plots=["qq"])
         assert len(chart.vconcat) == 1
