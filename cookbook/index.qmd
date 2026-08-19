@@ -23,13 +23,63 @@ picking the right response distribution, and reading the output.
 <div style="border: 1px solid #dee2e6; border-radius: 0.5rem; overflow: hidden;">
 <a href="choose-a-response-family.qmd" style="display: block; padding: 1.25rem 1.5rem; color: inherit; text-decoration: none;">
 <div style="font-size: 1.1rem; font-weight: 600; margin-bottom: 0.35rem; color: #0d6efd;">Choose a Response Family</div>
-<div style="font-size: 0.9rem; color: #6c757d; line-height: 1.45;">Pick the right distribution for your outcome variable — Gaussian, Poisson, Binomial, and more.</div>
+<div style="font-size: 0.9rem; color: #6c757d; line-height: 1.45;">Pick the right distribution for your outcome variable: Gaussian, Poisson, Binomial, and more.</div>
 </a>
 </div>
 <div style="border: 1px solid #dee2e6; border-radius: 0.5rem; overflow: hidden;">
 <a href="read-the-model-summary.qmd" style="display: block; padding: 1.25rem 1.5rem; color: inherit; text-decoration: none;">
 <div style="font-size: 1.1rem; font-weight: 600; margin-bottom: 0.35rem; color: #0d6efd;">Read the Model Summary</div>
 <div style="font-size: 0.9rem; color: #6c757d; line-height: 1.45;">Understand EDF, significance tests, and fit statistics at a glance.</div>
+</a>
+</div>
+</div>
+
+## Smooth terms
+
+The smooth term (its basis type, basis dimension, and interaction structure) is the main modeling
+decision in a GAM. These recipes cover the most useful smooth types and how to configure them.
+
+<div class="section-cards section-cards-list" style="display: grid; grid-template-columns: 1fr; gap: 1rem; margin-top: 0.5rem;">
+<div style="border: 1px solid #dee2e6; border-radius: 0.5rem; overflow: hidden;">
+<a href="fit-a-thin-plate-regression-spline.qmd" style="display: block; padding: 1.25rem 1.5rem; color: inherit; text-decoration: none;">
+<div style="font-size: 1.1rem; font-weight: 600; margin-bottom: 0.35rem; color: #0d6efd;">Fit a Thin Plate Regression Spline</div>
+<div style="font-size: 0.9rem; color: #6c757d; line-height: 1.45;">Understand the default smooth basis and when to use it.</div>
+</a>
+</div>
+<div style="border: 1px solid #dee2e6; border-radius: 0.5rem; overflow: hidden;">
+<a href="control-basis-dimension.qmd" style="display: block; padding: 1.25rem 1.5rem; color: inherit; text-decoration: none;">
+<div style="font-size: 1.1rem; font-weight: 600; margin-bottom: 0.35rem; color: #0d6efd;">Control Basis Dimension with k</div>
+<div style="font-size: 0.9rem; color: #6c757d; line-height: 1.45;">Choose k large enough to avoid underfitting, then let REML handle the rest.</div>
+</a>
+</div>
+<div style="border: 1px solid #dee2e6; border-radius: 0.5rem; overflow: hidden;">
+<a href="fit-a-cyclic-smooth.qmd" style="display: block; padding: 1.25rem 1.5rem; color: inherit; text-decoration: none;">
+<div style="font-size: 1.1rem; font-weight: 600; margin-bottom: 0.35rem; color: #0d6efd;">Fit a Cyclic Smooth to Seasonal Data</div>
+<div style="font-size: 0.9rem; color: #6c757d; line-height: 1.45;">Use bs='cc' to model a periodic pattern without discontinuities at the boundary.</div>
+</a>
+</div>
+<div style="border: 1px solid #dee2e6; border-radius: 0.5rem; overflow: hidden;">
+<a href="add-a-tensor-product.qmd" style="display: block; padding: 1.25rem 1.5rem; color: inherit; text-decoration: none;">
+<div style="font-size: 1.1rem; font-weight: 600; margin-bottom: 0.35rem; color: #0d6efd;">Add a Tensor Product for Two Predictors</div>
+<div style="font-size: 0.9rem; color: #6c757d; line-height: 1.45;">Model the joint nonlinear effect of two predictors, including their interaction, with te().</div>
+</a>
+</div>
+<div style="border: 1px solid #dee2e6; border-radius: 0.5rem; overflow: hidden;">
+<a href="use-a-by-variable-smooth.qmd" style="display: block; padding: 1.25rem 1.5rem; color: inherit; text-decoration: none;">
+<div style="font-size: 1.1rem; font-weight: 600; margin-bottom: 0.35rem; color: #0d6efd;">Use a By-Variable Smooth</div>
+<div style="font-size: 0.9rem; color: #6c757d; line-height: 1.45;">Fit a separate smooth curve per group without assuming the groups share the same shape.</div>
+</a>
+</div>
+<div style="border: 1px solid #dee2e6; border-radius: 0.5rem; overflow: hidden;">
+<a href="add-a-random-effect.qmd" style="display: block; padding: 1.25rem 1.5rem; color: inherit; text-decoration: none;">
+<div style="font-size: 1.1rem; font-weight: 600; margin-bottom: 0.35rem; color: #0d6efd;">Add a Random Effect</div>
+<div style="font-size: 0.9rem; color: #6c757d; line-height: 1.45;">Account for repeated-measures clustering with s(group, bs='re').</div>
+</a>
+</div>
+<div style="border: 1px solid #dee2e6; border-radius: 0.5rem; overflow: hidden;">
+<a href="fit-a-spatial-smooth.qmd" style="display: block; padding: 1.25rem 1.5rem; color: inherit; text-decoration: none;">
+<div style="font-size: 1.1rem; font-weight: 600; margin-bottom: 0.35rem; color: #0d6efd;">Fit a Spatial Smooth with a Tensor Product</div>
+<div style="font-size: 0.9rem; color: #6c757d; line-height: 1.45;">Use te(x, y) to capture two-dimensional spatial autocorrelation over a geographic field.</div>
 </a>
 </div>
 </div>
@@ -53,6 +103,30 @@ proportions (the most common departures from a Gaussian response).
 <div style="font-size: 0.9rem; color: #6c757d; line-height: 1.45;">Fit a logistic GAM for 0/1 responses. Predictions come back as probabilities.</div>
 </a>
 </div>
+<div style="border: 1px solid #dee2e6; border-radius: 0.5rem; overflow: hidden;">
+<a href="model-skewed-positive-data-with-gamma.qmd" style="display: block; padding: 1.25rem 1.5rem; color: inherit; text-decoration: none;">
+<div style="font-size: 1.1rem; font-weight: 600; margin-bottom: 0.35rem; color: #0d6efd;">Model Skewed Positive Data with Gamma</div>
+<div style="font-size: 0.9rem; color: #6c757d; line-height: 1.45;">Use the Gamma family for right-skewed continuous responses such as wages, costs, or durations.</div>
+</a>
+</div>
+<div style="border: 1px solid #dee2e6; border-radius: 0.5rem; overflow: hidden;">
+<a href="handle-overdispersed-counts-with-negative-binomial.qmd" style="display: block; padding: 1.25rem 1.5rem; color: inherit; text-decoration: none;">
+<div style="font-size: 1.1rem; font-weight: 600; margin-bottom: 0.35rem; color: #0d6efd;">Handle Overdispersed Counts with Negative Binomial</div>
+<div style="font-size: 0.9rem; color: #6c757d; line-height: 1.45;">Switch from Poisson to NegativeBinomial when residual deviance greatly exceeds residual df.</div>
+</a>
+</div>
+<div style="border: 1px solid #dee2e6; border-radius: 0.5rem; overflow: hidden;">
+<a href="model-proportions-with-beta.qmd" style="display: block; padding: 1.25rem 1.5rem; color: inherit; text-decoration: none;">
+<div style="font-size: 1.1rem; font-weight: 600; margin-bottom: 0.35rem; color: #0d6efd;">Model Proportions with Beta</div>
+<div style="font-size: 0.9rem; color: #6c757d; line-height: 1.45;">Fit a Beta GAM for responses bounded strictly between 0 and 1, such as rates or fractions.</div>
+</a>
+</div>
+<div style="border: 1px solid #dee2e6; border-radius: 0.5rem; overflow: hidden;">
+<a href="estimate-a-survival-curve-with-cox-ph.qmd" style="display: block; padding: 1.25rem 1.5rem; color: inherit; text-decoration: none;">
+<div style="font-size: 1.1rem; font-weight: 600; margin-bottom: 0.35rem; color: #0d6efd;">Estimate a Survival Curve with Cox PH</div>
+<div style="font-size: 0.9rem; color: #6c757d; line-height: 1.45;">Model time-to-event data with right censoring using the Cox proportional hazards family.</div>
+</a>
+</div>
 </div>
 
 ## Prediction and inference
@@ -65,13 +139,37 @@ interval.
 <div style="border: 1px solid #dee2e6; border-radius: 0.5rem; overflow: hidden;">
 <a href="predict-on-new-data.qmd" style="display: block; padding: 1.25rem 1.5rem; color: inherit; text-decoration: none;">
 <div style="font-size: 1.1rem; font-weight: 600; margin-bottom: 0.35rem; color: #0d6efd;">Predict on New Data</div>
-<div style="font-size: 0.9rem; color: #6c757d; line-height: 1.45;">Generate fitted values for any set of covariate values after fitting — grids, held-out rows, or hypothetical inputs.</div>
+<div style="font-size: 0.9rem; color: #6c757d; line-height: 1.45;">Generate fitted values for any set of covariate values after fitting (grids, held-out rows, or hypothetical inputs).</div>
 </a>
 </div>
 <div style="border: 1px solid #dee2e6; border-radius: 0.5rem; overflow: hidden;">
 <a href="get-confidence-intervals.qmd" style="display: block; padding: 1.25rem 1.5rem; color: inherit; text-decoration: none;">
 <div style="font-size: 1.1rem; font-weight: 600; margin-bottom: 0.35rem; color: #0d6efd;">Get Confidence Intervals</div>
 <div style="font-size: 0.9rem; color: #6c757d; line-height: 1.45;">Add pointwise, simultaneous, or prediction-interval uncertainty bands to any set of predictions.</div>
+</a>
+</div>
+<div style="border: 1px solid #dee2e6; border-radius: 0.5rem; overflow: hidden;">
+<a href="get-simultaneous-confidence-bands.qmd" style="display: block; padding: 1.25rem 1.5rem; color: inherit; text-decoration: none;">
+<div style="font-size: 1.1rem; font-weight: 600; margin-bottom: 0.35rem; color: #0d6efd;">Get Simultaneous Confidence Bands</div>
+<div style="font-size: 0.9rem; color: #6c757d; line-height: 1.45;">Get bands that jointly cover the whole fitted curve at 95%, not just each point in isolation.</div>
+</a>
+</div>
+<div style="border: 1px solid #dee2e6; border-radius: 0.5rem; overflow: hidden;">
+<a href="get-prediction-intervals.qmd" style="display: block; padding: 1.25rem 1.5rem; color: inherit; text-decoration: none;">
+<div style="font-size: 1.1rem; font-weight: 600; margin-bottom: 0.35rem; color: #0d6efd;">Get Prediction Intervals</div>
+<div style="font-size: 0.9rem; color: #6c757d; line-height: 1.45;">Bound individual future observations, not just the conditional mean, with prediction intervals.</div>
+</a>
+</div>
+<div style="border: 1px solid #dee2e6; border-radius: 0.5rem; overflow: hidden;">
+<a href="extract-term-level-contributions.qmd" style="display: block; padding: 1.25rem 1.5rem; color: inherit; text-decoration: none;">
+<div style="font-size: 1.1rem; font-weight: 600; margin-bottom: 0.35rem; color: #0d6efd;">Extract Term-Level Contributions</div>
+<div style="font-size: 0.9rem; color: #6c757d; line-height: 1.45;">Decompose a prediction into each smooth's individual contribution to the linear predictor.</div>
+</a>
+</div>
+<div style="border: 1px solid #dee2e6; border-radius: 0.5rem; overflow: hidden;">
+<a href="predict-on-the-link-scale.qmd" style="display: block; padding: 1.25rem 1.5rem; color: inherit; text-decoration: none;">
+<div style="font-size: 1.1rem; font-weight: 600; margin-bottom: 0.35rem; color: #0d6efd;">Predict on the Link Scale</div>
+<div style="font-size: 0.9rem; color: #6c757d; line-height: 1.45;">Get linear predictor values instead of back-transformed response-scale predictions.</div>
 </a>
 </div>
 </div>
@@ -96,9 +194,27 @@ criterion.
 </a>
 </div>
 <div style="border: 1px solid #dee2e6; border-radius: 0.5rem; overflow: hidden;">
+<a href="compare-models-with-aic.qmd" style="display: block; padding: 1.25rem 1.5rem; color: inherit; text-decoration: none;">
+<div style="font-size: 1.1rem; font-weight: 600; margin-bottom: 0.35rem; color: #0d6efd;">Compare Models with AIC</div>
+<div style="font-size: 0.9rem; color: #6c757d; line-height: 1.45;">Rank nested or non-nested models by AIC to balance fit quality against model complexity.</div>
+</a>
+</div>
+<div style="border: 1px solid #dee2e6; border-radius: 0.5rem; overflow: hidden;">
+<a href="cross-validate-a-gam.qmd" style="display: block; padding: 1.25rem 1.5rem; color: inherit; text-decoration: none;">
+<div style="font-size: 1.1rem; font-weight: 600; margin-bottom: 0.35rem; color: #0d6efd;">Cross-Validate a GAM</div>
+<div style="font-size: 0.9rem; color: #6c757d; line-height: 1.45;">Get an honest out-of-sample estimate of predictive performance using k-fold cross-validation.</div>
+</a>
+</div>
+<div style="border: 1px solid #dee2e6; border-radius: 0.5rem; overflow: hidden;">
 <a href="choose-a-smoothing-method.qmd" style="display: block; padding: 1.25rem 1.5rem; color: inherit; text-decoration: none;">
 <div style="font-size: 1.1rem; font-weight: 600; margin-bottom: 0.35rem; color: #0d6efd;">Choose a Smoothing Method</div>
 <div style="font-size: 0.9rem; color: #6c757d; line-height: 1.45;">Compare REML, GCV, and ML smoothness selection and know when each is the right choice.</div>
+</a>
+</div>
+<div style="border: 1px solid #dee2e6; border-radius: 0.5rem; overflow: hidden;">
+<a href="use-select-smoothing.qmd" style="display: block; padding: 1.25rem 1.5rem; color: inherit; text-decoration: none;">
+<div style="font-size: 1.1rem; font-weight: 600; margin-bottom: 0.35rem; color: #0d6efd;">Use Select Smoothing to Shrink Away a Term</div>
+<div style="font-size: 0.9rem; color: #6c757d; line-height: 1.45;">Add an extra penalty so irrelevant smooth terms can shrink completely to zero during fitting.</div>
 </a>
 </div>
 </div>
