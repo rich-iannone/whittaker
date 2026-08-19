@@ -31,8 +31,8 @@ data.head()
 ```
 
 The `event` column is a 0/1 indicator where 1 means the event occurred and 0 means the observation
-was censored. The `CoxPH` family reads this column automatically from the formula's response
-variable specification.
+was censored. The `CoxPH` family reads the `event` column automatically from the data by name,
+alongside the `time` response in the formula.
 
 ## Fit
 
