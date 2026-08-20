@@ -233,3 +233,101 @@ class TestQuantileSimulate:
         sims = gam.simulate(n_sim=10, seed=23)
         assert sims.shape == (len(symmetric_data["y"]), 10)
         assert np.isfinite(sims).all()
+
+
+# ---------------------------------------------------------------------------
+# Direct QuantileFamily method tests
+# ---------------------------------------------------------------------------
+
+
+class TestQuantileFamilyDirect:
+    """Tests for QuantileFamily constructor validations and individual methods."""
+
+    def test_invalid_tau_zero_raises(self):
+        with pytest.raises(ValueError, match="tau must be in"):
+            QuantileFamily(tau=0.0)
+
+    def test_invalid_tau_one_raises(self):
+        with pytest.raises(ValueError, match="tau must be in"):
+            QuantileFamily(tau=1.0)
+
+    def test_invalid_sigma_raises(self):
+        with pytest.raises(ValueError, match="sigma must be positive"):
+            QuantileFamily(sigma=-0.5)
+
+    def test_tau_property(self):
+        fam = QuantileFamily(tau=0.3, sigma=0.5)
+        assert fam.tau == pytest.approx(0.3)
+
+    def test_sigma_property(self):
+        fam = QuantileFamily(tau=0.3, sigma=0.5)
+        assert fam.sigma == pytest.approx(0.5)
+
+    def test_sigma_setter_zero_raises(self):
+        fam = QuantileFamily(tau=0.5)
+        with pytest.raises(ValueError, match="sigma must be positive"):
+            fam.sigma = 0.0
+
+    def test_sigma_setter_negative_raises(self):
+        fam = QuantileFamily(tau=0.5)
+        with pytest.raises(ValueError, match="sigma must be positive"):
+            fam.sigma = -1.0
+
+    def test_sigma_setter_valid(self):
+        fam = QuantileFamily(tau=0.5, sigma=0.1)
+        fam.sigma = 0.5
+        assert fam.sigma == pytest.approx(0.5)
+
+    def test_link_derivative(self):
+        fam = QuantileFamily(tau=0.5)
+        mu = np.array([1.0, 2.0, 3.0])
+        result = fam.link_derivative(mu)
+        np.testing.assert_allclose(result, np.ones(3))
+
+    def test_variance(self):
+        fam = QuantileFamily(tau=0.5)
+        mu = np.array([0.0, 1.0, -1.0])
+        result = fam.variance(mu)
+        np.testing.assert_allclose(result, np.ones(3))
+
+    def test_deviance_with_weights(self):
+        fam = QuantileFamily(tau=0.5, sigma=0.1)
+        y = np.array([1.0, 2.0, 3.0])
+        mu = np.array([1.1, 1.9, 3.2])
+        w = np.array([1.0, 2.0, 0.5])
+        dev = fam.deviance(y, mu, weights=w)
+        assert np.isfinite(dev)
+        dev_unweighted = fam.deviance(y, mu)
+        assert dev != dev_unweighted
+
+    def test_unit_deviance(self):
+        fam = QuantileFamily(tau=0.5, sigma=0.1)
+        y = np.array([1.0, 2.0, 3.0])
+        mu = np.array([1.1, 1.9, 3.2])
+        ud = fam.unit_deviance(y, mu)
+        assert ud.shape == y.shape
+        assert np.all(ud >= 0)
+
+    def test_log_likelihood_with_weights(self):
+        fam = QuantileFamily(tau=0.5, sigma=0.1)
+        y = np.array([1.0, 2.0, 3.0])
+        mu = np.array([1.1, 1.9, 3.2])
+        w = np.array([1.0, 2.0, 0.5])
+        ll = fam.log_likelihood(y, mu, scale=1.0, weights=w)
+        assert np.isfinite(ll)
+        ll_unweighted = fam.log_likelihood(y, mu, scale=1.0)
+        assert ll != ll_unweighted
+
+    def test_simulate(self):
+        fam = QuantileFamily(tau=0.5, sigma=0.1)
+        rng = np.random.default_rng(0)
+        mu = np.array([1.0, 2.0, 3.0])
+        samples = fam.simulate(mu, scale=1.0, rng=rng)
+        assert samples.shape == mu.shape
+        assert np.isfinite(samples).all()
+
+    def test_repr(self):
+        fam = QuantileFamily(tau=0.75, sigma=0.2)
+        r = repr(fam)
+        assert "0.75" in r
+        assert "0.2" in r
