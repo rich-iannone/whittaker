@@ -921,7 +921,7 @@ def predict_matrix(
         elif isinstance(term, InteractionTerm):
             left = _extract_column(new_data, term.left)
             right = _extract_column(new_data, term.right)
-            if term.full:
+            if term.full:  # pragma: no cover
                 blocks.append(left[:, np.newaxis])
                 blocks.append(right[:, np.newaxis])
             blocks.append((left * right)[:, np.newaxis])

@@ -164,7 +164,7 @@ def load_dataset(name: str, as_frame: bool = False) -> dict[str, NDArray] | Any:
         return data
     try:
         import pandas as pd
-    except ImportError as exc:
+    except ImportError as exc:  # pragma: no cover
         raise ImportError(
             "load_dataset(..., as_frame=True) requires pandas. Install it with: pip install pandas"
         ) from exc
