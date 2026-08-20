@@ -15,7 +15,6 @@ that are larger than available RAM.
 Create an in-memory DuckDB connection and populate a table with synthetic sensor readings.
 
 ```{python}
-#| eval: false
 import duckdb
 import numpy as np
 import whittaker as wk
@@ -41,7 +40,6 @@ Pass the table name as a string along with the open connection. `DuckDBGAM` will
 chunks without pulling it into Python memory.
 
 ```{python}
-#| eval: false
 model = wk.DuckDBGAM("y ~ s(x, k=10)").fit("sensor", conn)
 model.summary()
 ```
@@ -52,7 +50,6 @@ Use `fit_query()` when you want to apply filters, joins, or aggregations before 
 expressiveness of SQL is available at this step.
 
 ```{python}
-#| eval: false
 model2 = wk.DuckDBGAM("y ~ s(x, k=10)").fit_query(
     "SELECT x, y FROM sensor WHERE x < 4.0", conn
 )
@@ -64,7 +61,6 @@ model2.n_rows
 Prediction takes any dict of arrays (no DuckDB connection is needed after fitting).
 
 ```{python}
-#| eval: false
 new_data = {"x": np.linspace(0, 2 * np.pi, 100)}
 preds = model.predict(new_data)
 preds.values[:5]
