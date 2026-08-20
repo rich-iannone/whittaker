@@ -442,7 +442,7 @@ def _climate() -> dict[str, NDArray]:
 
     altitude = rng.uniform(0.0, 3000.0, n)
     latitude = rng.uniform(40.0, 70.0, n)
-    month = rng.integers(1, 13, endpoint=True, size=n).astype(float)
+    month = rng.integers(1, 13, size=n).astype(float)
 
     # True mean temperature (varies with altitude, latitude, and season)
     mu = (
