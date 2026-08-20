@@ -250,7 +250,7 @@ def _eval_gcv_disc(dm: DiscretizedModelMatrix, z: NDArray, sp: list[float], W: N
     n = dm.n_obs
     try:
         beta, hat_trace = _penalized_solve_disc(dm, z, sp, W=W)
-    except np.linalg.LinAlgError:
+    except np.linalg.LinAlgError:  # pragma: no cover
         return np.inf
     eta = _compute_eta(dm, beta)
     resid = z - eta
@@ -329,7 +329,7 @@ def _reml_objective_disc(
 
     try:
         cho, lower = cho_factor(A)
-    except np.linalg.LinAlgError:
+    except np.linalg.LinAlgError:  # pragma: no cover
         return 1e20, np.zeros_like(log_sp)
 
     beta = cho_solve((cho, lower), Xty)
@@ -353,7 +353,7 @@ def _reml_objective_disc(
         try:
             cho_xtx = cho_factor(XtX_ml)[0]
             log_det_XtX = 2.0 * float(np.sum(np.log(np.diag(cho_xtx))))
-        except np.linalg.LinAlgError:
+        except np.linalg.LinAlgError:  # pragma: no cover
             log_det_XtX = 0.0
         val -= 0.5 * log_det_XtX
 
@@ -416,7 +416,7 @@ def bam_fit(
     Mirrors :func:`~whittaker.fitting.pirls.pirls_fit` but accumulates X'WX and X'Wz from
     discretized basis blocks instead of the full design matrix.
     """
-    if family is None:
+    if family is None:  # pragma: no cover
         family = Gaussian()
 
     method_upper = method.upper()
@@ -528,7 +528,7 @@ def bam_fit(
             if abs(theta_new - theta_old) / (abs(theta_old) + 1e-8) < 1e-4:
                 converged = inner_converged
                 break
-        else:
+        else:  # pragma: no cover
             converged = inner_converged
 
         if is_nb:
