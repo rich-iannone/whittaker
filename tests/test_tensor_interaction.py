@@ -331,3 +331,21 @@ class TestTiGAM:
         rmse_te = np.sqrt(np.mean(model_te.get_residuals("response") ** 2))
         rmse_anova = np.sqrt(np.mean(model_anova.get_residuals("response") ** 2))
         assert abs(rmse_te - rmse_anova) / rmse_te < 0.5
+
+
+class TestTiListK:
+    """ti() with k as a list (per-variable basis dimensions)."""
+
+    def test_ti_list_k_fits(self) -> None:
+        import numpy as np
+        from whittaker.gam import GAM
+
+        rng = np.random.default_rng(0)
+        n = 200
+        x1 = rng.uniform(0, 1, n)
+        x2 = rng.uniform(0, 1, n)
+        y = np.sin(3 * x1) + np.cos(3 * x2) + rng.normal(0, 0.2, n)
+        data = {"y": y, "x1": x1, "x2": x2}
+
+        model = GAM("y ~ s(x1, k=6) + s(x2, k=6) + ti(x1, x2, k=[5, 6])").fit(data)
+        assert model.is_fitted
