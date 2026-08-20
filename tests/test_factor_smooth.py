@@ -422,3 +422,27 @@ class TestFactorSmoothGAM:
         g_global = GAM("y ~ s(x)", family=Gaussian()).fit(panel_data)
         g_fs = GAM("y ~ s(x, subject, bs='fs', k=6)", family=Gaussian()).fit(panel_data)
         assert g_fs._fit_result.deviance < g_global._fit_result.deviance
+
+
+class TestFactorSmoothBasisErrors:
+    """FactorSmoothBasis.fit() and basis_matrix() without factor arg raise ValueError."""
+
+    def test_fit_without_factor_raises(self):
+        from whittaker.smooths.factor_smooth import FactorSmoothBasis
+
+        basis = FactorSmoothBasis(k=6)
+        x = np.linspace(0, 1, 50)
+        with pytest.raises(ValueError, match="requires both"):
+            basis.fit(x)
+
+    def test_basis_matrix_without_factor_raises(self):
+        from whittaker.smooths.factor_smooth import FactorSmoothBasis
+
+        rng = np.random.default_rng(0)
+        n = 50
+        x = np.linspace(0, 1, n)
+        factor = np.repeat(["a", "b"], n // 2)
+        basis = FactorSmoothBasis(k=4)
+        basis.fit(x, factor)
+        with pytest.raises(ValueError, match="requires both"):
+            basis.basis_matrix(x)
