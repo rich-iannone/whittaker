@@ -165,7 +165,7 @@ class TestLoadDataset:
 
     def test_climate_month_range(self):
         data = load_dataset("climate")
-        assert np.all(data["month"] >= 1)
+        assert np.all(data["month"] >= 1) and np.all(data["month"] <= 12)
 
     # ------------------------------------------------------------------
     # Reproducibility
