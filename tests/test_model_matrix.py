@@ -783,3 +783,22 @@ class TestPredictOffset:
         offset = predict_offset(model, new_data)
         assert offset is not None
         assert_allclose(offset, new_x + new_x * 2.0)
+
+
+class TestInteractionTermFullPredict:
+    """InteractionTerm with full=True adds main-effect columns in predict_matrix."""
+
+    def test_full_interaction_predict_matrix(self) -> None:
+        rng = np.random.default_rng(0)
+        n = 100
+        x1 = rng.uniform(0, 1, n)
+        x2 = rng.uniform(0, 1, n)
+        y = x1 + x2 + x1 * x2 + rng.normal(0, 0.1, n)
+        data = {"y": y, "x1": x1, "x2": x2}
+
+        formula = parse("y ~ x1 * x2")
+        model = build_model_matrix(formula, data)
+        new_data = {"x1": np.array([0.2, 0.5, 0.8]), "x2": np.array([0.3, 0.6, 0.9])}
+        X_new = predict_matrix(model, new_data)
+        assert X_new.shape[0] == 3
+        assert X_new.shape[1] == model.X.shape[1]
