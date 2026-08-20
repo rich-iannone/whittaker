@@ -364,3 +364,21 @@ class TestT2GAM:
         chart = model.plot()
         assert isinstance(chart, alt.HConcatChart)
         assert chart.to_dict() is not None
+
+
+class TestT2ListK:
+    """t2() with k as a list (per-variable basis dimensions)."""
+
+    def test_t2_list_k_fits(self) -> None:
+        import numpy as np
+        from whittaker.gam import GAM
+
+        rng = np.random.default_rng(0)
+        n = 200
+        x1 = rng.uniform(0, 1, n)
+        x2 = rng.uniform(0, 1, n)
+        y = x1 * x2 + rng.normal(0, 0.1, n)
+        data = {"y": y, "x1": x1, "x2": x2}
+
+        model = GAM("y ~ t2(x1, x2, k=[5, 6])").fit(data)
+        assert model.is_fitted
