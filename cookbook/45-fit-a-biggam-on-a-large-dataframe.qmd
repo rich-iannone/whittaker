@@ -17,7 +17,6 @@ Simulate a large dataset with two covariates and a response that combines a sinu
 effect.
 
 ```{python}
-#| eval: false
 import numpy as np
 import whittaker as wk
 
@@ -36,7 +35,6 @@ data = {"y": y, "x1": x1, "x2": x2}
 is better suited to discretized data than `"REML"`.
 
 ```{python}
-#| eval: false
 model = wk.BigGAM("y ~ s(x1, k=10) + s(x2, k=10)").fit(data)
 model.summary()
 ```
@@ -47,7 +45,6 @@ Prediction works identically to a standard GAM: pass a dict of arrays for the co
 interest.
 
 ```{python}
-#| eval: false
 new_data = {"x1": np.array([0.5, 1.0, 2.0]), "x2": np.array([0.2, 0.5, 0.8])}
 preds = model.predict(new_data)
 preds.values

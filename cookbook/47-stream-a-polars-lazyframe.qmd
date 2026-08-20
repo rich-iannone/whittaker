@@ -16,7 +16,6 @@ Build a large synthetic dataset as a Polars `DataFrame`, then convert it to a `L
 workflow this might point at a Parquet file or a query chain that has not yet executed.
 
 ```{python}
-#| eval: false
 import numpy as np
 import polars as pl
 import whittaker as wk
@@ -40,7 +39,6 @@ Pass the `LazyFrame` directly to `fit()`. `PolarsGAM` triggers execution interna
 through the discretized-basis fitting algorithm.
 
 ```{python}
-#| eval: false
 model = wk.PolarsGAM("y ~ s(x1, k=10) + s(x2, k=8)").fit(lazy)
 model.summary()
 ```
@@ -50,7 +48,6 @@ model.summary()
 After fitting, `n_rows` reports how many observations were processed.
 
 ```{python}
-#| eval: false
 model.n_rows
 ```
 
@@ -59,7 +56,6 @@ model.n_rows
 Predictions use a plain dict of arrays, with no Polars dependency at inference time.
 
 ```{python}
-#| eval: false
 new_data = {"x1": np.array([0.5, 1.5, 2.5]), "x2": np.array([0.2, 0.5, 0.8])}
 preds = model.predict(new_data)
 preds.values
