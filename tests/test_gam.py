@@ -231,6 +231,18 @@ class TestSummary:
         with pytest.raises(RuntimeError):
             GAM("y ~ s(x)").summary()
 
+    def test_summary_repr(self) -> None:
+        data = _sin_data()
+        model = GAM("y ~ s(x)").fit(data)
+        s = model.summary()
+        assert "GAM fit summary" in repr(s)
+
+    def test_summary_str(self) -> None:
+        data = _sin_data()
+        model = GAM("y ~ s(x)").fit(data)
+        s = model.summary()
+        assert "GAM fit summary" in str(s)
+
 
 # ---------------------------------------------------------------------------
 # Multiple smooths
