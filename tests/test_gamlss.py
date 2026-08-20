@@ -602,3 +602,15 @@ class TestBetaLSFitting:
         assert "BetaLS" in s
         assert "mu" in s
         assert "phi" in s
+
+
+class TestGAMLSSEdgeCases:
+    """Edge-case paths in gamlss_fit."""
+
+    def test_invalid_method_raises(self, homoscedastic_data):
+        model = GAMLSS(
+            formulas={"mu": "y ~ s(x)", "sigma": "y ~ 1"},
+            family=GaussianLS(),
+        )
+        with pytest.raises(ValueError, match="method must be"):
+            model.fit(homoscedastic_data, method="BOGUS")
