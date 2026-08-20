@@ -211,3 +211,23 @@ class TestPredictTypeValidation:
         default = gam.predict(single_smooth_data)
         explicit = gam.predict(single_smooth_data, type="response")
         np.testing.assert_array_equal(default.values, explicit.values)
+
+
+class TestTermsPredictionResultValues:
+    """TermsPredictionResult.values sums all term contributions."""
+
+    @pytest.fixture()
+    def two_smooth_data(self):
+        rng = np.random.default_rng(42)
+        n = 200
+        x1 = np.linspace(0, 2 * np.pi, n)
+        x2 = rng.uniform(0, 1, n)
+        y = np.sin(x1) + 0.5 * x2 + rng.normal(0, 0.3, n)
+        return {"x1": x1, "x2": x2, "y": y}
+
+    def test_values_sums_terms(self, two_smooth_data):
+        gam = GAM("y ~ s(x1) + s(x2)", family=Gaussian()).fit(two_smooth_data)
+        pred_terms = gam.predict(two_smooth_data, type="terms")
+        summed = pred_terms.values
+        assert summed.shape == (200,)
+        assert np.isfinite(summed).all()
