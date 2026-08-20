@@ -223,10 +223,10 @@ def build_discretized_model_matrix(
         else:
             x = np.column_stack([_extract_column(data, v) for v in term.variables])
 
-        basis.fit(x)
+        unique_x, disc_indices = _discretize_nd(x, n_discrete)
+        basis.fit(unique_x)
         nsd = basis.null_space_dimension()
 
-        unique_x, disc_indices = _discretize_nd(x, n_discrete)
         unique_basis_mat = basis.basis_matrix(unique_x)
 
         if hasattr(basis, "penalty_matrices"):
