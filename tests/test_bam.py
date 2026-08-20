@@ -7,6 +7,7 @@ import pytest
 
 from whittaker.bam import BigGAM, build_discretized_model_matrix
 from whittaker.families.binomial import Binomial
+from whittaker.families.negative_binomial import NegativeBinomial
 from whittaker.families.poisson import Poisson
 from whittaker.fitting.bam import _discretize_1d, _discretize_nd
 from whittaker.formula.parser import parse
@@ -464,3 +465,168 @@ class TestBigGAMSmoothTests:
         tests = model.smooth_tests()
         assert tests[0].p_value < 0.01
         assert tests[1].p_value > 0.05
+
+
+class TestBigGAMML:
+    """ML smoothing parameter selection for BigGAM."""
+
+    @pytest.fixture()
+    def sin_data(self):
+        rng = np.random.default_rng(0)
+        n = 300
+        x = np.linspace(0, 2 * np.pi, n)
+        y = np.sin(x) + rng.normal(0, 0.3, n)
+        return {"x": x, "y": y}
+
+    def test_gaussian_ml(self, sin_data):
+        model = BigGAM("y ~ s(x)").fit(sin_data, method="ML")
+        assert model.is_fitted
+
+    def test_poisson_ml(self):
+        rng = np.random.default_rng(1)
+        n = 300
+        x = np.linspace(0, 2 * np.pi, n)
+        mu = np.exp(0.5 + 0.5 * np.sin(x))
+        y = rng.poisson(mu).astype(float)
+        data = {"x": x, "y": y}
+        model = BigGAM("y ~ s(x)", family=Poisson()).fit(data, method="ML")
+        assert model.is_fitted
+
+    def test_invalid_method_raises(self, sin_data):
+        with pytest.raises(ValueError, match="method must be"):
+            BigGAM("y ~ s(x)").fit(sin_data, method="BOGUS")
+
+
+class TestBigGAMNegativeBinomial:
+    """BigGAM with NegativeBinomial family (outer theta-estimation loop)."""
+
+    def test_nb_fit(self):
+        rng = np.random.default_rng(2)
+        n = 300
+        x = np.linspace(0, 2 * np.pi, n)
+        mu = np.exp(0.5 + 0.5 * np.sin(x))
+        theta = 5.0
+        p = theta / (theta + mu)
+        y = rng.negative_binomial(theta, p).astype(float)
+        data = {"x": x, "y": y}
+        model = BigGAM("y ~ s(x)", family=NegativeBinomial(theta=2.0)).fit(data)
+        assert model.is_fitted
+
+    def test_nb_predict(self):
+        rng = np.random.default_rng(3)
+        n = 200
+        x = np.linspace(0, 2 * np.pi, n)
+        mu = np.exp(0.3 + 0.4 * np.sin(x))
+        theta = 3.0
+        p = theta / (theta + mu)
+        y = rng.negative_binomial(int(theta), p).astype(float)
+        data = {"x": x, "y": y}
+        model = BigGAM("y ~ s(x)", family=NegativeBinomial()).fit(data)
+        preds = model.predict({"x": np.linspace(0, 2 * np.pi, 10)})
+        assert np.all(preds.values > 0)
+
+
+class TestBigGAMLinearOnly:
+    """BigGAM with no smooth terms — exercises the n_sp==0 early-return path."""
+
+    @pytest.fixture()
+    def linear_data(self):
+        rng = np.random.default_rng(4)
+        n = 300
+        x = rng.uniform(0, 5, n)
+        y = 2.0 + 0.7 * x + rng.normal(0, 0.5, n)
+        return {"x": x, "y": y}
+
+    def test_gcv_no_smooths(self, linear_data):
+        model = BigGAM("y ~ x").fit(linear_data, method="GCV")
+        assert model.is_fitted
+
+    def test_reml_no_smooths(self, linear_data):
+        model = BigGAM("y ~ x").fit(linear_data, method="REML")
+        assert model.is_fitted
+
+
+class TestBigGAMOffset:
+    """BigGAM fit with an offset term exercises the dm.offset branch."""
+
+    def test_fit_with_offset(self):
+        rng = np.random.default_rng(5)
+        n = 300
+        x = np.linspace(0, 2 * np.pi, n)
+        off = rng.normal(0, 0.2, n)
+        y = np.sin(x) + off + rng.normal(0, 0.3, n)
+        data = {"x": x, "off": off, "y": y}
+        model = BigGAM("y ~ s(x) + offset(off)").fit(data)
+        assert model.is_fitted
+
+    def test_predict_with_offset(self):
+        rng = np.random.default_rng(5)
+        n = 300
+        x = np.linspace(0, 2 * np.pi, n)
+        off = rng.normal(0, 0.2, n)
+        y = np.sin(x) + off + rng.normal(0, 0.3, n)
+        data = {"x": x, "off": off, "y": y}
+        model = BigGAM("y ~ s(x) + offset(off)").fit(data)
+        new_data = {"x": np.array([0.5, 1.5]), "off": np.array([0.0, 0.0])}
+        preds = model.predict(new_data)
+        assert preds.values.shape == (2,)
+
+
+class TestBigGAMSmoothingParams:
+    """BigGAM with explicit smoothing_params covers the manual-params path."""
+
+    @pytest.fixture()
+    def sin_data(self):
+        rng = np.random.default_rng(6)
+        n = 300
+        x = np.linspace(0, 2 * np.pi, n)
+        y = np.sin(x) + rng.normal(0, 0.3, n)
+        return {"x": x, "y": y}
+
+    def test_explicit_params_fit(self, sin_data):
+        model = BigGAM("y ~ s(x)").fit(sin_data, smoothing_params=[1.0])
+        assert model.is_fitted
+
+    def test_wrong_n_params_raises(self, sin_data):
+        with pytest.raises(ValueError, match="Expected"):
+            BigGAM("y ~ s(x)").fit(sin_data, smoothing_params=[1.0, 2.0])
+
+
+class TestBigGAMQuantileFamily:
+    """BigGAM with QuantileFamily exercises the custom irls_update path."""
+
+    def test_quantile_fit(self):
+        from whittaker.families.quantile import QuantileFamily
+
+        rng = np.random.default_rng(7)
+        n = 300
+        x = np.linspace(0, 2 * np.pi, n)
+        y = np.sin(x) + rng.normal(0, 0.3, n)
+        data = {"x": x, "y": y}
+        model = BigGAM("y ~ s(x)", family=QuantileFamily(tau=0.5, sigma=0.1)).fit(data)
+        assert model.is_fitted
+
+
+class TestBigGAMSelectRandomEffect:
+    """Covers the select+random-effect null-space penalty path."""
+
+    def test_select_random_effect(self):
+        rng = np.random.default_rng(8)
+        n = 300
+        grp = np.repeat(np.arange(10), 30)
+        y = grp * 0.1 + rng.normal(0, 0.5, n)
+        data = {"y": y.astype(float), "grp": grp.astype(float)}
+        dm = build_discretized_model_matrix(
+            parse("y ~ s(grp, bs='re')"),
+            data,
+            select=True,
+        )
+        assert dm is not None
+
+    def test_n_discrete_property(self):
+        rng = np.random.default_rng(9)
+        n = 300
+        x = np.linspace(0, 2 * np.pi, n)
+        y = np.sin(x) + rng.normal(0, 0.3, n)
+        model = BigGAM("y ~ s(x)", n_discrete=100).fit({"x": x, "y": y})
+        assert model.n_discrete == 100
