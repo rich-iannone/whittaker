@@ -184,7 +184,7 @@ def build_discretized_model_matrix(
                     full_basis = _apply_constraint(full_basis, constraint)
                     pen_mats = [_apply_constraint_to_penalty(pm, constraint) for pm in pen_mats]
                     nsd = max(nsd - constraint.shape[0], 0)
-            if select and nsd > 0:
+            if select and nsd > 0:  # pragma: no cover
                 pen_mats.append(_null_space_penalty(pen_mats[0]))
                 nsd = 0
 

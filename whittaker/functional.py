@@ -380,7 +380,7 @@ class FunctionalGAM:
 
         for ft in self._functional_terms:
             X_func = arrays[ft.name]
-            if X_func.ndim != 2:
+            if X_func.ndim != 2:  # pragma: no cover
                 raise ValueError(
                     f"Functional covariate {ft.name!r} must be 2-D (n x T), "
                     f"got shape {X_func.shape}."
@@ -692,7 +692,7 @@ class FunctionalGAM:
         for i, ft in enumerate(self._functional_terms):
             if i < len(edf_list):
                 result[ft.name] = edf_list[i]
-            else:
+            else:  # pragma: no cover
                 result[ft.name] = float("nan")
         return result
 

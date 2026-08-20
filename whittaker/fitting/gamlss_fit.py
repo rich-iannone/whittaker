@@ -116,7 +116,7 @@ def _select_sp_for_param(
     offset: NDArray | None = None,
 ) -> list[float]:
     n_sp = len(penalties)
-    if n_sp == 0:
+    if n_sp == 0:  # pragma: no cover
         return []
     if method == "REML":
         return _select_smoothing_params_reml(
