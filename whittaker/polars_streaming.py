@@ -226,8 +226,6 @@ class PolarsGAM(BigGAM):
             `.parquet` (`scan_parquet`), `.csv` (`scan_csv`), `.ipc`/`.arrow` (`scan_ipc`), or
             `.ndjson`/`.jsonl` (`scan_ndjson`). Any other type or unrecognized extension raises
             `TypeError` or `ValueError` respectively.
-        weights : numpy.ndarray, optional
-            Observation (prior) weights, shape `(n,)`. Must be strictly positive.
         smoothing_params : list of float, optional
             Fixed smoothing parameters `lambda_j`, one per smooth term, in formula order. If
             `None` (the default), smoothing parameters are selected automatically according to
