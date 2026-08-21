@@ -22,8 +22,16 @@ class TestListDatasets:
     def test_expected_dataset_names_present(self):
         names = {row["name"] for row in list_datasets()}
         expected = {
-            "mcycle", "co2", "fish", "credit", "wages",
-            "proportions", "meuse", "survival", "abalone", "climate",
+            "mcycle",
+            "co2",
+            "fish",
+            "credit",
+            "wages",
+            "proportions",
+            "meuse",
+            "survival",
+            "abalone",
+            "climate",
         }
         assert expected <= names
 
