@@ -2,7 +2,7 @@ r"""Tweedie family with estimated variance power parameter.
 
 Provides `tw()` which creates a Tweedie family whose variance power `p` is estimated from the data
 by profile likelihood. During `GAM.fit()`, the model is fitted at a grid of candidate `p` values and
-the one minimising AIC (or another criterion) is selected.
+the one minimizing AIC (or another criterion) is selected.
 """
 
 from __future__ import annotations
