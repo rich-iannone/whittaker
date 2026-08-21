@@ -23,13 +23,6 @@ class Binomial(Family):
     interpretation: a one-unit increase in a covariate changes the log-odds of success by
     `coefficient`, and multiplies the odds by `exp(coefficient)`.
 
-    Parameters
-    ----------
-    None
-        `Binomial` takes no constructor arguments. The scale parameter is fixed at `1` (see
-        `scale_known`), since the Bernoulli/Binomial distribution has no free dispersion
-        parameter.
-
     Notes
     -----
     The canonical link is the logit function:
