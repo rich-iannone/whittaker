@@ -1,0 +1,253 @@
+---
+title: "Variational inference"
+guide-section: "Advanced features"
+---
+
+```{python}
+#| echo: false
+#| output: false
+import great_docs as gd
+
+gd.enable_tbl_preview(n_head=8, n_tail=3)
+```
+
+Whittaker's default fitting pipeline uses P-IRLS to find the posterior mode $\hat\beta$ and then
+treats the **Laplace approximation** $q(\beta) = \mathcal{N}(\hat\beta,\, V_\beta)$ as the
+posterior, where $V_\beta = \phi\,(X^\top W X + \sum_j \lambda_j S_j)^{-1}$. For Gaussian response
+this is exact. For non-Gaussian families (Poisson, Binomial, Gamma) it is an approximation that can
+underestimate posterior spread when the likelihood surface is skewed.
+
+**Variational inference (VI)** replaces the Laplace approximation with a better-calibrated
+posterior, chosen by maximizing the Evidence Lower BOund (ELBO):
+
+$$\text{ELBO}(\phi) = \mathbb{E}_q[\log p(y \mid \beta)] - \text{KL}\bigl(q(\beta) \|\, p(\beta \mid \boldsymbol\lambda)\bigr)$$
+
+The key practical benefit is more accurate uncertainty quantification for non-Gaussian families,
+especially at small-to-moderate sample sizes, without the cost or complexity of MCMC.
+
+## When to use VI
+
+Use `method="VI"` when:
+
+- your response is non-Gaussian (e.g., Poisson, Binomial, Gamma, etc.) **and** you want
+  well-calibrated and credible intervals rather than Wald-style confidence intervals
+- sample sizes are moderate ($n \lesssim 5000$) and the posterior may be skewed
+- you want a principled probabilistic posterior (not just a point estimate with a heuristic
+  covariance) but MCMC is too slow for your use case
+
+For large $n$, the Laplace approximation is already very accurate and `method="REML"` (the default)
+is both faster and nearly as good. For Gaussian response, VI and Laplace give identical results.
+Whittaker detects this and skips the optimization entirely.
+
+## Basic usage
+
+Pass `method="VI"` to `fit()` (everything else stays the same).
+
+```{python}
+import numpy as np
+import whittaker as wk
+from whittaker.families.poisson import Poisson
+
+rng = np.random.default_rng(23)
+n = 300
+x = np.linspace(0, 2 * np.pi, n)
+lam = np.exp(1.5 * np.sin(x))
+y = rng.poisson(lam).astype(float)
+
+data = {"x": x, "y": y}
+
+model = wk.GAM("y ~ s(x)", family=Poisson())
+model.fit(data, method="VI")
+model.summary()
+```
+
+The summary shows `Inference: Variational Bayes` and the final ELBO instead of GCV/AIC/BIC, which
+are not defined for VI fits.
+
+## The variational family
+
+Whittaker uses a **full-rank Gaussian** variational family:
+
+$$q(\beta) = \mathcal{N}(m,\, C), \qquad C = LL^\top$$
+
+where $m \in \mathbb{R}^p$ is the variational mean and $L$ is a lower-triangular Cholesky factor
+with positive diagonal. This parameterization guarantees positive-definiteness throughout
+optimization and it yields numerically stable gradients.
+
+Full-rank covariance is a good default for GAMs: smooth coefficients within a term are heavily
+correlated by construction, and a diagonal (mean-field) approximation would produce incorrect
+uncertainty estimates for the smooth curves.
+
+The parameters $(m, L)$ are initialized from the P-IRLS solution (VI is a refinement of the
+Laplace approximation and not a replacement) and then optimized with the Adam optimizer.
+
+## Predictions and uncertainty
+
+`predict(se=True)` and confidence intervals work exactly as with any other fitting method. Standard
+errors are derived from the variational posterior covariance $C$:
+
+$$\text{SE}(\hat\eta_i) = \sqrt{x_i^\top C\, x_i}$$
+
+```{python}
+import matplotlib.pyplot as plt
+
+x_new = np.linspace(0, 2 * np.pi, 200)
+preds = model.predict({"x": x_new}, se=True, interval="confidence")
+
+fig, ax = plt.subplots()
+ax.scatter(x, y, alpha=0.3, s=10, label="Data")
+ax.plot(x_new, preds.values, label="VI fit")
+ax.fill_between(x_new, preds.lower, preds.upper, alpha=0.25, label="95% credible interval")
+ax.set_xlabel("x")
+ax.set_ylabel("μ")
+ax.legend()
+plt.tight_layout()
+plt.show()
+```
+
+## Inspecting the variational result
+
+The `vi_result` property returns the underlying `VIResult` object with detailed information about
+the optimization:
+
+```{python}
+vr = model.vi_result
+
+print(f"ELBO at convergence: {vr.elbo:.4f}")
+print(f"Iterations: {vr.n_iter}")
+print(f"Converged: {vr.converged}")
+print(f"Posterior covariance shape: {vr.posterior_cov.shape}")
+```
+
+Note that `vi_result` will be `None` if the model was fitted with any other method.
+
+### ELBO trace
+
+The ELBO should increase monotonically (or nearly so) as optimization proceeds. A non-monotone trace
+suggests that the learning rate is too high. Plot `elbo_history` to diagnose:
+
+```{python}
+plt.figure()
+plt.plot(vr.elbo_history)
+plt.xlabel("Iteration")
+plt.ylabel("ELBO")
+plt.title("ELBO convergence trace")
+plt.tight_layout()
+plt.show()
+```
+
+A trace that rises quickly and then flattens is ideal. Oscillations indicate `lr` should be
+reduced. A trace that rises very slowly may benefit from a larger `lr` or more iterations.
+
+## Posterior samples
+
+`posterior_samples(n)` draws coefficient vectors directly from $q(\beta) = \mathcal{N}(m, C)$:
+
+```{python}
+beta_samples = model.posterior_samples(n=500, seed=42)
+print(f"Shape: {beta_samples.shape}")  # (p, 500)
+```
+
+This also works after `method="REML"` or `"GCV"` fits (in that case samples are drawn from the
+Laplace posterior), so code that uses `posterior_samples()` is inference-method agnostic.
+
+## Simulating from the posterior
+
+`simulate()` uses the posterior coefficient samples to propagate uncertainty through the response
+distribution:
+
+```{python}
+sims = model.simulate(n_sim=200, seed=0)
+print(f"Simulations shape: {sims.shape}")  # (n, 200): integer count draws
+```
+
+## Controlling VI
+
+Pass a `vi_options=` dict to `fit()` to override any of the optimizer settings:
+
+```python
+model = wk.GAM("y ~ s(x)", family=Poisson()).fit(
+    data,
+    method="VI",
+    vi_options={
+        "lr": 0.005,        # Adam learning rate (default 0.01)
+        "max_iter": 2000,   # maximum optimizer steps (default 1000)
+        "tol": 1e-5,        # relative ELBO change threshold (default of 1e-4)
+        "patience": 10,     # consecutive steps below tol before stopping (the default is 5)
+        "n_quad": 30,       # Gauss-Hermite quadrature points (default: 20)
+        "seed": 42,         # reproducibility
+    },
+)
+```
+
+### Block-diagonal covariance
+
+For large models with many smooth terms, the full $p \times p$ Cholesky factor can be expensive to
+run. `cov_structure="block"` assigns one Cholesky block per smooth term, dropping cross-term
+correlations:
+
+```python
+model = wk.GAM("y ~ s(x1) + s(x2) + s(x3)", family=Poisson()).fit(
+    data,
+    method="VI",
+    vi_options={"cov_structure": "block"},
+)
+```
+
+The cost drops from $O(p^2)$ to $O(\sum_j k_j^2)$, where $k_j$ is the basis dimension of the $j$-th
+smooth. For a model with 5 terms each with $k = 10$, this is a 5x reduction in parameters.
+
+### Variational scale parameter
+
+For families with a separate scale parameter $\phi$ (Gamma, InverseGaussian), the default is to
+fix $\phi$ at its P-IRLS estimate. Setting `phi_inference="variational"` includes $\log\phi$ in
+the variational family as a log-normal marginal
+$q(\phi) = \text{LogNormal}(\mu_\phi, \sigma_\phi^2)$, which gives better-calibrated intervals when
+$n$ is small:
+
+```python
+from whittaker.families.gamma import Gamma
+
+model = wk.GAM("y ~ s(x)", family=Gamma()).fit(
+    data,
+    method="VI",
+    vi_options={"phi_inference": "variational"},
+)
+
+vr = model.vi_result
+print(f"log φ mean: {vr.log_phi_mean:.4f}")
+print(f"log φ variance: {vr.log_phi_var:.4f}")
+```
+
+## Gaussian fast path
+
+For Gaussian response with the identity link, the Laplace approximation is the exact posterior (no
+optimization is needed). Whittaker detects this and returns immediately with $n\_\text{iter} = 0$:
+
+```{python}
+from whittaker.families.gaussian import Gaussian
+
+gauss_model = wk.GAM("y ~ s(x)", family=Gaussian()).fit(
+    {"x": np.linspace(0, 1, 200), "y": rng.normal(size=200)},
+    method="VI",
+)
+print(f"Iterations: {gauss_model.vi_result.n_iter}")   # 0
+print(f"Converged: {gauss_model.vi_result.converged}") # True
+```
+
+The `VIResult` from a Gaussian fit is identical to what the Laplace approximation would give, so
+switching between `method="REML"` and `method="VI"` is seamless for Gaussian models.
+
+## Properties not available for VI fits
+
+The `deviance`, `null_deviance`, `deviance_explained`, `aic`, `bic`, and `gcv_score` properties are
+not defined for VI fits and raise `NotImplementedError`. Use the ELBO as the convergence diagnostic
+and use posterior predictive checks (via `simulate()`) for model comparison.
+
+## Where to go next
+
+- **[Prediction and inference](06-prediction.qmd)**: confidence intervals, simultaneous bands, and
+  term-level predictions from any fitted model.
+- **[Model diagnostics](07-diagnostics.qmd)**: residual plots and `model.check()`.
+- **[Model fitting](05-fitting.qmd)**: P-IRLS, REML, and smoothness selection.
+- **[Response families](04-families.qmd)**: how the family affects VI convergence and calibration.
