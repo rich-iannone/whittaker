@@ -21,13 +21,6 @@ class Gaussian(Family):
     strictly positive quantity, consider `Poisson`, `Binomial`, `Gamma`, or another family
     instead.
 
-    Parameters
-    ----------
-    None
-        `Gaussian` takes no constructor arguments; the scale parameter `phi` (the residual
-        variance `sigma^2`) is estimated from the data during fitting rather than supplied by
-        the user.
-
     Notes
     -----
     The canonical (and only supported) link is the identity function:

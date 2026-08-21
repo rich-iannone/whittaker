@@ -24,12 +24,6 @@ class GammaLS(GAMLSSFamily):
     volatility grows with the covariates rather than staying proportional to `mu` alone. Both
     parameters use the log link, keeping `mu > 0` and `sigma > 0`.
 
-    Parameters
-    ----------
-    None
-        `GammaLS` takes no constructor arguments; both `mu` and `sigma` are modeled entirely
-        through the formulas supplied to `GAMLSS`.
-
     Notes
     -----
     `GammaLS` parameterizes the Gamma distribution by its mean `mu > 0` and its coefficient of

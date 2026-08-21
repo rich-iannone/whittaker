@@ -26,12 +26,6 @@ class ZeroInflatedPoisson(GAMLSSFamily):
     If overdispersion remains even among the non-structural-zero counts, use
     `ZeroInflatedNegativeBinomial` instead.
 
-    Parameters
-    ----------
-    None
-        `ZeroInflatedPoisson` takes no constructor arguments; both `mu` and `pi` are modeled
-        entirely through the formulas supplied to `GAMLSS`.
-
     Notes
     -----
     Two distributional parameters are modeled, each with its own link:

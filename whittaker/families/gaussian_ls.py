@@ -20,12 +20,6 @@ class GaussianLS(GAMLSSFamily):
     `mu` uses the identity link (as in `Gaussian`), and `sigma` uses the log link, which keeps
     the fitted standard deviation positive.
 
-    Parameters
-    ----------
-    None
-        `GaussianLS` takes no constructor arguments; both `mu` and `sigma` are modeled entirely
-        through the formulas supplied to `GAMLSS`.
-
     Notes
     -----
     The two parameters use distinct link functions:

@@ -20,12 +20,6 @@ class Poisson(Family):
     the linear predictor a multiplicative interpretation: a one-unit increase in a covariate
     multiplies the expected count by `exp(coefficient)`.
 
-    Parameters
-    ----------
-    None
-        `Poisson` takes no constructor arguments. The scale parameter is fixed at `1` (see
-        `scale_known`), since the Poisson distribution has no free dispersion parameter.
-
     Notes
     -----
     The canonical link is the natural logarithm:

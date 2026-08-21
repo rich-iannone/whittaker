@@ -23,13 +23,6 @@ class Gamma(Family):
     across the range of fitted values; if instead the variance grows linearly with the mean,
     `Poisson` or `Tweedie` with `1 < p < 2` may fit better.
 
-    Parameters
-    ----------
-    None
-        `Gamma` takes no constructor arguments. The dispersion parameter `phi = 1/alpha` (the
-        inverse of the shape parameter) is estimated from the data during fitting (see
-        `scale_known`).
-
     Notes
     -----
     The (non-canonical, but default) link is the natural logarithm:

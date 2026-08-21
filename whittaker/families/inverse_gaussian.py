@@ -23,12 +23,6 @@ class InverseGaussian(Family):
     The log link is used for the same reasons as in `Gamma`: it keeps fitted values positive and
     gives coefficients a multiplicative interpretation.
 
-    Parameters
-    ----------
-    None
-        `InverseGaussian` takes no constructor arguments. The dispersion parameter `phi` is
-        estimated from the data during fitting (see `scale_known`).
-
     Notes
     -----
     The link is the natural logarithm:
