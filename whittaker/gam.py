@@ -941,7 +941,7 @@ class GAM:
             Residual vector, shape `(n,)`. A copy, safe to mutate.
         """
         self._check_fitted()
-        return self._fit_result.residuals.copy()
+        return self._require_fit_result().residuals.copy()
 
     def get_residuals(self, type: str = "deviance") -> NDArray:
         """Compute residuals of the specified type.
@@ -1225,7 +1225,9 @@ class GAM:
         from whittaker.fitting.inference import parametric_tests
 
         self._check_fitted()
-        return parametric_tests(self._fit_result, self._model_matrix, self._family.scale_known)
+        return parametric_tests(
+            self._require_fit_result(), self._model_matrix, self._family.scale_known
+        )
 
     def smooth_tests(self) -> list:
         """Compute approximate p-values for all smooth terms.
@@ -1241,7 +1243,7 @@ class GAM:
         from whittaker.fitting.inference import smooth_tests
 
         self._check_fitted()
-        return smooth_tests(self._fit_result, self._model_matrix)
+        return smooth_tests(self._require_fit_result(), self._model_matrix)
 
     def k_check(self, *, n_sim: int = 400) -> list:
         """Check basis dimension adequacy for each smooth term.
@@ -1265,7 +1267,9 @@ class GAM:
 
         self._check_fitted()
         resid = self.get_residuals("deviance")
-        return k_check(self._fit_result, self._model_matrix, self._data, resid, n_sim=n_sim)
+        return k_check(
+            self._require_fit_result(), self._model_matrix, self._data, resid, n_sim=n_sim
+        )
 
     def gam_check(self, *, n_sim: int = 100) -> GamCheckResult:
         """Run all-in-one GAM diagnostics.
@@ -1402,7 +1406,7 @@ class GAM:
         from whittaker.fitting.inference import concurvity
 
         self._check_fitted()
-        return concurvity(self._fit_result, self._model_matrix, full=full)
+        return concurvity(self._require_fit_result(), self._model_matrix, full=full)
 
     def anova(self, *others: GAM) -> object:
         """Compare this model with one or more other fitted GAMs via deviance-difference tests.
@@ -1471,41 +1475,42 @@ class GAM:
             f"Coefficients: {mm.n_coefs}",
         ]
 
-        ptests = self.parametric_tests()
-        if ptests:
-            stat_label = "z value" if self._family.scale_known else "t value"
+        if not isinstance(r, VIResult):
+            ptests = self.parametric_tests()
+            if ptests:
+                stat_label = "z value" if self._family.scale_known else "t value"
+                lines.extend(
+                    [
+                        "",
+                        "Parametric coefficients:",
+                        f"  {'Term':<24} {'Estimate':>10} {'Std.Err':>10} "
+                        f"{stat_label:>10} {'p-value':>10}",
+                        f"  {'-' * 24} {'-' * 10} {'-' * 10} {'-' * 10} {'-' * 10}",
+                    ]
+                )
+                for pt in ptests:
+                    pval_str = f"{pt.p_value:.4g}" if pt.p_value >= 1e-16 else "< 1e-16"
+                    lines.append(
+                        f"  {pt.term_label:<24} {pt.estimate:>10.4f} {pt.se:>10.4f} "
+                        f"{pt.stat:>10.3f} {pval_str:>10}"
+                    )
+
+            stests = self.smooth_tests()
             lines.extend(
                 [
                     "",
-                    "Parametric coefficients:",
-                    f"  {'Term':<24} {'Estimate':>10} {'Std.Err':>10} "
-                    f"{stat_label:>10} {'p-value':>10}",
-                    f"  {'-' * 24} {'-' * 10} {'-' * 10} {'-' * 10} {'-' * 10}",
+                    "Approximate significance of smooth terms:",
+                    f"  {'Term':<24} {'EDF':>6} {'Ref.df':>6} {'Chi.sq':>10} {'p-value':>10}",
+                    f"  {'-' * 24} {'-' * 6} {'-' * 6} {'-' * 10} {'-' * 10}",
                 ]
             )
-            for pt in ptests:
-                pval_str = f"{pt.p_value:.4g}" if pt.p_value >= 1e-16 else "< 1e-16"
+
+            for test in stests:
+                pval_str = f"{test.p_value:.4g}" if test.p_value >= 1e-16 else "< 1e-16"
                 lines.append(
-                    f"  {pt.term_label:<24} {pt.estimate:>10.4f} {pt.se:>10.4f} "
-                    f"{pt.stat:>10.3f} {pval_str:>10}"
+                    f"  {test.term_label:<24} {test.edf:>6.2f} {test.ref_df:>6.0f} "
+                    f"{test.stat:>10.3f} {pval_str:>10}"
                 )
-
-        stests = self.smooth_tests()
-        lines.extend(
-            [
-                "",
-                "Approximate significance of smooth terms:",
-                f"  {'Term':<24} {'EDF':>6} {'Ref.df':>6} {'Chi.sq':>10} {'p-value':>10}",
-                f"  {'-' * 24} {'-' * 6} {'-' * 6} {'-' * 10} {'-' * 10}",
-            ]
-        )
-
-        for test in stests:
-            pval_str = f"{test.p_value:.4g}" if test.p_value >= 1e-16 else "< 1e-16"
-            lines.append(
-                f"  {test.term_label:<24} {test.edf:>6.2f} {test.ref_df:>6.0f} "
-                f"{test.stat:>10.3f} {pval_str:>10}"
-            )
 
         lines.append("")
         lines.append(f"Total EDF:  {r.edf_total:.2f}")
@@ -1588,7 +1593,7 @@ class GAM:
         from whittaker.fitting.inference import influence
 
         self._check_fitted()
-        return influence(self._fit_result, self._model_matrix)
+        return influence(self._require_fit_result(), self._model_matrix)
 
     def quantile_residuals(self, *, seed: int | None = None) -> NDArray:
         """Compute randomized quantile residuals (Dunn & Smyth 1996).
@@ -1608,7 +1613,9 @@ class GAM:
         from whittaker.fitting.inference import quantile_residuals
 
         self._check_fitted()
-        return quantile_residuals(self._fit_result, self._model_matrix, self._family, seed=seed)
+        return quantile_residuals(
+            self._require_fit_result(), self._model_matrix, self._family, seed=seed
+        )
 
     def dispersion_test(self) -> object:
         """Test for overdispersion in Poisson or Binomial models.
@@ -1621,7 +1628,7 @@ class GAM:
         from whittaker.fitting.inference import dispersion_test
 
         self._check_fitted()
-        return dispersion_test(self._fit_result, self._model_matrix, self._family)
+        return dispersion_test(self._require_fit_result(), self._model_matrix, self._family)
 
     def vif(self) -> list:
         """Compute variance inflation factors for parametric (linear) terms.
@@ -1676,7 +1683,7 @@ class GAM:
         self._check_fitted()
         V = self._covariance_matrix(unconditional=unconditional)
         return smooth_derivatives(
-            self._fit_result,
+            self._require_fit_result(),
             self._model_matrix,
             variable,
             self._data,
@@ -1725,7 +1732,7 @@ class GAM:
         self._check_fitted()
         V = self._covariance_matrix(unconditional=unconditional)
         return marginal_effects(
-            self._fit_result,
+            self._require_fit_result(),
             self._model_matrix,
             variable,
             self._data,
@@ -1772,7 +1779,7 @@ class GAM:
         self._check_fitted()
         V = self._covariance_matrix(unconditional=unconditional)
         return pairwise_comparisons(
-            self._fit_result,
+            self._require_fit_result(),
             self._model_matrix,
             variable,
             self._data,
@@ -1785,6 +1792,12 @@ class GAM:
     def _check_fitted(self) -> None:
         if not self._fitted:
             raise RuntimeError("This GAM has not been fitted yet. Call .fit(data) first.")
+
+    def _require_fit_result(self) -> FitResult:
+        """Return ``_fit_result`` narrowed to ``FitResult``, raising for VI fits."""
+        if isinstance(self._fit_result, VIResult):
+            raise NotImplementedError("This method is not available for VI fits (method='VI').")
+        return self._fit_result
 
     def __repr__(self) -> str:
         status = "fitted" if self._fitted else "unfitted"

@@ -326,6 +326,7 @@ class QuantileGAM:
                 if offset is not None:
                     corrected_eta = corrected_eta - offset
                 beta_new, _ = np.linalg.lstsq(X, corrected_eta, rcond=None)[:2]
+                assert isinstance(model._fit_result, FitResult)
                 model._fit_result = FitResult(
                     coefficients=beta_new,
                     linear_predictor=X @ beta_new + (offset if offset is not None else 0),
