@@ -46,7 +46,7 @@ class TestLoadDataset:
     # Shared helpers
     # ------------------------------------------------------------------
 
-    def _check_dataset(self, name: str, expected_keys: "set[str]") -> None:
+    def _check_dataset(self, name: str, expected_keys: set[str]) -> None:
         data = load_dataset(name)
         assert isinstance(data, dict), f"{name}: result is not a dict"
         assert set(data.keys()) == expected_keys, (

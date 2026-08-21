@@ -438,7 +438,6 @@ class TestFactorSmoothBasisErrors:
     def test_basis_matrix_without_factor_raises(self):
         from whittaker.smooths.factor_smooth import FactorSmoothBasis
 
-        rng = np.random.default_rng(0)
         n = 50
         x = np.linspace(0, 1, n)
         factor = np.repeat(["a", "b"], n // 2)

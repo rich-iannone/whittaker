@@ -338,6 +338,7 @@ class TestTiListK:
 
     def test_ti_list_k_fits(self) -> None:
         import numpy as np
+
         from whittaker.gam import GAM
 
         rng = np.random.default_rng(0)

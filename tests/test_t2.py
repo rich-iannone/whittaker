@@ -371,6 +371,7 @@ class TestT2ListK:
 
     def test_t2_list_k_fits(self) -> None:
         import numpy as np
+
         from whittaker.gam import GAM
 
         rng = np.random.default_rng(0)
