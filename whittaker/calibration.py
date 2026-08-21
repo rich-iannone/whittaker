@@ -58,7 +58,7 @@ def calibrate_sigma(
     Returns
     -------
     float
-        Calibrated sigma value (the one minimising CV pinball loss).
+        Calibrated sigma value (the one minimizing CV pinball loss).
 
     Examples
     --------
