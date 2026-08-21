@@ -222,7 +222,7 @@ class DuckDBGAM(BigGAM):
 
         Parameters
         ----------
-        data : str
+        source : str
             DuckDB table or view name, or a full `SELECT` query. A bare name such as
             `"my_table"` is normalized by `_normalize_source` into
             `"SELECT * FROM my_table"`; a string that already starts with `SELECT`
@@ -239,8 +239,6 @@ class DuckDBGAM(BigGAM):
             Fixed smoothing parameters. If `None`, selected automatically.
         method : str
             Smoothing selection method: `"fREML"` (default), `"REML"`, `"ML"`, or `"GCV"`.
-        weights : numpy.ndarray, optional
-            Observation (prior) weights, shape `(n,)`. Must be strictly positive.
         select : bool
             If `True`, enable double-penalty variable selection.
 
