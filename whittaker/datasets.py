@@ -1,9 +1,8 @@
 """Built-in example datasets for cookbook examples and quick demonstrations.
 
-All datasets are generated synthetically with fixed random seeds so they are
-fully reproducible without any internet access or optional dependencies.  The
-statistical properties (family, effect shapes, noise level) are designed to
-illustrate specific modelling scenarios.
+All datasets are generated synthetically with fixed random seeds so they are fully reproducible
+without any internet access or optional dependencies.  The statistical properties (family, effect
+shapes, noise level) are designed to illustrate specific modeling scenarios.
 """
 
 from __future__ import annotations
@@ -80,7 +79,7 @@ _REGISTRY: dict[str, dict[str, str]] = {
         "family": "GaussianLS",
         "note": (
             "Individual temperature readings with heteroscedastic noise: variance increases "
-            "with altitude and latitude.  Designed for GAMLSS location-scale modelling where "
+            "with altitude and latitude.  Designed for GAMLSS location-scale modeling where "
             "both mean and dispersion are smooth functions of the predictors."
         ),
     },
