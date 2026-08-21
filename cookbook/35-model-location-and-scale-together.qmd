@@ -85,6 +85,6 @@ pred.values["sigma"][:5]
 
 Higher altitude drives `mu` downward (temperatures are colder) while `sigma` tends to increase,
 reflecting greater day-to-day variability at elevation. A standard Gaussian GAM would fix the
-residual variance at a single global value, masking this pattern entirely. By modelling both
+residual variance at a single global value, masking this pattern entirely. By modeling both
 parameters simultaneously, GAMLSS produces better-calibrated prediction intervals at every altitude
 level.
