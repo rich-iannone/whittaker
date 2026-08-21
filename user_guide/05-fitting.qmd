@@ -623,6 +623,8 @@ After calling `model.fit()`, the following attributes are available:
   and term-level predictions from a fitted model.
 - **[Model diagnostics](07-diagnostics.qmd)**: residual plots, k-index tests, and
   `model.check()`.
+- **[Variational inference](20-variational-inference.qmd)**: a principled Bayesian posterior
+  for non-Gaussian families, using `method="VI"`.
 - **[Smooth terms](03-smooths.qmd)**: choosing the right basis and basis dimension.
 - **[Response families](04-families.qmd)**: how the family and link function affect the
   P-IRLS algorithm.
