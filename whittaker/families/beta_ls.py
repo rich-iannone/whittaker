@@ -21,12 +21,6 @@ class BetaLS(GAMLSSFamily):
     others. The mean uses the logit link (as in `Beta`) and the precision uses the log link,
     keeping `mu` in `(0, 1)` and `phi > 0`.
 
-    Parameters
-    ----------
-    None
-        `BetaLS` takes no constructor arguments; both `mu` and `phi` are modeled entirely
-        through the formulas supplied to `GAMLSS`.
-
     Notes
     -----
     The two parameters use distinct link functions:
