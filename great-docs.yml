@@ -38,6 +38,7 @@ nav_icons:
     "Functional regression": square-function
     "Cross-validation": repeat
     "Large datasets": database
+    "Variational inference": brain
     "Saving and loading models": save
     "Glossary": book-open
 
@@ -68,6 +69,7 @@ tags:
     Cross-validation: repeat
     Data input: database
     Polars: zap
+    "Variational inference": brain
     Serialization: save
     Deployment: cloud-upload
     scikit-learn: puzzle
@@ -398,6 +400,7 @@ sections:
           - fit-a-multi-response-gam.qmd
           - fit-a-functional-covariate.qmd
           - update-a-streaming-gam-incrementally.qmd
+          - use-variational-inference.qmd
       - section: Large datasets
         contents:
           - fit-a-biggam-on-a-large-dataframe.qmd

@@ -13,7 +13,7 @@ gd.enable_tbl_preview(n_head=8, n_tail=3)
 
 Standard GAM fitting builds the full $n \times p$ design matrix, which becomes memory-prohibitive
 when $n$ is in the millions. Whittaker provides three scalable backends that use discretised
-covariates and streaming aggregation to fit GAMs on large datasets without materialising the full
+covariates and streaming aggregation to fit GAMs on large datasets without materializing the full
 matrix:
 
 | Class | Data source | Key feature |

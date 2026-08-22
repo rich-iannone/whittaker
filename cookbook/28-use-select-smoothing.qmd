@@ -91,4 +91,4 @@ The select models should have lower total EDF because the noise term has been sh
 | Mixed confidence in predictors | `bs='cs'` on uncertain terms only |
 | All predictors known to be relevant | Standard smooths; select adds overhead |
 
-Select smoothing is most valuable in exploratory modelling where you have more candidate predictors than you expect to need. It does not replace domain knowledge, but it provides a principled way to let the data confirm or dismiss a term.
+Select smoothing is most valuable in exploratory modeling where you have more candidate predictors than you expect to need. It does not replace domain knowledge, but it provides a principled way to let the data confirm or dismiss a term.

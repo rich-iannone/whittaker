@@ -13,6 +13,7 @@ from whittaker.families.base import Family
 from whittaker.families.gaussian import Gaussian
 from whittaker.families.tweedie_estimated import TweedieEstimated
 from whittaker.fitting.pirls import FitResult, pirls_fit
+from whittaker.fitting.vi import VIResult, vi_fit
 from whittaker.formula.parser import parse
 from whittaker.formula.terms import Formula
 from whittaker.model_matrix import ModelMatrix, build_model_matrix, predict_matrix, predict_offset
@@ -57,18 +58,18 @@ class PredictionResult:
 class TermsPredictionResult:
     """Container returned by `GAM.predict(type="terms")`.
 
-    Instead of collapsing every smooth's effect into a single linear predictor, each smooth
-    term's contribution is kept separate. This is useful for decomposing a fitted additive model
-    into its constituent partial effects — e.g. to inspect how much of the prediction at a point
-    comes from `s(x1)` versus `s(x2)` — without needing to build partial-effect plots.
+    Instead of collapsing every smooth's effect into a single linear predictor, each smooth term's
+    contribution is kept separate. This is useful for decomposing a fitted additive model into its
+    constituent partial effects (e.g., to inspect how much of the prediction at a point comes from
+    `s(x1)` versus `s(x2)`) without needing to build partial-effect plots.
 
     Attributes
     ----------
     terms : dict[str, numpy.ndarray]
-        Maps each term label (e.g. `"s(x1)"`, `"te(x1, x2)"`, or `"s(x1):group_a"` for
-        factor-`by` smooths) to that term's contribution to the linear predictor, each of shape
-        `(n,)`. Contributions sum (plus the intercept and any parametric terms) to the full
-        linear predictor.
+        Maps each term label (e.g. `"s(x1)"`, `"te(x1, x2)"`, or `"s(x1):group_a"` for factor-`by`
+        smooths) to that term's contribution to the linear predictor, each of shape `(n,)`.
+        Contributions sum (plus the intercept and any parametric terms) to the full linear
+        predictor.
     se : dict[str, numpy.ndarray] or None
         Maps each term label to its per-term standard error, each of shape `(n,)`. `None` unless
         `se=True` was passed to `predict()`.
@@ -93,16 +94,16 @@ class GamCheckResult:
     statistics and basis-dimension adequacy checks.
 
     This mirrors the console output of R mgcv's `gam.check()`: it lets you inspect whether the
-    residuals look well-behaved and whether any smooth's basis dimension `k` was set too small
-    (in which case the smooth may be under-fitting), all from a single object. Printing the
-    result (or relying on its `__repr__`) gives a compact textual report; the individual
-    attributes are also available for building custom diagnostic plots (see `GAM.check()`).
+    residuals look well-behaved and whether any smooth's basis dimension `k` was set too small (in
+    which case the smooth may be under-fitting), all from a single object. Printing the result (or
+    relying on its `__repr__`) gives a compact textual report; the individual attributes are also
+    available for building custom diagnostic plots (see `GAM.check()`).
 
     Attributes
     ----------
     deviance_residuals : numpy.ndarray
-        Deviance residuals, shape `(n,)`. Should look approximately normal and homoscedastic for
-        a well-specified model.
+        Deviance residuals, shape `(n,)`. Should look approximately normal and homoscedastic for a
+        well-specified model.
     fitted_values : numpy.ndarray
         Fitted values `mu` on the response scale, shape `(n,)`.
     response : numpy.ndarray
@@ -112,14 +113,14 @@ class GamCheckResult:
         simulation-based p-value; low p-values (typically flagged with `*`) suggest the smooth's
         basis dimension `k` may be too small to capture the true function.
     deviance_explained : float
-        Proportion of null deviance explained by the model, in `[0, 1]` (analogous to R-squared
-        for non-Gaussian families).
+        Proportion of null deviance explained by the model, in `[0, 1]` (analogous to R-squared for
+        non-Gaussian families).
     scale : float
-        Estimated scale (dispersion) parameter `phi`.
+        The estimated scale (dispersion) parameter `phi`.
     edf_total : float
-        Total effective degrees of freedom across all model terms.
+        The total effective degrees of freedom across all model terms.
     n_obs : int
-        Number of observations used in the fit.
+        The number of observations used in the fit.
     """
 
     deviance_residuals: NDArray
@@ -201,13 +202,13 @@ class GAM:
     Fitting (`fit()`) proceeds by Penalized Iteratively Reweighted Least Squares (P-IRLS): each
     smooth's wiggliness is controlled by a quadratic penalty $\lambda_k \boldsymbol{\beta}_k^T
     \mathbf{S}_k \boldsymbol{\beta}_k$ on its coefficients, and the smoothing parameters
-    $\lambda_k$ are themselves estimated from the data — by default via Generalized
+    $\lambda_k$ are themselves estimated from the data. By default this is via Generalized
     Cross-Validation (GCV), or via Restricted Maximum Likelihood (REML) or Marginal Likelihood
-    (ML) when smooths are treated as correlated random effects. Larger $\lambda_k$ shrinks a
-    smooth toward a simpler (e.g. linear or constant) shape; smaller $\lambda_k$ allows more
-    flexibility. This automatic selection is what distinguishes a GAM from simply choosing a
-    fixed spline basis: the *effective* complexity of each term (its effective degrees of
-    freedom, or EDF) is learned rather than fixed in advance.
+    (ML) when smooths are treated as correlated random effects. Larger $\lambda_k$ shrinks a smooth
+    toward a simpler (e.g. linear or constant) shape; smaller $\lambda_k$ allows more flexibility.
+    This automatic selection is what distinguishes a GAM from simply choosing a fixed spline basis:
+    the *effective* complexity of each term (its effective degrees of freedom, or EDF) is learned
+    rather than fixed in advance.
 
     Once fitted, a `GAM` supports prediction with standard errors and intervals (`predict()`),
     partial-effect plotting (`plot()`), residual and basis-dimension diagnostics (`check()`,
@@ -225,8 +226,8 @@ class GAM:
         right-hand side to suppress the intercept.
     family : Family or None
         Response distribution and link function. Defaults to `Gaussian()` (identity link) if not
-        given. Other options include `Binomial`, `Poisson`, `Gamma`, and `Tweedie`-family
-        classes, each defining the variance function, deviance, and link used during P-IRLS.
+        given. Other options include `Binomial`, `Poisson`, `Gamma`, and `Tweedie`-family classes,
+        each defining the variance function, deviance, and link used during P-IRLS.
 
     Examples
     --------
@@ -257,7 +258,7 @@ class GAM:
         self._fitted = False
 
         self._model_matrix: ModelMatrix
-        self._fit_result: FitResult
+        self._fit_result: FitResult | VIResult
 
     @property
     def formula(self) -> Formula:
@@ -312,6 +313,7 @@ class GAM:
         method: str = "GCV",
         weights: NDArray | None = None,
         select: bool = False,
+        vi_options: dict | None = None,
     ) -> GAM:
         r"""Fit the GAM to data via Penalized Iteratively Reweighted Least Squares (P-IRLS).
 
@@ -359,6 +361,11 @@ class GAM:
             selection analogous to the lasso (Marra & Wood, 2011). Recommended together with
             `method="REML"`. Has no additional effect on bases whose null space is already zero
             (e.g. `bs="re"`, `bs="fs"`, or the shrinkage bases `"ts"`/`"cs"`).
+        vi_options : dict or None
+            Extra keyword arguments forwarded to `~whittaker.fitting.vi.vi_fit` when
+            `method="VI"`.  Accepted keys: `n_quad`, `lr`, `max_iter`, `tol`,
+            `patience`, `seed`, `cov_structure`, `phi_inference`.  Ignored for
+            all other methods.
 
         Returns
         -------
@@ -384,7 +391,15 @@ class GAM:
             if np.any(pw <= 0):
                 raise ValueError("All weights must be positive.")
 
-        if isinstance(self._family, TweedieEstimated) and not self._family.p_estimated:
+        if method.upper() == "VI":
+            self._fit_result = vi_fit(
+                self._model_matrix,
+                self._family,
+                smoothing_params=smoothing_params,
+                prior_weights=pw,
+                **(vi_options or {}),
+            )
+        elif isinstance(self._family, TweedieEstimated) and not self._family.p_estimated:
             self._fit_result = self._profile_tweedie_power(
                 self._model_matrix,
                 self._family,
@@ -679,6 +694,9 @@ class GAM:
         if W is None:
             W = self._combined_weights()
 
+        if isinstance(self._fit_result, VIResult):
+            return self._fit_result.posterior_cov
+
         if unconditional and self._fit_result.method in ("REML", "ML"):
             from whittaker.fitting.inference import _unconditional_covariance
 
@@ -914,8 +932,8 @@ class GAM:
     def residuals(self) -> NDArray:
         r"""Response residuals ($y - \mu$) on the training data.
 
-        These are the raw (unstandardized) residuals. For Pearson, deviance, or working
-        residuals — or residuals on new data — use `get_residuals()` instead.
+        These are the raw (unstandardized) residuals. For Pearson, deviance, or working residuals
+        (or residuals on new data) use `get_residuals()` instead.
 
         Returns
         -------
@@ -923,7 +941,7 @@ class GAM:
             Residual vector, shape `(n,)`. A copy, safe to mutate.
         """
         self._check_fitted()
-        return self._fit_result.residuals.copy()
+        return self._require_fit_result().residuals.copy()
 
     def get_residuals(self, type: str = "deviance") -> NDArray:
         """Compute residuals of the specified type.
@@ -1043,6 +1061,8 @@ class GAM:
             Deviance of the fitted model.
         """
         self._check_fitted()
+        if isinstance(self._fit_result, VIResult):
+            raise NotImplementedError("deviance is not computed for VI fits; use elbo instead.")
         return self._fit_result.deviance
 
     @property
@@ -1060,6 +1080,10 @@ class GAM:
             GCV score of the fitted model.
         """
         self._check_fitted()
+        if isinstance(self._fit_result, VIResult):
+            raise NotImplementedError(
+                "gcv_score is not computed for VI fits; use vi_result.elbo instead."
+            )
         return self._fit_result.gcv_score
 
     @property
@@ -1076,6 +1100,8 @@ class GAM:
             Deviance of the intercept-only model.
         """
         self._check_fitted()
+        if isinstance(self._fit_result, VIResult):
+            raise NotImplementedError("null_deviance is not computed for VI fits.")
         assert self._fit_result.null_deviance is not None
         return self._fit_result.null_deviance
 
@@ -1094,6 +1120,8 @@ class GAM:
             the null deviance is non-positive.
         """
         self._check_fitted()
+        if isinstance(self._fit_result, VIResult):
+            raise NotImplementedError("deviance_explained is not computed for VI fits.")
         null_dev = self._fit_result.null_deviance
         if null_dev is None or null_dev <= 0:
             return 0.0
@@ -1113,6 +1141,8 @@ class GAM:
             AIC of the fitted model.
         """
         self._check_fitted()
+        if isinstance(self._fit_result, VIResult):
+            raise NotImplementedError("AIC is not computed for VI fits; use elbo instead.")
         assert self._fit_result.aic is not None
         return self._fit_result.aic
 
@@ -1130,8 +1160,56 @@ class GAM:
             BIC of the fitted model.
         """
         self._check_fitted()
+        if isinstance(self._fit_result, VIResult):
+            raise NotImplementedError("BIC is not computed for VI fits; use elbo instead.")
         assert self._fit_result.bic is not None
         return self._fit_result.bic
+
+    @property
+    def vi_result(self) -> VIResult | None:
+        """The `VIResult` when the model was fitted with `method="VI"`, else `None`."""
+        self._check_fitted()
+        return self._fit_result if isinstance(self._fit_result, VIResult) else None
+
+    def posterior_samples(self, n: int = 1000, *, seed: int | None = None) -> NDArray:
+        """Draw coefficient vectors from the posterior.
+
+        For VI fits, samples from the variational posterior `N(m, C)`.
+        For Laplace fits (REML/GCV/ML), samples from `N(β̂, V_β)`.
+
+        Parameters
+        ----------
+        n:
+            Number of draws.
+        seed:
+            Random seed.
+
+        Returns
+        -------
+        NDArray
+            Shape `(p, n)`, where `p` is the number of model coefficients.
+        """
+        self._check_fitted()
+        from whittaker.fitting.inference import _bayesian_covariance
+
+        if isinstance(self._fit_result, VIResult):
+            return self._fit_result.draw(n, seed=seed)
+
+        W = self._combined_weights()
+        V_beta = _bayesian_covariance(
+            self._model_matrix.X,
+            self._model_matrix.penalties,
+            self._fit_result.smoothing_params,
+            self._fit_result.scale,
+            W=W,
+        )
+        rng = np.random.default_rng(seed)
+        V_beta = (V_beta + V_beta.T) * 0.5
+        eigvals, eigvecs = np.linalg.eigh(V_beta)
+        eigvals = np.maximum(eigvals, 0.0)
+        L = eigvecs * np.sqrt(eigvals)[np.newaxis, :]
+        z = rng.standard_normal((len(self._fit_result.coefficients), n))
+        return self._fit_result.coefficients[:, np.newaxis] + L @ z
 
     def parametric_tests(self) -> list:
         """Compute Wald tests for parametric (non-smooth) coefficients.
@@ -1147,7 +1225,9 @@ class GAM:
         from whittaker.fitting.inference import parametric_tests
 
         self._check_fitted()
-        return parametric_tests(self._fit_result, self._model_matrix, self._family.scale_known)
+        return parametric_tests(
+            self._require_fit_result(), self._model_matrix, self._family.scale_known
+        )
 
     def smooth_tests(self) -> list:
         """Compute approximate p-values for all smooth terms.
@@ -1163,7 +1243,7 @@ class GAM:
         from whittaker.fitting.inference import smooth_tests
 
         self._check_fitted()
-        return smooth_tests(self._fit_result, self._model_matrix)
+        return smooth_tests(self._require_fit_result(), self._model_matrix)
 
     def k_check(self, *, n_sim: int = 400) -> list:
         """Check basis dimension adequacy for each smooth term.
@@ -1187,7 +1267,9 @@ class GAM:
 
         self._check_fitted()
         resid = self.get_residuals("deviance")
-        return k_check(self._fit_result, self._model_matrix, self._data, resid, n_sim=n_sim)
+        return k_check(
+            self._require_fit_result(), self._model_matrix, self._data, resid, n_sim=n_sim
+        )
 
     def gam_check(self, *, n_sim: int = 100) -> GamCheckResult:
         """Run all-in-one GAM diagnostics.
@@ -1268,24 +1350,27 @@ class GAM:
             X_new = predict_matrix(self._model_matrix, new_data)
             offset = predict_offset(self._model_matrix, new_data)
 
-        W = self._combined_weights()
-        V_beta = _bayesian_covariance(
-            self._model_matrix.X,
-            self._model_matrix.penalties,
-            self._fit_result.smoothing_params,
-            self._fit_result.scale,
-            W=W,
-        )
-
         beta_hat = self._fit_result.coefficients
-        V_beta = (V_beta + V_beta.T) * 0.5
 
-        eigvals, eigvecs = np.linalg.eigh(V_beta)
-        eigvals = np.maximum(eigvals, 0.0)
-        L = eigvecs * np.sqrt(eigvals)[np.newaxis, :]
+        if isinstance(self._fit_result, VIResult):
+            # Draw directly from the variational posterior N(m, C)
+            beta_draws = self._fit_result.draw(n_sim, seed=seed)
+        else:
+            W = self._combined_weights()
+            V_beta = _bayesian_covariance(
+                self._model_matrix.X,
+                self._model_matrix.penalties,
+                self._fit_result.smoothing_params,
+                self._fit_result.scale,
+                W=W,
+            )
+            V_beta = (V_beta + V_beta.T) * 0.5
 
-        z = rng.standard_normal((len(beta_hat), n_sim))
-        beta_draws = beta_hat[:, np.newaxis] + L @ z
+            eigvals, eigvecs = np.linalg.eigh(V_beta)
+            eigvals = np.maximum(eigvals, 0.0)
+            L_draws = eigvecs * np.sqrt(eigvals)[np.newaxis, :]
+            z = rng.standard_normal((len(beta_hat), n_sim))
+            beta_draws = beta_hat[:, np.newaxis] + L_draws @ z
 
         eta = X_new @ beta_draws
         if offset is not None:
@@ -1321,7 +1406,7 @@ class GAM:
         from whittaker.fitting.inference import concurvity
 
         self._check_fitted()
-        return concurvity(self._fit_result, self._model_matrix, full=full)
+        return concurvity(self._require_fit_result(), self._model_matrix, full=full)
 
     def anova(self, *others: GAM) -> object:
         """Compare this model with one or more other fitted GAMs via deviance-difference tests.
@@ -1379,65 +1464,73 @@ class GAM:
         r = self._fit_result
         mm = self._model_matrix
 
+        inference_label = "Variational Bayes" if isinstance(r, VIResult) else r.method
         lines = [
             "GAM fit summary",
             "=" * 60,
             f"Formula:    {self._formula!r}",
             f"Family:     {self._family!r}",
+            f"Inference:  {inference_label}",
             f"Observations: {mm.n_obs}",
             f"Coefficients: {mm.n_coefs}",
         ]
 
-        ptests = self.parametric_tests()
-        if ptests:
-            stat_label = "z value" if self._family.scale_known else "t value"
+        if not isinstance(r, VIResult):
+            ptests = self.parametric_tests()
+            if ptests:
+                stat_label = "z value" if self._family.scale_known else "t value"
+                lines.extend(
+                    [
+                        "",
+                        "Parametric coefficients:",
+                        f"  {'Term':<24} {'Estimate':>10} {'Std.Err':>10} "
+                        f"{stat_label:>10} {'p-value':>10}",
+                        f"  {'-' * 24} {'-' * 10} {'-' * 10} {'-' * 10} {'-' * 10}",
+                    ]
+                )
+                for pt in ptests:
+                    pval_str = f"{pt.p_value:.4g}" if pt.p_value >= 1e-16 else "< 1e-16"
+                    lines.append(
+                        f"  {pt.term_label:<24} {pt.estimate:>10.4f} {pt.se:>10.4f} "
+                        f"{pt.stat:>10.3f} {pval_str:>10}"
+                    )
+
+            stests = self.smooth_tests()
             lines.extend(
                 [
                     "",
-                    "Parametric coefficients:",
-                    f"  {'Term':<24} {'Estimate':>10} {'Std.Err':>10} "
-                    f"{stat_label:>10} {'p-value':>10}",
-                    f"  {'-' * 24} {'-' * 10} {'-' * 10} {'-' * 10} {'-' * 10}",
+                    "Approximate significance of smooth terms:",
+                    f"  {'Term':<24} {'EDF':>6} {'Ref.df':>6} {'Chi.sq':>10} {'p-value':>10}",
+                    f"  {'-' * 24} {'-' * 6} {'-' * 6} {'-' * 10} {'-' * 10}",
                 ]
             )
-            for pt in ptests:
-                pval_str = f"{pt.p_value:.4g}" if pt.p_value >= 1e-16 else "< 1e-16"
+
+            for test in stests:
+                pval_str = f"{test.p_value:.4g}" if test.p_value >= 1e-16 else "< 1e-16"
                 lines.append(
-                    f"  {pt.term_label:<24} {pt.estimate:>10.4f} {pt.se:>10.4f} "
-                    f"{pt.stat:>10.3f} {pval_str:>10}"
+                    f"  {test.term_label:<24} {test.edf:>6.2f} {test.ref_df:>6.0f} "
+                    f"{test.stat:>10.3f} {pval_str:>10}"
                 )
 
-        stests = self.smooth_tests()
-        lines.extend(
-            [
-                "",
-                "Approximate significance of smooth terms:",
-                f"  {'Term':<24} {'EDF':>6} {'Ref.df':>6} {'Chi.sq':>10} {'p-value':>10}",
-                f"  {'-' * 24} {'-' * 6} {'-' * 6} {'-' * 10} {'-' * 10}",
-            ]
-        )
-
-        for test in stests:
-            pval_str = f"{test.p_value:.4g}" if test.p_value >= 1e-16 else "< 1e-16"
-            lines.append(
-                f"  {test.term_label:<24} {test.edf:>6.2f} {test.ref_df:>6.0f} "
-                f"{test.stat:>10.3f} {pval_str:>10}"
+        lines.append("")
+        lines.append(f"Total EDF:  {r.edf_total:.2f}")
+        lines.append(f"Scale est:  {r.scale:.6f}")
+        if isinstance(r, VIResult):
+            lines.append(f"ELBO:       {r.elbo:.4f}")
+            lines.append(f"VI iters:   {r.n_iter}")
+            lines.append(f"Converged:  {r.converged}")
+        else:
+            dev_expl = self.deviance_explained
+            lines.extend(
+                [
+                    f"Deviance:   {r.deviance:.4f}",
+                    f"Null dev:   {r.null_deviance:.4f}",
+                    f"Dev. expl:  {dev_expl:.1%}",
+                    f"GCV score:  {r.gcv_score:.6f}",
+                    f"AIC:        {r.aic:.2f}",
+                    f"BIC:        {r.bic:.2f}",
+                ]
             )
-
-        dev_expl = self.deviance_explained
-        lines.extend(
-            [
-                "",
-                f"Total EDF:  {r.edf_total:.2f}",
-                f"Deviance:   {r.deviance:.4f}",
-                f"Null dev:   {r.null_deviance:.4f}",
-                f"Dev. expl:  {dev_expl:.1%}",
-                f"GCV score:  {r.gcv_score:.6f}",
-                f"Scale est:  {r.scale:.6f}",
-                f"AIC:        {r.aic:.2f}",
-                f"BIC:        {r.bic:.2f}",
-            ]
-        )
 
         text = "\n".join(lines)
         return ModelSummary(text)
@@ -1450,26 +1543,26 @@ class GAM:
     ) -> object:
         """Plot the estimated partial effect of each smooth term, with a confidence band.
 
-        For every smooth in the formula, evaluates the term's contribution to the linear
-        predictor over an evenly spaced grid spanning its covariate's observed range (holding
-        other terms out, i.e. this shows the additive component `f_k(x)` itself, not the full
-        fitted response), together with a pointwise confidence band derived from the model's
-        coefficient covariance. This is the standard way to visually inspect the *shape* of each
-        estimated smooth — e.g. whether it is roughly linear, monotonic, or has a distinct
-        peak — without needing to call `predict(type="terms")` and plot manually.
+        For every smooth in the formula, evaluates the term's contribution to the linear predictor
+        over an evenly spaced grid spanning its covariate's observed range (holding other terms out,
+        i.e., this shows the additive component `f_k(x)` itself, not the full fitted response),
+        together with a pointwise confidence band derived from the model's coefficient covariance.
+        This is the standard way to visually inspect the *shape* of each estimated smooth (e.g.,
+        whether it is roughly linear, monotonic, or has a distinct peak) without needing to call
+        `predict(type="terms")` and plot manually.
 
         Parameters
         ----------
         n_points : int
-            Number of evenly spaced evaluation points per smooth (default `200`).
+            Number of evenly spaced evaluation points per smooth (the default is `200`).
         level : float
-            Confidence level for the bands, e.g. `0.95` for a 95% band (default).
+            Confidence level for the bands, e.g. `0.95` for a 95% band (the default is `0.95`).
 
         Returns
         -------
         altair.VConcatChart or altair.Chart
-            A vertically concatenated chart with one panel per smooth term (or a single `Chart`
-            if the model has exactly one smooth).
+            A vertically concatenated chart with one panel per smooth term (or a single `Chart` if
+            the model has exactly one smooth).
 
         Examples
         --------
@@ -1500,7 +1593,7 @@ class GAM:
         from whittaker.fitting.inference import influence
 
         self._check_fitted()
-        return influence(self._fit_result, self._model_matrix)
+        return influence(self._require_fit_result(), self._model_matrix)
 
     def quantile_residuals(self, *, seed: int | None = None) -> NDArray:
         """Compute randomized quantile residuals (Dunn & Smyth 1996).
@@ -1520,7 +1613,9 @@ class GAM:
         from whittaker.fitting.inference import quantile_residuals
 
         self._check_fitted()
-        return quantile_residuals(self._fit_result, self._model_matrix, self._family, seed=seed)
+        return quantile_residuals(
+            self._require_fit_result(), self._model_matrix, self._family, seed=seed
+        )
 
     def dispersion_test(self) -> object:
         """Test for overdispersion in Poisson or Binomial models.
@@ -1533,7 +1628,7 @@ class GAM:
         from whittaker.fitting.inference import dispersion_test
 
         self._check_fitted()
-        return dispersion_test(self._fit_result, self._model_matrix, self._family)
+        return dispersion_test(self._require_fit_result(), self._model_matrix, self._family)
 
     def vif(self) -> list:
         """Compute variance inflation factors for parametric (linear) terms.
@@ -1588,7 +1683,7 @@ class GAM:
         self._check_fitted()
         V = self._covariance_matrix(unconditional=unconditional)
         return smooth_derivatives(
-            self._fit_result,
+            self._require_fit_result(),
             self._model_matrix,
             variable,
             self._data,
@@ -1637,7 +1732,7 @@ class GAM:
         self._check_fitted()
         V = self._covariance_matrix(unconditional=unconditional)
         return marginal_effects(
-            self._fit_result,
+            self._require_fit_result(),
             self._model_matrix,
             variable,
             self._data,
@@ -1684,7 +1779,7 @@ class GAM:
         self._check_fitted()
         V = self._covariance_matrix(unconditional=unconditional)
         return pairwise_comparisons(
-            self._fit_result,
+            self._require_fit_result(),
             self._model_matrix,
             variable,
             self._data,
@@ -1697,6 +1792,12 @@ class GAM:
     def _check_fitted(self) -> None:
         if not self._fitted:
             raise RuntimeError("This GAM has not been fitted yet. Call .fit(data) first.")
+
+    def _require_fit_result(self) -> FitResult:
+        """Return ``_fit_result`` narrowed to ``FitResult``, raising for VI fits."""
+        if isinstance(self._fit_result, VIResult):
+            raise NotImplementedError("This method is not available for VI fits (method='VI').")
+        return self._fit_result
 
     def __repr__(self) -> str:
         status = "fitted" if self._fitted else "unfitted"

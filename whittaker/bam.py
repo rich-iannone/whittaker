@@ -484,6 +484,7 @@ class BigGAM(GAM):
         method: str = "fREML",
         weights: NDArray | None = None,
         select: bool = False,
+        vi_options: dict | None = None,
     ) -> BigGAM:
         """Fit the BigGAM using discretized P-IRLS.
 

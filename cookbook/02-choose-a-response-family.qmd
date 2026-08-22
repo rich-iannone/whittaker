@@ -8,7 +8,7 @@ tags: [Basics, Families]
 
 The `family` argument tells Whittaker which probability distribution governs the response and which
 link function connects the linear predictor to the mean. Choosing the right family is the single
-most important modelling decision. A mismatched family produces biased smooths and unreliable
+most important modeling decision. A mismatched family produces biased smooths and unreliable
 standard errors.
 
 ## The family table
