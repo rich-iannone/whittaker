@@ -89,20 +89,42 @@ errors are derived from the variational posterior covariance $C$:
 $$\text{SE}(\hat\eta_i) = \sqrt{x_i^\top C\, x_i}$$
 
 ```{python}
-import matplotlib.pyplot as plt
+import altair as alt
 
 x_new = np.linspace(0, 2 * np.pi, 200)
 preds = model.predict({"x": x_new}, se=True, interval="confidence")
 
-fig, ax = plt.subplots()
-ax.scatter(x, y, alpha=0.3, s=10, label="Data")
-ax.plot(x_new, preds.values, label="VI fit")
-ax.fill_between(x_new, preds.lower, preds.upper, alpha=0.25, label="95% credible interval")
-ax.set_xlabel("x")
-ax.set_ylabel("μ")
-ax.legend()
-plt.tight_layout()
-plt.show()
+obs_data = [{"x": float(x[i]), "y": float(y[i])} for i in range(n)]
+points = alt.Chart({"values": obs_data}).mark_circle(
+    size=15, opacity=0.3, color="steelblue"
+).encode(
+    x=alt.X("x:Q", title="x"),
+    y=alt.Y("y:Q", title="count"),
+)
+
+fit_data = [
+    {
+        "x": float(x_new[i]),
+        "fit": float(preds.values[i]),
+        "lower": float(preds.lower[i]),
+        "upper": float(preds.upper[i]),
+    }
+    for i in range(len(x_new))
+]
+
+line = alt.Chart({"values": fit_data}).mark_line(
+    color="firebrick", strokeWidth=2
+).encode(x="x:Q", y="fit:Q")
+
+band = alt.Chart({"values": fit_data}).mark_area(
+    opacity=0.2, color="firebrick"
+).encode(x="x:Q", y="lower:Q", y2="upper:Q")
+
+(band + line + points).properties(
+    title="Poisson GAM with VI: fitted curve and 95% credible interval",
+    width=500,
+    height=300,
+)
 ```
 
 ## Inspecting the variational result
@@ -127,13 +149,19 @@ The ELBO should increase monotonically (or nearly so) as optimization proceeds. 
 suggests that the learning rate is too high. Plot `elbo_history` to diagnose:
 
 ```{python}
-plt.figure()
-plt.plot(vr.elbo_history)
-plt.xlabel("Iteration")
-plt.ylabel("ELBO")
-plt.title("ELBO convergence trace")
-plt.tight_layout()
-plt.show()
+elbo_data = [
+    {"iteration": i, "ELBO": float(vr.elbo_history[i])}
+    for i in range(len(vr.elbo_history))
+]
+
+alt.Chart({"values": elbo_data}).mark_line(color="steelblue").encode(
+    x=alt.X("iteration:Q", title="Iteration"),
+    y=alt.Y("ELBO:Q", title="ELBO"),
+).properties(
+    title="ELBO convergence trace",
+    width=500,
+    height=250,
+)
 ```
 
 A trace that rises quickly and then flattens is ideal. Oscillations indicate `lr` should be
