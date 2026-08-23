@@ -495,9 +495,7 @@ class TestNUTS:
 
     def test_hmc_no_divergences_on_gaussian(self, hmc_result):
         """HMC on a well-conditioned Gaussian should produce zero divergences."""
-        assert hmc_result.n_divergent == 0, (
-            f"Expected 0 divergences, got {hmc_result.n_divergent}"
-        )
+        assert hmc_result.n_divergent == 0, f"Expected 0 divergences, got {hmc_result.n_divergent}"
 
     def test_hmc_n_divergent_is_int(self, hmc_result):
         """HMC n_divergent must be a non-negative integer."""
