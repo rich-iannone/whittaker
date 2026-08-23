@@ -18,11 +18,12 @@ $V_\beta = \phi\,(X^\top W X + \sum_j \lambda_j S_j)^{-1}$.
 For Gaussian response this is exact; for non-Gaussian families it can underestimate spread when
 the likelihood surface is asymmetric.
 
-**Hamiltonian Monte Carlo (MCMC)** draws directly from the exact posterior, so no Gaussian
-approximation is made. It uses the gradient of the log-posterior to propose distant moves in
-parameter space that are accepted with high probability, making it far more efficient than
-random-walk Metropolis. The result is a collection of coefficient vectors that represent the full
-posterior distribution of the smooth functions.
+**MCMC** (via the No-U-Turn Sampler, NUTS) draws directly from the exact posterior, so no Gaussian
+approximation is made. NUTS uses the gradient of the log-posterior to grow a binary trajectory tree
+in both directions, stopping automatically when the path would double back on itself. This gives it
+the efficiency of Hamiltonian Monte Carlo without requiring you to tune a trajectory length. The
+result is a collection of coefficient vectors that represent the full posterior distribution of the
+smooth functions.
 
 ## When to use MCMC
 
@@ -75,7 +76,8 @@ mr = model.mcmc_result
 print(f"Samples shape: {mr.samples.shape}")  # (p, n_chains * n_samples)
 print(f"R-hat (max): {mr.r_hat.max():.4f}")
 print(f"ESS (min):   {mr.ess.min():.1f}")
-print(f"Acceptance rate: {mr.acceptance_rate:.3f}")
+print(f"Acceptance rate: {mr.acceptance_rate:.3f}")  # mean per-leaf α for NUTS
+print(f"Mean tree depth: {mr.mean_tree_depth:.2f}")  # NUTS only
 ```
 
 `mcmc_result` is `None` if the model was fitted with any other method.
@@ -182,20 +184,44 @@ model = wk.GAM("y ~ s(x)", family=Poisson()).fit(
     data,
     method="MCMC",
     mcmc_options={
-        "n_chains": 4,        # number of independent chains (default: 4)
-        "n_samples": 1000,    # post-warmup draws per chain (default: 1000)
-        "n_warmup": 500,      # warmup (adaptation) draws per chain (default: 500)
-        "leapfrog_steps": 30, # leapfrog steps per proposal (default: 10)
-        "seed": 23,           # seed for reproducibility
+        "n_chains": 4,          # number of independent chains (default: 4)
+        "n_samples": 1000,      # post-warmup draws per chain (default: 1000)
+        "n_warmup": 500,        # warmup (adaptation) draws per chain (default: 500)
+        "max_tree_depth": 10,   # NUTS: max binary-tree doublings per step (default: 10)
+        "seed": 23,             # seed for reproducibility
     },
 )
 ```
 
+### Choosing a sampler
+
+Two samplers are available via the `sampler` key:
+
+- **`"NUTS"`** (default): No-U-Turn Sampler. Automatically selects trajectory length by growing a
+  binary tree until a U-turn is detected. Requires no manual tuning of leapfrog steps and generally
+  mixes better than fixed-length HMC.
+- **`"HMC"`**: Static-trajectory HMC with a fixed number of leapfrog steps per proposal, controlled
+  by `leapfrog_steps` (default 10).
+
+```python
+# Static HMC with 20 leapfrog steps per proposal
+model = wk.GAM("y ~ s(x)", family=Poisson()).fit(
+    data,
+    method="MCMC",
+    mcmc_options={"sampler": "HMC", "leapfrog_steps": 20},
+)
+```
+
+`mean_tree_depth` in `MCMCResult` reports the mean number of binary-tree doublings per post-warmup
+NUTS step (0.0 for HMC). Each doubling doubles the number of leapfrog evaluations: depth $j$
+corresponds to $2^j$ steps. A depth of 5–7 is typical; if it consistently hits `max_tree_depth`
+consider raising that limit.
+
 ### Step-size adaptation
 
 Whittaker uses dual-averaging step-size adaptation (Nesterov 2009, as implemented in Stan) during
-the warmup phase, targeting an acceptance rate of 0.65. The adapted step size is fixed for the
-sampling phase. You can override the target acceptance rate:
+the warmup phase. The adapted step size is fixed for the sampling phase. The default target
+acceptance rate is 0.65. NUTS often benefits from a higher target:
 
 ```python
 model = wk.GAM("y ~ s(x)", family=Poisson()).fit(
@@ -205,8 +231,12 @@ model = wk.GAM("y ~ s(x)", family=Poisson()).fit(
 )
 ```
 
-Higher target acceptance rates lead to smaller step sizes and more correlated draws; lower rates
-lead to larger steps but more rejections. The default of 0.65 works well in most settings.
+For NUTS, `acceptance_rate` in `MCMCResult` reports the mean per-leaf acceptance statistic
+(mean $\min(1, \exp(H_0 - H_i))$ over all leapfrog steps), which tracks the dual-averaging
+target and is directly comparable to HMC's Metropolis acceptance rate.
+
+Higher target acceptance rates lead to smaller step sizes and more correlated draws. Lower rates
+lead to larger steps but more rejections.
 
 ### Mass matrix
 

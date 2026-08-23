@@ -1,4 +1,4 @@
-"""Tests for whittaker.fitting.mcmc (HMC posterior sampler)."""
+"""Tests for whittaker.fitting.mcmc (HMC and NUTS posterior samplers)."""
 
 from __future__ import annotations
 
@@ -372,3 +372,106 @@ class TestMCMCResultAPI:
         data = _gaussian_data(seed=4)
         sim = gam.simulate(data, n_sim=50)
         assert sim.shape == (len(data["y"]), 50)
+
+
+# ---------------------------------------------------------------------------
+# NUTS-specific tests
+# ---------------------------------------------------------------------------
+
+
+class TestNUTS:
+    """Verify NUTS-specific behaviour: default sampler, tree depth, HMC fallback."""
+
+    @pytest.fixture(scope="class")
+    def nuts_result(self):
+        """NUTS fit on a small Gaussian problem (fast)."""
+        data = _gaussian_data(seed=10)
+        gam = GAM("y ~ s(x)")
+        gam.fit(
+            data,
+            method="MCMC",
+            mcmc_options={
+                "sampler": "NUTS",
+                "n_chains": 2,
+                "n_samples": 300,
+                "n_warmup": 200,
+                "seed": 99,
+            },
+        )
+        return gam.mcmc_result
+
+    @pytest.fixture(scope="class")
+    def hmc_result(self):
+        """Explicit HMC fit for comparison."""
+        data = _gaussian_data(seed=10)
+        gam = GAM("y ~ s(x)")
+        gam.fit(
+            data,
+            method="MCMC",
+            mcmc_options={
+                "sampler": "HMC",
+                "leapfrog_steps": 20,
+                "n_chains": 2,
+                "n_samples": 300,
+                "n_warmup": 200,
+                "seed": 99,
+            },
+        )
+        return gam.mcmc_result
+
+    def test_nuts_is_default_sampler(self):
+        """mcmc_fit() with no sampler argument uses NUTS (mean_tree_depth > 0)."""
+        data = _gaussian_data(seed=11)
+        mm, fr, S_lambda, fam = _build_components(data)
+        mr = mcmc_fit(mm, fam, n_chains=2, n_samples=200, n_warmup=100, seed=7)
+        assert mr.mean_tree_depth > 0.0, "Default sampler should be NUTS (mean_tree_depth > 0)"
+
+    def test_nuts_tree_depth_at_least_one(self, nuts_result):
+        """NUTS expands the tree beyond the trivial single-step base case."""
+        assert nuts_result.mean_tree_depth >= 1.0, (
+            f"Expected mean_tree_depth >= 1, got {nuts_result.mean_tree_depth:.2f}"
+        )
+
+    def test_nuts_mean_tree_depth_reasonable(self, nuts_result):
+        """Mean tree depth is in the typical range (1–10) for a well-conditioned problem."""
+        assert 1.0 <= nuts_result.mean_tree_depth <= 10.0, (
+            f"Unexpected mean_tree_depth = {nuts_result.mean_tree_depth:.2f}"
+        )
+
+    def test_nuts_acceptance_rate_in_range(self, nuts_result):
+        """NUTS mean per-leaf α is in [0.5, 1.0]."""
+        assert 0.5 <= nuts_result.acceptance_rate <= 1.0, (
+            f"Unexpected acceptance_rate = {nuts_result.acceptance_rate:.3f}"
+        )
+
+    def test_nuts_r_hat_converges(self, nuts_result):
+        """NUTS chains converge: R-hat < 1.1 for all parameters."""
+        assert nuts_result.r_hat.max() < 1.1, f"R-hat max = {nuts_result.r_hat.max():.4f}"
+
+    def test_hmc_mean_tree_depth_is_zero(self, hmc_result):
+        """mean_tree_depth is 0.0 for static-L HMC."""
+        assert hmc_result.mean_tree_depth == 0.0, (
+            f"Expected 0.0 for HMC, got {hmc_result.mean_tree_depth}"
+        )
+
+    def test_hmc_sampler_still_works(self, hmc_result):
+        """sampler='HMC' produces valid diagnostics."""
+        assert hmc_result.r_hat.max() < 1.1
+        assert 0.5 <= hmc_result.acceptance_rate <= 1.0
+
+    def test_max_tree_depth_respected(self):
+        """With max_tree_depth=2 the mean depth stays at or below 2."""
+        data = _gaussian_data(seed=12)
+        mm, fr, S_lambda, fam = _build_components(data)
+        mr = mcmc_fit(
+            mm,
+            fam,
+            n_chains=2,
+            n_samples=200,
+            n_warmup=100,
+            max_tree_depth=2,
+            seed=13,
+        )
+        assert mr.mean_tree_depth <= 2.0, (
+            f"mean_tree_depth {mr.mean_tree_depth:.2f} exceeded max_tree_depth=2"
+        )
