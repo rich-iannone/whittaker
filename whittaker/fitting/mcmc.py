@@ -399,7 +399,7 @@ def _hmc_chain(
     step_size_init: float,
     target_accept: float,
     seed: int,
-) -> tuple[NDArray, float, float]:
+) -> tuple[NDArray, float, float, float]:
     """Run one HMC chain with dual-averaging step-size adaptation.
 
     Returns
