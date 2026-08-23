@@ -1,7 +1,15 @@
-"""Hamiltonian Monte Carlo (HMC) posterior sampling for GAMs.
+"""HMC and NUTS posterior sampling for GAMs.
 
-Static-L HMC with diagonal mass matrix, Nesterov dual-averaging step-size adaptation, and
-n_chains independent chains run in parallel via concurrent.futures.ProcessPoolExecutor.
+Two samplers are provided:
+
+- Static-L HMC (`sampler="HMC"`): fixed leapfrog trajectory length with Metropolis accept/reject and
+  Nesterov dual-averaging step-size adaptation.
+- NUTS (`sampler="NUTS"`, default): No-U-Turn Sampler (Hoffman & Gelman 2014) that automatically
+  adapts the trajectory length by growing a binary tree until a U-turn is detected. Dual-averaging
+  adapts the step size during warmup.
+
+Both samplers use a diagonal mass matrix pre-conditioned from the Laplace posterior covariance,
+and run `n_chains` independent chains in parallel via `concurrent.futures.ProcessPoolExecutor`.
 """
 
 from __future__ import annotations
@@ -51,6 +59,10 @@ class MCMCResult(BayesResult):
         Post-warmup draws per chain.
     n_warmup:
         Warmup (discarded) draws per chain.
+    mean_tree_depth:
+        Mean number of binary-tree doublings per post-warmup sample, averaged over all chains (NUTS
+        only, and `0.0` for HMC). Each doubling will double the number of leapfrog steps: depth $j$
+        corresponds to $2^j$ leapfrog evaluations.
     """
 
     samples: NDArray = field(default_factory=lambda: np.empty(0))
@@ -61,6 +73,7 @@ class MCMCResult(BayesResult):
     n_chains: int = 1
     n_samples: int = 0
     n_warmup: int = 0
+    mean_tree_depth: float = 0.0
     method: str = "MCMC"
 
     def draw(self, n: int, *, seed: int | None = None) -> NDArray:
@@ -177,6 +190,191 @@ def _leapfrog(
     p_mom = p_mom - 0.5 * step_size * grad
 
     return beta, p_mom
+
+
+# ---------------------------------------------------------------------------
+# NUTS binary-tree builder
+# ---------------------------------------------------------------------------
+
+
+def _build_tree(
+    beta: NDArray,
+    p_mom: NDArray,
+    log_u: float,
+    v: int,
+    j: int,
+    eps: float,
+    H0: float,
+    M_diag_inv: NDArray,
+    X: NDArray,
+    y: NDArray,
+    S_lambda: NDArray,
+    family: Family,
+    scale: float,
+    weights: NDArray | None,
+    offset: NDArray | None,
+    rng: np.random.Generator,
+) -> tuple[NDArray, NDArray, NDArray, NDArray, NDArray, int, bool, float, int]:
+    """Recursive binary-tree builder for NUTS (Hoffman & Gelman 2014, Algorithm 3).
+
+    Parameters
+    ----------
+    beta, p_mom:
+        Starting position and momentum for this subtree.
+    log_u:
+        Log of the slice variable: log U where U ~ Uniform(0, exp(−H₀)).
+    v:
+        Direction: +1 (forward) or −1 (backward).
+    j:
+        Tree depth (0 = base case, one leapfrog step).
+    eps:
+        Leapfrog step size.
+    H0:
+        Initial Hamiltonian at the start of this NUTS step. Used to compute the
+        acceptance-probability statistic for dual-averaging.
+    M_diag_inv:
+        Diagonal of M⁻¹.
+
+    Returns
+    -------
+    beta_minus, p_minus:
+        Leftmost position and momentum of this subtree.
+    beta_plus, p_plus:
+        Rightmost position and momentum of this subtree.
+    beta_prime:
+        Proposed sample drawn uniformly from the in-slice leaves.
+    n_prime:
+        Number of in-slice leaves.
+    s_prime:
+        False when a U-turn is detected or energy error exceeds 1000.
+    alpha_sum:
+        Sum of min(1, exp(H₀ − Hᵢ)) over all leaf leapfrog steps.
+    n_alpha:
+        Number of leaf steps (= number of leapfrog evaluations in subtree).
+    """
+    _DELTA_MAX = 1000.0
+
+    if j == 0:
+        beta_new, p_new = _leapfrog(
+            beta,
+            p_mom,
+            M_diag_inv,
+            v * eps,
+            1,
+            X,
+            y,
+            S_lambda,
+            family,
+            scale,
+            weights,
+            offset,
+        )
+        U_new = _potential_U(beta_new, X, y, S_lambda, family, scale, weights, offset)
+        K_new = 0.5 * float(np.sum(p_new**2 * M_diag_inv))
+        H_new = U_new + K_new
+        n_prime = int(-H_new >= log_u)
+        s_prime = -H_new > log_u - _DELTA_MAX
+        alpha = float(np.exp(np.clip(H0 - H_new, -700.0, 0.0)))
+        return beta_new, p_new, beta_new, p_new, beta_new, n_prime, s_prime, alpha, 1
+
+    # Recursive case — build first half of the subtree
+    (beta_minus, p_minus, beta_plus, p_plus, beta_prime, n_prime, s_prime, alpha_sum, n_alpha) = (
+        _build_tree(
+            beta,
+            p_mom,
+            log_u,
+            v,
+            j - 1,
+            eps,
+            H0,
+            M_diag_inv,
+            X,
+            y,
+            S_lambda,
+            family,
+            scale,
+            weights,
+            offset,
+            rng,
+        )
+    )
+
+    if s_prime:
+        if v == -1:
+            (
+                beta_minus,
+                p_minus,
+                _,
+                _,
+                beta_double_prime,
+                n_double_prime,
+                s_double_prime,
+                alpha_sum2,
+                n_alpha2,
+            ) = _build_tree(
+                beta_minus,
+                p_minus,
+                log_u,
+                v,
+                j - 1,
+                eps,
+                H0,
+                M_diag_inv,
+                X,
+                y,
+                S_lambda,
+                family,
+                scale,
+                weights,
+                offset,
+                rng,
+            )
+        else:
+            (
+                _,
+                _,
+                beta_plus,
+                p_plus,
+                beta_double_prime,
+                n_double_prime,
+                s_double_prime,
+                alpha_sum2,
+                n_alpha2,
+            ) = _build_tree(
+                beta_plus,
+                p_plus,
+                log_u,
+                v,
+                j - 1,
+                eps,
+                H0,
+                M_diag_inv,
+                X,
+                y,
+                S_lambda,
+                family,
+                scale,
+                weights,
+                offset,
+                rng,
+            )
+
+        # Biased progressive sampling: accept the new subtree's proposal with
+        # probability proportional to the number of its in-slice leaves.
+        if n_double_prime > 0 and rng.uniform() < n_double_prime / (n_prime + n_double_prime):
+            beta_prime = beta_double_prime
+
+        delta = beta_plus - beta_minus
+        s_prime = (
+            s_double_prime
+            and float(np.dot(delta, p_minus)) >= 0
+            and float(np.dot(delta, p_plus)) >= 0
+        )
+        n_prime += n_double_prime
+        alpha_sum += alpha_sum2
+        n_alpha += n_alpha2
+
+    return beta_minus, p_minus, beta_plus, p_plus, beta_prime, n_prime, s_prime, alpha_sum, n_alpha
 
 
 # ---------------------------------------------------------------------------
@@ -299,7 +497,7 @@ def _hmc_chain(
 
         samples[:, t] = beta
 
-    return samples, eps, n_accepted / n_samples
+    return samples, eps, n_accepted / n_samples, 0.0
 
 
 # Top-level wrapper (must be at module level for ProcessPoolExecutor pickling)
@@ -333,6 +531,189 @@ def _chain_worker(
         n_samples,
         n_warmup,
         leapfrog_steps,
+        step_size_init,
+        target_accept,
+        seed,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Single NUTS chain
+# ---------------------------------------------------------------------------
+
+
+def _nuts_chain(
+    beta_init: NDArray,
+    M_diag: NDArray,
+    X: NDArray,
+    y: NDArray,
+    S_lambda: NDArray,
+    family: Family,
+    scale: float,
+    weights: NDArray | None,
+    offset: NDArray | None,
+    n_samples: int,
+    n_warmup: int,
+    max_tree_depth: int,
+    step_size_init: float,
+    target_accept: float,
+    seed: int,
+) -> tuple[NDArray, float, float, float]:
+    """Run one NUTS chain with dual-averaging step-size adaptation.
+
+    Returns
+    -------
+    samples : NDArray, shape `(p, n_samples)`
+    adapted_step_size : float
+    acceptance_rate : float
+        Fraction of post-warmup NUTS steps that moved to a new position.
+    mean_tree_depth : float
+        Mean number of tree doublings per post-warmup sample.
+    """
+    rng = np.random.default_rng(seed)
+    M_diag_inv = 1.0 / M_diag
+    p = len(beta_init)
+
+    beta = beta_init.copy()
+    U_curr = _potential_U(beta, X, y, S_lambda, family, scale, weights, offset)
+
+    # Dual-averaging parameters (Nesterov 2009, as used in Stan)
+    eps = step_size_init
+    mu = float(np.log(10.0 * eps))
+    log_eps_bar = 0.0
+    H_bar = 0.0
+    gamma, t0, kappa = 0.05, 10.0, 0.75
+
+    def _one_step(beta_in: NDArray, U_in: float) -> tuple[NDArray, float, float, int]:
+        """One NUTS step; returns (beta_new, U_new, alpha_mean, tree_depth)."""
+        p0 = rng.standard_normal(p) * np.sqrt(M_diag)
+        K0 = 0.5 * float(np.sum(p0**2 * M_diag_inv))
+        H0 = U_in + K0
+        # log of the slice variable: U ~ Uniform(0, exp(-H0))
+        log_u = -H0 - float(rng.exponential())
+
+        beta_minus = beta_in.copy()
+        beta_plus = beta_in.copy()
+        p_minus = p0.copy()
+        p_plus = p0.copy()
+        beta_new = beta_in.copy()
+        n, s = 1, True
+        alpha_sum, n_alpha, depth = 0.0, 0, 0
+
+        for jj in range(max_tree_depth):
+            v = rng.integers(0, 2) * 2 - 1  # uniform ±1
+            if v == -1:
+                (beta_minus, p_minus, _, _, beta_prime, n_prime, s_prime, a_s, na) = _build_tree(
+                    beta_minus,
+                    p_minus,
+                    log_u,
+                    v,
+                    jj,
+                    eps,
+                    H0,
+                    M_diag_inv,
+                    X,
+                    y,
+                    S_lambda,
+                    family,
+                    scale,
+                    weights,
+                    offset,
+                    rng,
+                )
+            else:
+                (_, _, beta_plus, p_plus, beta_prime, n_prime, s_prime, a_s, na) = _build_tree(
+                    beta_plus,
+                    p_plus,
+                    log_u,
+                    v,
+                    jj,
+                    eps,
+                    H0,
+                    M_diag_inv,
+                    X,
+                    y,
+                    S_lambda,
+                    family,
+                    scale,
+                    weights,
+                    offset,
+                    rng,
+                )
+
+            alpha_sum += a_s
+            n_alpha += na
+
+            if s_prime and n_prime > 0 and rng.uniform() < n_prime / n:
+                beta_new = beta_prime
+
+            n += n_prime
+            depth = jj + 1
+            dq = beta_plus - beta_minus
+            s = s_prime and float(np.dot(dq, p_minus)) >= 0 and float(np.dot(dq, p_plus)) >= 0
+            if not s:
+                break
+
+        U_new = _potential_U(beta_new, X, y, S_lambda, family, scale, weights, offset)
+        return beta_new, U_new, alpha_sum / max(n_alpha, 1), depth
+
+    # --- Warmup (with dual-averaging step-size adaptation) ---
+    for m in range(1, n_warmup + 1):
+        beta, U_curr, alpha_mean, _ = _one_step(beta, U_curr)
+
+        H_bar = (1.0 - 1.0 / (m + t0)) * H_bar + (1.0 / (m + t0)) * (target_accept - alpha_mean)
+        log_eps_local = mu - (float(np.sqrt(m)) / gamma) * H_bar
+        eps = float(np.exp(log_eps_local))
+        log_eps_bar = m ** (-kappa) * log_eps_local + (1.0 - m ** (-kappa)) * log_eps_bar
+
+    eps = float(np.exp(log_eps_bar))
+
+    # --- Sampling ---
+    samples = np.empty((p, n_samples))
+    depths = np.empty(n_samples, dtype=int)
+    alpha_sum = 0.0
+
+    for t in range(n_samples):
+        beta, U_curr, alpha_mean, depth = _one_step(beta, U_curr)
+        alpha_sum += alpha_mean
+        samples[:, t] = beta
+        depths[t] = depth
+
+    # Report the mean per-leaf acceptance statistic (ᾱ), comparable to HMC's
+    # Metropolis acceptance rate and consistent with the dual-averaging target.
+    return samples, eps, alpha_sum / n_samples, float(np.mean(depths))
+
+
+def _nuts_worker(
+    beta_init: NDArray,
+    M_diag: NDArray,
+    X: NDArray,
+    y: NDArray,
+    S_lambda: NDArray,
+    family: Family,
+    scale: float,
+    weights: NDArray | None,
+    offset: NDArray | None,
+    n_samples: int,
+    n_warmup: int,
+    max_tree_depth: int,
+    step_size_init: float,
+    target_accept: float,
+    seed: int,
+) -> tuple[NDArray, float, float, float]:
+    return _nuts_chain(
+        beta_init,
+        M_diag,
+        X,
+        y,
+        S_lambda,
+        family,
+        scale,
+        weights,
+        offset,
+        n_samples,
+        n_warmup,
+        max_tree_depth,
         step_size_init,
         target_accept,
         seed,
@@ -421,12 +802,14 @@ def mcmc_fit(
     n_samples: int = 1000,
     n_warmup: int = 500,
     n_chains: int = 4,
+    sampler: str = "NUTS",
     leapfrog_steps: int = 10,
+    max_tree_depth: int = 10,
     target_accept: float = 0.65,
     seed: int | None = None,
     init_result: FitResult | None = None,
 ) -> MCMCResult:
-    """Fit a GAM using Hamiltonian Monte Carlo.
+    """Fit a GAM posterior using HMC or NUTS.
 
     Parameters
     ----------
@@ -435,25 +818,31 @@ def mcmc_fit(
     family:
         Response distribution family.
     smoothing_params:
-        Fixed smoothing parameters.  If `None`, P-IRLS with REML is run
-        first to estimate them; MCMC then samples the posterior with λ fixed.
+        Fixed smoothing parameters. If `None`, P-IRLS with REML is run first to estimate them. MCMC
+        then samples the posterior with λ fixed.
     prior_weights:
         Observation weights, shape `(n,)`.
     n_samples:
-        Post-warmup draws per chain (default 1000).
+        Post-warmup draws per chain (the default is `1000`).
     n_warmup:
-        Warmup draws per chain (default 500).  These are discarded.
+        Warmup draws per chain (the default is `500`). These are discarded.
     n_chains:
-        Number of independent Markov chains (default 4).
+        Number of independent Markov chains (the default is `4`).
+    sampler:
+        `"NUTS"` (the default) or `"HMC"`. NUTS automatically adapts the trajectory length. HMC uses
+        a fixed number of leapfrog steps.
     leapfrog_steps:
-        Number of leapfrog steps per proposal `L` (default 10).
+        Number of leapfrog steps per proposal (HMC only; default 10).
+    max_tree_depth:
+        Maximum binary-tree depth for NUTS (default 10, giving up to 2^10 = 1024 leapfrog steps per
+        sample). Ignored when `sampler="HMC"`.
     target_accept:
-        Target Metropolis acceptance rate for dual-averaging (default 0.65).
+        Target acceptance rate for dual-averaging step-size adaptation (the default is `0.65`).
     seed:
         Master random seed.  Each chain is seeded deterministically from this.
     init_result:
-        Optional pre-computed `FitResult` to use as warm start.  If
-        `None`, `pirls_fit()` is called internally with `method="REML"`.
+        Optional pre-computed `FitResult` to use as warm start. If `None`, `pirls_fit()` is called
+        internally with `method="REML"`.
 
     Returns
     -------
@@ -514,42 +903,69 @@ def mcmc_fit(
         noise = perturb_rng.standard_normal(p) * np.sqrt(0.1 * V_diag)
         chain_inits.append(beta_map + noise)
 
-    # 5. Run chains in parallel (fall back to sequential if pickling fails)
-    chain_args = [
-        (
-            chain_inits[k],
-            M_diag,
-            X,
-            y,
-            S_lambda,
-            family,
-            scale,
-            pw,
-            offset,
-            n_samples,
-            n_warmup,
-            leapfrog_steps,
-            step_size_init,
-            target_accept,
-            int(chain_seeds[k]),
-        )
-        for k in range(n_chains)
-    ]
+    # 5. Build per-chain args and select worker based on sampler
+    use_nuts = sampler.upper() == "NUTS"
+    if use_nuts:
+        chain_args = [
+            (
+                chain_inits[k],
+                M_diag,
+                X,
+                y,
+                S_lambda,
+                family,
+                scale,
+                pw,
+                offset,
+                n_samples,
+                n_warmup,
+                max_tree_depth,
+                step_size_init,
+                target_accept,
+                int(chain_seeds[k]),
+            )
+            for k in range(n_chains)
+        ]
+        worker_fn = _nuts_worker
+    else:
+        chain_args = [
+            (
+                chain_inits[k],
+                M_diag,
+                X,
+                y,
+                S_lambda,
+                family,
+                scale,
+                pw,
+                offset,
+                n_samples,
+                n_warmup,
+                leapfrog_steps,
+                step_size_init,
+                target_accept,
+                int(chain_seeds[k]),
+            )
+            for k in range(n_chains)
+        ]
+        worker_fn = _chain_worker
+
     n_workers = min(n_chains, os.cpu_count() or 1)
 
     try:
         with concurrent.futures.ProcessPoolExecutor(max_workers=n_workers) as executor:
-            futures = [executor.submit(_chain_worker, *args) for args in chain_args]
+            futures = [executor.submit(worker_fn, *args) for args in chain_args]
             chain_results = [f.result() for f in futures]
     except Exception:
         # Sequential fallback when families or the runtime environment prevent forking
-        chain_results = [_chain_worker(*args) for args in chain_args]
+        chain_results = [worker_fn(*args) for args in chain_args]
 
     # 6. Collect samples and scalar summaries
-    # each chain_result: (samples (p, n_samples), step_size, acceptance_rate)
+    # each chain_result: (samples (p, n_samples), step_size, acceptance_rate, mean_tree_depth)
     all_samples = np.concatenate([cr[0] for cr in chain_results], axis=1)  # (p, n_chains*n_samples)
     final_step_size = float(np.mean([cr[1] for cr in chain_results]))
     acceptance_rate = float(np.mean([cr[2] for cr in chain_results]))
+    mean_tree_depth = float(np.mean([cr[3] for cr in chain_results]))
 
     # 7. Convergence diagnostics over (n_chains, n_samples, p) array
     chains_3d = np.stack([cr[0].T for cr in chain_results], axis=0)  # (n_chains, n_samples, p)
@@ -593,5 +1009,6 @@ def mcmc_fit(
         n_chains=n_chains,
         n_samples=n_samples,
         n_warmup=n_warmup,
+        mean_tree_depth=mean_tree_depth,
         method="MCMC",
     )
