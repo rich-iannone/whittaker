@@ -78,6 +78,7 @@ print(f"R-hat (max): {mr.r_hat.max():.4f}")
 print(f"ESS (min):   {mr.ess.min():.1f}")
 print(f"Acceptance rate: {mr.acceptance_rate:.3f}")  # mean per-leaf α for NUTS
 print(f"Mean tree depth: {mr.mean_tree_depth:.2f}")  # NUTS only
+print(f"Divergences:     {mr.n_divergent}")
 ```
 
 `mcmc_result` is `None` if the model was fitted with any other method.
@@ -109,6 +110,28 @@ alt.Chart({"values": diag_data}).mark_bar().encode(
     ),
 ).properties(title="R-hat by coefficient (red = > 1.1)", width=500, height=250)
 ```
+
+### Divergences
+
+A **divergent transition** occurs when the leapfrog integrator encounters a region of very high
+curvature and the Hamiltonian energy error exceeds 1000. This signals that the sampler has strayed
+into a part of the posterior that the step size cannot handle correctly. The resulting draw is
+biased (and not just noisy).
+
+`n_divergent` counts the total number of divergent transitions across all chains and all post-warmup
+samples. For a well-specified model with a reasonable step size, this should be zero. Any non-zero
+value is a warning that posterior geometry is causing problems:
+
+```python
+if mr.n_divergent > 0:
+    print(f"Warning: {mr.n_divergent} divergent transitions detected.")
+    print("Try a higher target_accept (e.g. 0.90) or reparameterize the model.")
+```
+
+Increasing `target_accept` causes the dual-averaging algorithm to adapt to a smaller step size,
+which reduces energy errors at the cost of shorter trajectories. If divergences persist despite a
+high target acceptance rate, the posterior may have a funnel-shaped geometry that requires
+reparameterization.
 
 ## Predictions and uncertainty
 
