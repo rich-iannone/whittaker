@@ -64,6 +64,12 @@ class MCMCResult(BayesResult):
         Mean number of binary-tree doublings per post-warmup sample, averaged over all chains (NUTS
         only, and `0.0` for HMC). Each doubling will double the number of leapfrog steps: depth $j$
         corresponds to $2^j$ leapfrog evaluations.
+    n_divergent:
+        Total number of divergent transitions across all chains and post-warmup samples. A divergent
+        transition is one where the energy error exceeds 1000, indicating that the leapfrog
+        integrator has entered a region of very high curvature. Any divergences warrant
+        investigation: try a higher `target_accept` (which adapts to a smaller step size) or
+        reparameterize the model.
     """
 
     samples: NDArray = field(default_factory=lambda: np.empty(0))
@@ -75,6 +81,7 @@ class MCMCResult(BayesResult):
     n_samples: int = 0
     n_warmup: int = 0
     mean_tree_depth: float = 0.0
+    n_divergent: int = 0
     method: str = "MCMC"
 
     def draw(self, n: int, *, seed: int | None = None) -> NDArray:
@@ -215,7 +222,7 @@ def _build_tree(
     weights: NDArray | None,
     offset: NDArray | None,
     rng: np.random.Generator,
-) -> tuple[NDArray, NDArray, NDArray, NDArray, NDArray, int, bool, float, int]:
+) -> tuple[NDArray, NDArray, NDArray, NDArray, NDArray, int, bool, float, int, int]:
     """Recursive binary-tree builder for NUTS (Hoffman & Gelman 2014, Algorithm 3).
 
     Parameters
@@ -252,6 +259,8 @@ def _build_tree(
         Sum of min(1, exp(H₀ − Hᵢ)) over all leaf leapfrog steps.
     n_alpha:
         Number of leaf steps (= number of leapfrog evaluations in subtree).
+    n_divergent:
+        Number of divergent transitions in this subtree (energy error > 1000).
     """
     _DELTA_MAX = 1000.0
 
@@ -276,28 +285,38 @@ def _build_tree(
         n_prime = int(-H_new >= log_u)
         s_prime = -H_new > log_u - _DELTA_MAX
         alpha = float(np.exp(np.clip(H0 - H_new, -700.0, 0.0)))
-        return beta_new, p_new, beta_new, p_new, beta_new, n_prime, s_prime, alpha, 1
+        divergent = int(H_new - H0 > _DELTA_MAX)
+        return beta_new, p_new, beta_new, p_new, beta_new, n_prime, s_prime, alpha, 1, divergent
 
     # Recursive case — build first half of the subtree
-    (beta_minus, p_minus, beta_plus, p_plus, beta_prime, n_prime, s_prime, alpha_sum, n_alpha) = (
-        _build_tree(
-            beta,
-            p_mom,
-            log_u,
-            v,
-            j - 1,
-            eps,
-            H0,
-            M_diag_inv,
-            X,
-            y,
-            S_lambda,
-            family,
-            scale,
-            weights,
-            offset,
-            rng,
-        )
+    (
+        beta_minus,
+        p_minus,
+        beta_plus,
+        p_plus,
+        beta_prime,
+        n_prime,
+        s_prime,
+        alpha_sum,
+        n_alpha,
+        n_divergent,
+    ) = _build_tree(
+        beta,
+        p_mom,
+        log_u,
+        v,
+        j - 1,
+        eps,
+        H0,
+        M_diag_inv,
+        X,
+        y,
+        S_lambda,
+        family,
+        scale,
+        weights,
+        offset,
+        rng,
     )
 
     if s_prime:
@@ -312,6 +331,7 @@ def _build_tree(
                 s_double_prime,
                 alpha_sum2,
                 n_alpha2,
+                n_divergent2,
             ) = _build_tree(
                 beta_minus,
                 p_minus,
@@ -341,6 +361,7 @@ def _build_tree(
                 s_double_prime,
                 alpha_sum2,
                 n_alpha2,
+                n_divergent2,
             ) = _build_tree(
                 beta_plus,
                 p_plus,
@@ -374,8 +395,20 @@ def _build_tree(
         n_prime += n_double_prime
         alpha_sum += alpha_sum2
         n_alpha += n_alpha2
+        n_divergent += n_divergent2
 
-    return beta_minus, p_minus, beta_plus, p_plus, beta_prime, n_prime, s_prime, alpha_sum, n_alpha
+    return (
+        beta_minus,
+        p_minus,
+        beta_plus,
+        p_plus,
+        beta_prime,
+        n_prime,
+        s_prime,
+        alpha_sum,
+        n_alpha,
+        n_divergent,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -399,7 +432,7 @@ def _hmc_chain(
     step_size_init: float,
     target_accept: float,
     seed: int,
-) -> tuple[NDArray, float, float, float]:
+) -> tuple[NDArray, float, float, float, int]:
     """Run one HMC chain with dual-averaging step-size adaptation.
 
     Returns
@@ -407,7 +440,11 @@ def _hmc_chain(
     samples : NDArray, shape (p, n_samples)
     adapted_step_size : float
     acceptance_rate : float
-        Post-warmup acceptance rate.
+        Post-warmup Metropolis acceptance rate.
+    mean_tree_depth : float
+        This is always `0.0` for HMC.
+    n_divergent : int
+        Number of post-warmup proposals with energy error > 1000.
     """
     rng = np.random.default_rng(seed)
     M_diag_inv = 1.0 / M_diag
@@ -464,8 +501,10 @@ def _hmc_chain(
     eps = float(np.exp(log_eps_bar))
 
     # --- Sampling ---
+    _DELTA_MAX = 1000.0
     samples = np.empty((p, n_samples))
     n_accepted = 0
+    n_divergent = 0
 
     for t in range(n_samples):
         p_mom = rng.standard_normal(p) * np.sqrt(M_diag)
@@ -488,7 +527,12 @@ def _hmc_chain(
         U_prop = _potential_U(beta_prop, X, y, S_lambda, family, scale, weights, offset)
         K_prop = 0.5 * float(np.sum(p_prop**2 * M_diag_inv))
 
-        log_accept = -(U_prop + K_prop) + (U_curr + K_curr)
+        H_curr = U_curr + K_curr
+        H_prop = U_prop + K_prop
+        if H_prop - H_curr > _DELTA_MAX:
+            n_divergent += 1
+
+        log_accept = -H_prop + H_curr
         alpha = min(1.0, float(np.exp(np.clip(log_accept, -700.0, 700.0))))
 
         if rng.uniform() < alpha:
@@ -498,7 +542,7 @@ def _hmc_chain(
 
         samples[:, t] = beta
 
-    return samples, eps, n_accepted / n_samples, 0.0
+    return samples, eps, n_accepted / n_samples, 0.0, n_divergent
 
 
 # Top-level wrapper (must be at module level for ProcessPoolExecutor pickling)
@@ -518,7 +562,7 @@ def _chain_worker(
     step_size_init: float,
     target_accept: float,
     seed: int,
-) -> tuple[NDArray, float, float, float]:
+) -> tuple[NDArray, float, float, float, int]:
     return _hmc_chain(
         beta_init,
         M_diag,
@@ -559,7 +603,7 @@ def _nuts_chain(
     step_size_init: float,
     target_accept: float,
     seed: int,
-) -> tuple[NDArray, float, float, float]:
+) -> tuple[NDArray, float, float, float, int]:
     """Run one NUTS chain with dual-averaging step-size adaptation.
 
     Returns
@@ -567,9 +611,11 @@ def _nuts_chain(
     samples : NDArray, shape `(p, n_samples)`
     adapted_step_size : float
     acceptance_rate : float
-        Fraction of post-warmup NUTS steps that moved to a new position.
+        Mean per-leaf acceptance statistic (ᾱ) over post-warmup samples.
     mean_tree_depth : float
         Mean number of tree doublings per post-warmup sample.
+    n_divergent : int
+        Number of divergent transitions in the post-warmup sampling phase.
     """
     rng = np.random.default_rng(seed)
     M_diag_inv = 1.0 / M_diag
@@ -585,8 +631,8 @@ def _nuts_chain(
     H_bar = 0.0
     gamma, t0, kappa = 0.05, 10.0, 0.75
 
-    def _one_step(beta_in: NDArray, U_in: float) -> tuple[NDArray, float, float, int]:
-        """One NUTS step; returns (beta_new, U_new, alpha_mean, tree_depth)."""
+    def _one_step(beta_in: NDArray, U_in: float) -> tuple[NDArray, float, float, int, int]:
+        """One NUTS step; returns (beta_new, U_new, alpha_mean, tree_depth, n_divergent)."""
         p0 = rng.standard_normal(p) * np.sqrt(M_diag)
         K0 = 0.5 * float(np.sum(p0**2 * M_diag_inv))
         H0 = U_in + K0
@@ -599,31 +645,33 @@ def _nuts_chain(
         p_plus = p0.copy()
         beta_new = beta_in.copy()
         n, s = 1, True
-        alpha_sum, n_alpha, depth = 0.0, 0, 0
+        alpha_sum, n_alpha, depth, n_divergent = 0.0, 0, 0, 0
 
         for jj in range(max_tree_depth):
             v = rng.integers(0, 2) * 2 - 1  # uniform ±1
             if v == -1:
-                (beta_minus, p_minus, _, _, beta_prime, n_prime, s_prime, a_s, na) = _build_tree(
-                    beta_minus,
-                    p_minus,
-                    log_u,
-                    v,
-                    jj,
-                    eps,
-                    H0,
-                    M_diag_inv,
-                    X,
-                    y,
-                    S_lambda,
-                    family,
-                    scale,
-                    weights,
-                    offset,
-                    rng,
+                (beta_minus, p_minus, _, _, beta_prime, n_prime, s_prime, a_s, na, nd) = (
+                    _build_tree(
+                        beta_minus,
+                        p_minus,
+                        log_u,
+                        v,
+                        jj,
+                        eps,
+                        H0,
+                        M_diag_inv,
+                        X,
+                        y,
+                        S_lambda,
+                        family,
+                        scale,
+                        weights,
+                        offset,
+                        rng,
+                    )
                 )
             else:
-                (_, _, beta_plus, p_plus, beta_prime, n_prime, s_prime, a_s, na) = _build_tree(
+                (_, _, beta_plus, p_plus, beta_prime, n_prime, s_prime, a_s, na, nd) = _build_tree(
                     beta_plus,
                     p_plus,
                     log_u,
@@ -644,6 +692,7 @@ def _nuts_chain(
 
             alpha_sum += a_s
             n_alpha += na
+            n_divergent += nd
 
             if s_prime and n_prime > 0 and rng.uniform() < n_prime / n:
                 beta_new = beta_prime
@@ -656,11 +705,11 @@ def _nuts_chain(
                 break
 
         U_new = _potential_U(beta_new, X, y, S_lambda, family, scale, weights, offset)
-        return beta_new, U_new, alpha_sum / max(n_alpha, 1), depth
+        return beta_new, U_new, alpha_sum / max(n_alpha, 1), depth, n_divergent
 
     # --- Warmup (with dual-averaging step-size adaptation) ---
     for m in range(1, n_warmup + 1):
-        beta, U_curr, alpha_mean, _ = _one_step(beta, U_curr)
+        beta, U_curr, alpha_mean, _, _ = _one_step(beta, U_curr)
 
         H_bar = (1.0 - 1.0 / (m + t0)) * H_bar + (1.0 / (m + t0)) * (target_accept - alpha_mean)
         log_eps_local = mu - (float(np.sqrt(m)) / gamma) * H_bar
@@ -673,16 +722,18 @@ def _nuts_chain(
     samples = np.empty((p, n_samples))
     depths = np.empty(n_samples, dtype=int)
     alpha_sum = 0.0
+    n_divergent_total = 0
 
     for t in range(n_samples):
-        beta, U_curr, alpha_mean, depth = _one_step(beta, U_curr)
+        beta, U_curr, alpha_mean, depth, nd = _one_step(beta, U_curr)
         alpha_sum += alpha_mean
+        n_divergent_total += nd
         samples[:, t] = beta
         depths[t] = depth
 
     # Report the mean per-leaf acceptance statistic (ᾱ), comparable to HMC's
     # Metropolis acceptance rate and consistent with the dual-averaging target.
-    return samples, eps, alpha_sum / n_samples, float(np.mean(depths))
+    return samples, eps, alpha_sum / n_samples, float(np.mean(depths)), n_divergent_total
 
 
 def _nuts_worker(
@@ -701,7 +752,7 @@ def _nuts_worker(
     step_size_init: float,
     target_accept: float,
     seed: int,
-) -> tuple[NDArray, float, float, float]:
+) -> tuple[NDArray, float, float, float, int]:
     return _nuts_chain(
         beta_init,
         M_diag,
@@ -927,7 +978,7 @@ def mcmc_fit(
             )
             for k in range(n_chains)
         ]
-        worker_fn: Callable[..., tuple[NDArray, float, float, float]] = _nuts_worker
+        worker_fn: Callable[..., tuple[NDArray, float, float, float, int]] = _nuts_worker
     else:
         chain_args = [
             (
@@ -949,7 +1000,7 @@ def mcmc_fit(
             )
             for k in range(n_chains)
         ]
-        worker_fn = _chain_worker  # same Callable[..., tuple[NDArray, float, float, float]]
+        worker_fn = _chain_worker  # same Callable[..., tuple[NDArray, float, float, float, int]]
 
     n_workers = min(n_chains, os.cpu_count() or 1)
 
@@ -962,11 +1013,12 @@ def mcmc_fit(
         chain_results = [worker_fn(*args) for args in chain_args]
 
     # 6. Collect samples and scalar summaries
-    # each chain_result: (samples (p, n_samples), step_size, acceptance_rate, mean_tree_depth)
+    # each chain_result: (samples, step_size, acceptance_rate, mean_tree_depth, n_divergent)
     all_samples = np.concatenate([cr[0] for cr in chain_results], axis=1)  # (p, n_chains*n_samples)
     final_step_size = float(np.mean([cr[1] for cr in chain_results]))
     acceptance_rate = float(np.mean([cr[2] for cr in chain_results]))
     mean_tree_depth = float(np.mean([cr[3] for cr in chain_results]))
+    n_divergent = int(sum(cr[4] for cr in chain_results))
 
     # 7. Convergence diagnostics over (n_chains, n_samples, p) array
     chains_3d = np.stack([cr[0].T for cr in chain_results], axis=0)  # (n_chains, n_samples, p)
@@ -1011,5 +1063,6 @@ def mcmc_fit(
         n_samples=n_samples,
         n_warmup=n_warmup,
         mean_tree_depth=mean_tree_depth,
+        n_divergent=n_divergent,
         method="MCMC",
     )

@@ -191,6 +191,15 @@ Deviance residuals
   Deviance residuals are more nearly normally distributed than raw residuals for non-Gaussian
   families, making them the default choice for diagnostic plots.
 
+Divergent transition
+: An **MCMC** step in which the Hamiltonian energy error exceeds a threshold (1000 by default),
+  indicating that the **leapfrog integrator** has entered a region of very high posterior curvature
+  and can no longer accurately simulate the dynamics. The resulting draw is biased rather than
+  just being noisy, so any divergences invalidate local inferences. Divergences are reported in
+  `MCMCResult.n_divergent`. Remedies include increasing `target_accept` (which adapts to a smaller
+  step size) or reparameterizing the model to remove funnels or other high-curvature geometry. See
+  also **NUTS**, **Hamiltonian Monte Carlo**, **warmup**.
+
 Dispersion parameter ($\phi$)
 : A scale parameter that controls the spread of the response distribution beyond what is
   captured by the variance function. For Gaussian models, $\phi = \sigma^2$. For Poisson and
