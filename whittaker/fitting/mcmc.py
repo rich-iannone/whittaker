@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import concurrent.futures
 import os
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
@@ -517,7 +518,7 @@ def _chain_worker(
     step_size_init: float,
     target_accept: float,
     seed: int,
-) -> tuple[NDArray, float, float]:
+) -> tuple[NDArray, float, float, float]:
     return _hmc_chain(
         beta_init,
         M_diag,
@@ -926,7 +927,7 @@ def mcmc_fit(
             )
             for k in range(n_chains)
         ]
-        worker_fn = _nuts_worker
+        worker_fn: Callable[..., tuple[NDArray, float, float, float]] = _nuts_worker
     else:
         chain_args = [
             (
@@ -948,7 +949,7 @@ def mcmc_fit(
             )
             for k in range(n_chains)
         ]
-        worker_fn = _chain_worker
+        worker_fn = _chain_worker  # same Callable[..., tuple[NDArray, float, float, float]]
 
     n_workers = min(n_chains, os.cpu_count() or 1)
 
