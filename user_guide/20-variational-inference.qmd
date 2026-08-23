@@ -172,7 +172,7 @@ reduced. A trace that rises very slowly may benefit from a larger `lr` or more i
 `posterior_samples(n)` draws coefficient vectors directly from $q(\beta) = \mathcal{N}(m, C)$:
 
 ```{python}
-beta_samples = model.posterior_samples(n=500, seed=42)
+beta_samples = model.posterior_samples(n=500, seed=23)
 print(f"Shape: {beta_samples.shape}")  # (p, 500)
 ```
 
@@ -203,7 +203,7 @@ model = wk.GAM("y ~ s(x)", family=Poisson()).fit(
         "tol": 1e-5,        # relative ELBO change threshold (default of 1e-4)
         "patience": 10,     # consecutive steps below tol before stopping (the default is 5)
         "n_quad": 30,       # Gauss-Hermite quadrature points (default: 20)
-        "seed": 42,         # reproducibility
+        "seed": 23,         # seed for reproducibility
     },
 )
 ```
