@@ -446,9 +446,7 @@ class TestNUTS:
 
     def test_nuts_r_hat_converges(self, nuts_result):
         """NUTS chains converge: R-hat < 1.1 for all parameters."""
-        assert nuts_result.r_hat.max() < 1.1, (
-            f"R-hat max = {nuts_result.r_hat.max():.4f}"
-        )
+        assert nuts_result.r_hat.max() < 1.1, f"R-hat max = {nuts_result.r_hat.max():.4f}"
 
     def test_hmc_mean_tree_depth_is_zero(self, hmc_result):
         """mean_tree_depth is 0.0 for static-L HMC."""
@@ -466,9 +464,13 @@ class TestNUTS:
         data = _gaussian_data(seed=12)
         mm, fr, S_lambda, fam = _build_components(data)
         mr = mcmc_fit(
-            mm, fam,
-            n_chains=2, n_samples=200, n_warmup=100,
-            max_tree_depth=2, seed=13,
+            mm,
+            fam,
+            n_chains=2,
+            n_samples=200,
+            n_warmup=100,
+            max_tree_depth=2,
+            seed=13,
         )
         assert mr.mean_tree_depth <= 2.0, (
             f"mean_tree_depth {mr.mean_tree_depth:.2f} exceeded max_tree_depth=2"
