@@ -35,6 +35,7 @@ Whittaker is a Python library for Generalized Additive Models (GAMs), the flexib
 - smoothness selection is principled: REML by default, with GCV, ML, and fREML as alternatives
 - you get beautiful, interactive plots: partial effects, diagnostics, term comparisons, and prediction intervals, all powered by [Altair](https://altair-viz.github.io/)
 - it goes well beyond the mean: distributional regression (GAMLSS), quantile regression, conformal prediction, causal inference, streaming GAMs, and functional regression are all built in
+- it offers principled Bayesian inference: variational inference for fast approximate posteriors, and NUTS (No-U-Turn Sampler) MCMC for exact posterior sampling with full convergence diagnostics
 
 ## What's included
 
@@ -54,6 +55,7 @@ Prediction and inference:
 
 Advanced models:
 
+- **Bayesian inference**: variational inference (`method="VI"`) for fast approximate posteriors, and NUTS MCMC (`method="MCMC"`) for exact posterior sampling (both with R-hat, ESS, and divergence diagnostics)
 - **Distributional regression** (`GAMLSS`): model location, scale, and shape simultaneously (Gaussian, Gamma, and Beta location-scale families, plus zero-inflated Poisson and Negative Binomial)
 - **Quantile regression** (`QuantileGAM`): fit conditional quantiles with ELF loss, optional non-crossing constraints, and sigma calibration
 - **Conformal prediction** (`ConformalPredictor`): distribution-free prediction intervals via split, CV+, and jackknife+ methods
