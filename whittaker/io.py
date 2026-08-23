@@ -385,10 +385,11 @@ def save_gam(model: Any, path: str | Path) -> None:
         raise TypeError(f"Expected a GAM instance, got {type(model).__name__}.")
     if not model.is_fitted:
         raise RuntimeError("Cannot save an unfitted model. Call fit() first.")
+    from whittaker.fitting.mcmc import MCMCResult
     from whittaker.fitting.vi import VIResult
 
-    if isinstance(model._fit_result, VIResult):
-        raise NotImplementedError("save_gam does not support VI fits (method='VI').")
+    if isinstance(model._fit_result, (VIResult, MCMCResult)):
+        raise NotImplementedError(f"save_gam does not support {model._fit_result.method} fits.")
 
     path = Path(path)
     fr = model._fit_result
@@ -700,10 +701,11 @@ def to_mgcv_dict(model: Any) -> dict[str, Any]:
         raise TypeError(f"Expected a GAM instance, got {type(model).__name__}.")
     if not model.is_fitted:
         raise RuntimeError("Cannot export an unfitted model.")
+    from whittaker.fitting.mcmc import MCMCResult
     from whittaker.fitting.vi import VIResult
 
-    if isinstance(model._fit_result, VIResult):
-        raise NotImplementedError("to_mgcv_dict does not support VI fits (method='VI').")
+    if isinstance(model._fit_result, (VIResult, MCMCResult)):
+        raise NotImplementedError(f"to_mgcv_dict does not support {model._fit_result.method} fits.")
 
     fr = model._fit_result
     mm = model._model_matrix

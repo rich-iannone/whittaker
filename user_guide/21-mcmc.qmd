@@ -1,0 +1,233 @@
+---
+title: "MCMC sampling"
+guide-section: "Advanced features"
+---
+
+```{python}
+#| echo: false
+#| output: false
+import great_docs as gd
+
+gd.enable_tbl_preview(n_head=8, n_tail=3)
+```
+
+Whittaker's default inference pipeline is the **Laplace approximation**: after P-IRLS finds the
+posterior mode $\hat\beta$, the posterior is approximated as
+$q(\beta) = \mathcal{N}(\hat\beta,\, V_\beta)$, where
+$V_\beta = \phi\,(X^\top W X + \sum_j \lambda_j S_j)^{-1}$.
+For Gaussian response this is exact; for non-Gaussian families it can underestimate spread when
+the likelihood surface is asymmetric.
+
+**Hamiltonian Monte Carlo (MCMC)** draws directly from the exact posterior, so no Gaussian
+approximation is made. It uses the gradient of the log-posterior to propose distant moves in
+parameter space that are accepted with high probability, making it far more efficient than
+random-walk Metropolis. The result is a collection of coefficient vectors that represent the full
+posterior distribution of the smooth functions.
+
+## When to use MCMC
+
+Use `method="MCMC"` when:
+
+- you need the most accurate posterior uncertainty for non-Gaussian families (Poisson, Binomial,
+  Gamma) and neither the Laplace approximation nor VI is sufficient
+- the posterior may be multimodal or strongly skewed
+- you want posterior predictive distributions for individual observations, not just marginal
+  standard errors
+- you are doing formal Bayesian inference and need to verify convergence via R-hat and ESS
+
+For large $n$ or when a fast answer is needed, the Laplace approximation (`method="REML"`, the
+default) is usually adequate. For non-Gaussian families with moderate $n$, variational inference
+(`method="VI"`) offers a nice middle ground: better calibrated than Laplace, cheaper than MCMC.
+
+## Basic usage
+
+Pass `method="MCMC"` to `fit()`. Everything else stays the same.
+
+```{python}
+import numpy as np
+import whittaker as wk
+from whittaker.families.poisson import Poisson
+
+rng = np.random.default_rng(23)
+n = 300
+x = np.linspace(0, 2 * np.pi, n)
+lam = np.exp(1.5 * np.sin(x))
+y = rng.poisson(lam).astype(float)
+
+data = {"x": x, "y": y}
+
+model = wk.GAM("y ~ s(x)", family=Poisson())
+model.fit(data, method="MCMC")
+model.summary()
+```
+
+The summary shows `Inference: MCMC` along with R-hat and ESS diagnostics. GCV, AIC, and BIC are
+not defined for MCMC fits.
+
+## Inspecting the MCMC result
+
+The `mcmc_result` property returns an `MCMCResult` object with the full posterior sample and
+convergence diagnostics:
+
+```{python}
+mr = model.mcmc_result
+
+print(f"Samples shape: {mr.samples.shape}")  # (p, n_chains * n_samples)
+print(f"R-hat (max): {mr.r_hat.max():.4f}")
+print(f"ESS (min):   {mr.ess.min():.1f}")
+print(f"Acceptance rate: {mr.acceptance_rate:.3f}")
+```
+
+`mcmc_result` is `None` if the model was fitted with any other method.
+
+### R-hat and ESS
+
+**R-hat** (the Gelman-Rubin statistic) compares within-chain and between-chain variance. Values
+below 1.1 indicate that the chains have mixed well. Values above 1.1 suggest you need more
+warmup iterations, more chains, or a smaller step size.
+
+**ESS** (effective sample size) estimates how many independent draws the correlated MCMC output
+is worth. An ESS ratio (ESS / total draws) above 0.05 is generally considered adequate.
+
+```{python}
+import altair as alt
+
+diag_data = [
+    {"coefficient": i, "r_hat": float(mr.r_hat[i]), "ess": float(mr.ess[i])}
+    for i in range(len(mr.r_hat))
+]
+
+alt.Chart({"values": diag_data}).mark_bar().encode(
+    x=alt.X("coefficient:O", title="Coefficient index"),
+    y=alt.Y("r_hat:Q", title="R-hat", scale=alt.Scale(domainMin=1.0)),
+    color=alt.condition(
+        alt.datum.r_hat > 1.1,
+        alt.value("firebrick"),
+        alt.value("steelblue"),
+    ),
+).properties(title="R-hat by coefficient (red = > 1.1)", width=500, height=250)
+```
+
+## Predictions and uncertainty
+
+`predict(se=True)` and confidence intervals work exactly as with any other fitting method.
+Standard errors are derived from the posterior samples:
+
+```{python}
+x_new = np.linspace(0, 2 * np.pi, 200)
+preds = model.predict({"x": x_new}, se=True, interval="confidence")
+
+obs_data = [{"x": float(x[i]), "y": float(y[i])} for i in range(n)]
+points = alt.Chart({"values": obs_data}).mark_circle(
+    size=15, opacity=0.3, color="steelblue"
+).encode(
+    x=alt.X("x:Q", title="x"),
+    y=alt.Y("y:Q", title="count"),
+)
+
+fit_data = [
+    {
+        "x": float(x_new[i]),
+        "fit": float(preds.values[i]),
+        "lower": float(preds.lower[i]),
+        "upper": float(preds.upper[i]),
+    }
+    for i in range(len(x_new))
+]
+
+line = alt.Chart({"values": fit_data}).mark_line(
+    color="firebrick", strokeWidth=2
+).encode(x="x:Q", y="fit:Q")
+
+band = alt.Chart({"values": fit_data}).mark_area(
+    opacity=0.2, color="firebrick"
+).encode(x="x:Q", y="lower:Q", y2="upper:Q")
+
+(band + line + points).properties(
+    title="Poisson GAM with MCMC: fitted curve and 95% credible interval",
+    width=500,
+    height=300,
+)
+```
+
+## Posterior samples
+
+`posterior_samples(n)` draws coefficient vectors from the empirical posterior:
+
+```{python}
+beta_samples = model.posterior_samples(n=500, seed=23)
+print(f"Shape: {beta_samples.shape}")  # (p, 500)
+```
+
+This also works after `method="REML"`, `"GCV"`, or `"VI"` fits (in those cases samples are drawn
+from the Laplace or variational posterior), so code that calls `posterior_samples()` is
+inference-method agnostic.
+
+## Simulating from the posterior
+
+`simulate()` propagates posterior coefficient uncertainty through the response distribution,
+giving a posterior predictive sample:
+
+```{python}
+sims = model.simulate(n_sim=200, seed=0)
+print(f"Simulations shape: {sims.shape}")  # (n, 200): integer count draws
+```
+
+## Controlling MCMC
+
+Pass an `mcmc_options=` dict to `fit()` to override any sampler setting:
+
+```python
+model = wk.GAM("y ~ s(x)", family=Poisson()).fit(
+    data,
+    method="MCMC",
+    mcmc_options={
+        "n_chains": 4,        # number of independent chains (default: 4)
+        "n_samples": 1000,    # post-warmup draws per chain (default: 1000)
+        "n_warmup": 500,      # warmup (adaptation) draws per chain (default: 500)
+        "leapfrog_steps": 30, # leapfrog steps per proposal (default: 10)
+        "seed": 23,           # seed for reproducibility
+    },
+)
+```
+
+### Step-size adaptation
+
+Whittaker uses dual-averaging step-size adaptation (Nesterov 2009, as implemented in Stan) during
+the warmup phase, targeting an acceptance rate of 0.65. The adapted step size is fixed for the
+sampling phase. You can override the target acceptance rate:
+
+```python
+model = wk.GAM("y ~ s(x)", family=Poisson()).fit(
+    data,
+    method="MCMC",
+    mcmc_options={"target_accept": 0.80},  # default: 0.65
+)
+```
+
+Higher target acceptance rates lead to smaller step sizes and more correlated draws; lower rates
+lead to larger steps but more rejections. The default of 0.65 works well in most settings.
+
+### Mass matrix
+
+The sampler uses a diagonal mass matrix $M = \text{diag}(1 / V_\beta)$, where $V_\beta$ is the
+diagonal of the Laplace posterior covariance. This pre-conditions the leapfrog integrator to the
+scale of each coefficient, substantially improving mixing when coefficients differ greatly in
+magnitude (as is common for B-spline bases).
+
+## Properties not available for MCMC fits
+
+The `deviance`, `null_deviance`, `deviance_explained`, `aic`, `bic`, and `gcv_score` properties
+are not defined for MCMC fits and raise `NotImplementedError`. Use R-hat and ESS for convergence
+assessment, and posterior predictive checks (via `simulate()`) for model comparison.
+
+## Where to go next
+
+- **[Variational inference](20-variational-inference.qmd)**: a faster alternative to MCMC for
+  non-Gaussian families that gives better-calibrated intervals than the Laplace approximation.
+- **[Prediction and inference](06-prediction.qmd)**: confidence intervals, simultaneous bands,
+  and term-level predictions from any fitted model.
+- **[Model diagnostics](07-diagnostics.qmd)**: residual plots and `model.check()`.
+- **[Model fitting](05-fitting.qmd)**: P-IRLS, REML, and smoothness selection.
+- **[Response families](04-families.qmd)**: how the family affects posterior shape and MCMC
+  efficiency.

@@ -39,6 +39,7 @@ nav_icons:
     "Cross-validation": repeat
     "Large datasets": database
     "Variational inference": brain
+    "MCMC sampling": activity
     "Saving and loading models": save
     "Glossary": book-open
 
@@ -70,6 +71,7 @@ tags:
     Data input: database
     Polars: zap
     "Variational inference": brain
+    MCMC: activity
     Serialization: save
     Deployment: cloud-upload
     scikit-learn: puzzle
