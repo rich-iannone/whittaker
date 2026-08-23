@@ -108,8 +108,10 @@ class TestLeapfrog:
         z0 = np.concatenate([beta0, p0])
         J = np.zeros((2 * p, 2 * p))
         for i in range(2 * p):
-            zp = z0.copy(); zp[i] += h
-            zm = z0.copy(); zm[i] -= h
+            zp = z0.copy()
+            zp[i] += h
+            zm = z0.copy()
+            zm[i] -= h
             J[:, i] = (F(zp) - F(zm)) / (2 * h)
 
         assert_allclose(abs(np.linalg.det(J)), 1.0, atol=1e-6)
@@ -124,9 +126,13 @@ class TestLeapfrog:
         p0 = rng.standard_normal(p) * np.sqrt(M_diag)
 
         eps = 0.01
-        H0 = _potential_U(beta0, X, y, S, fam, scale, None, None) + 0.5 * float(np.sum(p0**2 * M_inv))
+        H0 = _potential_U(beta0, X, y, S, fam, scale, None, None) + 0.5 * float(
+            np.sum(p0**2 * M_inv)
+        )
         beta1, p1 = _leapfrog(beta0, p0, M_inv, eps, 20, X, y, S, fam, scale, None, None)
-        H1 = _potential_U(beta1, X, y, S, fam, scale, None, None) + 0.5 * float(np.sum(p1**2 * M_inv))
+        H1 = _potential_U(beta1, X, y, S, fam, scale, None, None) + 0.5 * float(
+            np.sum(p1**2 * M_inv)
+        )
 
         # Leapfrog conserves H up to O(ε²) per step; tolerance ~ L * ε² * ‖H‖
         assert abs(H1 - H0) < 1.0
@@ -151,11 +157,13 @@ class TestGradientConsistency:
         h = 1e-5
         g_numeric = np.zeros_like(beta)
         for i in range(len(beta)):
-            bp = beta.copy(); bp[i] += h
-            bm = beta.copy(); bm[i] -= h
+            bp = beta.copy()
+            bp[i] += h
+            bm = beta.copy()
+            bm[i] -= h
             g_numeric[i] = (
-                _potential_U(bp, X, y, S_lambda, fam, scale, None, offset) -
-                _potential_U(bm, X, y, S_lambda, fam, scale, None, offset)
+                _potential_U(bp, X, y, S_lambda, fam, scale, None, offset)
+                - _potential_U(bm, X, y, S_lambda, fam, scale, None, offset)
             ) / (2 * h)
 
         rel_err = np.linalg.norm(g_analytic - g_numeric) / (np.linalg.norm(g_numeric) + 1e-15)
@@ -203,8 +211,7 @@ class TestGaussianPosterior:
         std_true = np.sqrt(np.diag(cov_true))
 
         # MCMC via full mcmc_fit
-        mr = mcmc_fit(mm, fam, n_chains=4, n_samples=1000, n_warmup=500,
-                      leapfrog_steps=30, seed=42)
+        mr = mcmc_fit(mm, fam, n_chains=4, n_samples=1000, n_warmup=500, leapfrog_steps=30, seed=42)
         return mr, fr.coefficients, std_true
 
     def test_gaussian_matches_laplace_mean(self, fitted):
@@ -236,10 +243,17 @@ class TestPoissonPosterior:
     def fitted(self):
         data = _poisson_data(seed=6)
         gam = GAM("y ~ s(x)", family=Poisson())
-        gam.fit(data, method="MCMC", mcmc_options={
-            "n_chains": 4, "n_samples": 1000, "n_warmup": 500,
-            "leapfrog_steps": 30, "seed": 55,
-        })
+        gam.fit(
+            data,
+            method="MCMC",
+            mcmc_options={
+                "n_chains": 4,
+                "n_samples": 1000,
+                "n_warmup": 500,
+                "leapfrog_steps": 30,
+                "seed": 55,
+            },
+        )
         return gam
 
     def test_poisson_r_hat_converges(self, fitted):
@@ -275,10 +289,17 @@ class TestConvergenceDiagnostics:
     def mr(self):
         data = _gaussian_data(seed=3)
         gam = GAM("y ~ s(x)")
-        gam.fit(data, method="MCMC", mcmc_options={
-            "n_chains": 4, "n_samples": 500, "n_warmup": 300,
-            "leapfrog_steps": 20, "seed": 17,
-        })
+        gam.fit(
+            data,
+            method="MCMC",
+            mcmc_options={
+                "n_chains": 4,
+                "n_samples": 500,
+                "n_warmup": 300,
+                "leapfrog_steps": 20,
+                "seed": 17,
+            },
+        )
         return gam.mcmc_result
 
     def test_r_hat_converges(self, mr):
@@ -304,10 +325,17 @@ class TestMCMCResultAPI:
     def gam(self):
         data = _gaussian_data(seed=4)
         gam = GAM("y ~ s(x)")
-        gam.fit(data, method="MCMC", mcmc_options={
-            "n_chains": 2, "n_samples": 200, "n_warmup": 100,
-            "leapfrog_steps": 10, "seed": 7,
-        })
+        gam.fit(
+            data,
+            method="MCMC",
+            mcmc_options={
+                "n_chains": 2,
+                "n_samples": 200,
+                "n_warmup": 100,
+                "leapfrog_steps": 10,
+                "seed": 7,
+            },
+        )
         return gam
 
     def test_mcmc_result_draw_shape(self, gam):

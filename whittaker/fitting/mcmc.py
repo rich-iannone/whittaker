@@ -233,8 +233,18 @@ def _hmc_chain(
         K_curr = 0.5 * float(np.sum(p_mom**2 * M_diag_inv))
 
         beta_prop, p_prop = _leapfrog(
-            beta, p_mom, M_diag_inv, eps, leapfrog_steps,
-            X, y, S_lambda, family, scale, weights, offset,
+            beta,
+            p_mom,
+            M_diag_inv,
+            eps,
+            leapfrog_steps,
+            X,
+            y,
+            S_lambda,
+            family,
+            scale,
+            weights,
+            offset,
         )
         U_prop = _potential_U(beta_prop, X, y, S_lambda, family, scale, weights, offset)
         K_prop = 0.5 * float(np.sum(p_prop**2 * M_diag_inv))
@@ -264,8 +274,18 @@ def _hmc_chain(
         K_curr = 0.5 * float(np.sum(p_mom**2 * M_diag_inv))
 
         beta_prop, p_prop = _leapfrog(
-            beta, p_mom, M_diag_inv, eps, leapfrog_steps,
-            X, y, S_lambda, family, scale, weights, offset,
+            beta,
+            p_mom,
+            M_diag_inv,
+            eps,
+            leapfrog_steps,
+            X,
+            y,
+            S_lambda,
+            family,
+            scale,
+            weights,
+            offset,
         )
         U_prop = _potential_U(beta_prop, X, y, S_lambda, family, scale, weights, offset)
         K_prop = 0.5 * float(np.sum(p_prop**2 * M_diag_inv))
@@ -302,8 +322,21 @@ def _chain_worker(
     seed: int,
 ) -> tuple[NDArray, float, float]:
     return _hmc_chain(
-        beta_init, M_diag, X, y, S_lambda, family, scale, weights, offset,
-        n_samples, n_warmup, leapfrog_steps, step_size_init, target_accept, seed,
+        beta_init,
+        M_diag,
+        X,
+        y,
+        S_lambda,
+        family,
+        scale,
+        weights,
+        offset,
+        n_samples,
+        n_warmup,
+        leapfrog_steps,
+        step_size_init,
+        target_accept,
+        seed,
     )
 
 
@@ -472,7 +505,7 @@ def mcmc_fit(
     M_diag = 1.0 / V_diag  # precision; M_diag_inv inside _hmc_chain = V_diag
 
     # Stan-style initial step size: O(1) in the whitened (unit-mass) coordinate system.
-    step_size_init = 0.3 / float(p ** 0.25)
+    step_size_init = 0.3 / float(p**0.25)
 
     # 4. Per-chain seeds and dispersed initializations from MAP
     rng_master = np.random.default_rng(seed)
@@ -489,8 +522,20 @@ def mcmc_fit(
     # 5. Run chains in parallel (fall back to sequential if pickling fails)
     chain_args = [
         (
-            chain_inits[k], M_diag, X, y, S_lambda, family, scale, pw, offset,
-            n_samples, n_warmup, leapfrog_steps, step_size_init, target_accept,
+            chain_inits[k],
+            M_diag,
+            X,
+            y,
+            S_lambda,
+            family,
+            scale,
+            pw,
+            offset,
+            n_samples,
+            n_warmup,
+            leapfrog_steps,
+            step_size_init,
+            target_accept,
             int(chain_seeds[k]),
         )
         for k in range(n_chains)

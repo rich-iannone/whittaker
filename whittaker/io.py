@@ -389,9 +389,7 @@ def save_gam(model: Any, path: str | Path) -> None:
     from whittaker.fitting.vi import VIResult
 
     if isinstance(model._fit_result, (VIResult, MCMCResult)):
-        raise NotImplementedError(
-            f"save_gam does not support {model._fit_result.method} fits."
-        )
+        raise NotImplementedError(f"save_gam does not support {model._fit_result.method} fits.")
 
     path = Path(path)
     fr = model._fit_result
@@ -707,9 +705,7 @@ def to_mgcv_dict(model: Any) -> dict[str, Any]:
     from whittaker.fitting.vi import VIResult
 
     if isinstance(model._fit_result, (VIResult, MCMCResult)):
-        raise NotImplementedError(
-            f"to_mgcv_dict does not support {model._fit_result.method} fits."
-        )
+        raise NotImplementedError(f"to_mgcv_dict does not support {model._fit_result.method} fits.")
 
     fr = model._fit_result
     mm = model._model_matrix
