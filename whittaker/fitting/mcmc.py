@@ -21,7 +21,6 @@ if TYPE_CHECKING:
 
 from whittaker.fitting.vi import BayesResult
 
-
 # ---------------------------------------------------------------------------
 # Result dataclass
 # ---------------------------------------------------------------------------
@@ -379,10 +378,6 @@ def _ess(chains: NDArray) -> NDArray:
     """
     n_chains, n_samples, p = chains.shape
     n_total = n_chains * n_samples
-
-    W = np.var(chains, axis=1, ddof=1).mean(axis=0)  # (p,)
-    B_over_n = np.var(chains.mean(axis=1), axis=0, ddof=1)  # (p,)
-    var_plus = ((n_samples - 1) / n_samples) * W + B_over_n  # (p,)
 
     ess = np.empty(p)
     for j in range(p):
