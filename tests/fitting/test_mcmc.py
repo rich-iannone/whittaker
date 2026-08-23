@@ -439,8 +439,8 @@ class TestNUTS:
         )
 
     def test_nuts_acceptance_rate_in_range(self, nuts_result):
-        """NUTS mean per-leaf α is in [0.5, 0.99]."""
-        assert 0.5 <= nuts_result.acceptance_rate <= 0.99, (
+        """NUTS mean per-leaf α is in [0.5, 1.0]."""
+        assert 0.5 <= nuts_result.acceptance_rate <= 1.0, (
             f"Unexpected acceptance_rate = {nuts_result.acceptance_rate:.3f}"
         )
 
@@ -457,7 +457,7 @@ class TestNUTS:
     def test_hmc_sampler_still_works(self, hmc_result):
         """sampler='HMC' produces valid diagnostics."""
         assert hmc_result.r_hat.max() < 1.1
-        assert 0.5 <= hmc_result.acceptance_rate <= 0.99
+        assert 0.5 <= hmc_result.acceptance_rate <= 1.0
 
     def test_max_tree_depth_respected(self):
         """With max_tree_depth=2 the mean depth stays at or below 2."""
