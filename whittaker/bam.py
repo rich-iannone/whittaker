@@ -485,6 +485,7 @@ class BigGAM(GAM):
         weights: NDArray | None = None,
         select: bool = False,
         vi_options: dict | None = None,
+        mcmc_options: dict | None = None,
     ) -> BigGAM:
         """Fit the BigGAM using discretized P-IRLS.
 
