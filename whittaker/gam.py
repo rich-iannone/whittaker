@@ -12,6 +12,7 @@ from whittaker.data import InputData, prepare_data
 from whittaker.families.base import Family
 from whittaker.families.gaussian import Gaussian
 from whittaker.families.tweedie_estimated import TweedieEstimated
+from whittaker.fitting.mcmc import MCMCResult, mcmc_fit
 from whittaker.fitting.pirls import FitResult, pirls_fit
 from whittaker.fitting.vi import VIResult, vi_fit
 from whittaker.formula.parser import parse
@@ -258,7 +259,7 @@ class GAM:
         self._fitted = False
 
         self._model_matrix: ModelMatrix
-        self._fit_result: FitResult | VIResult
+        self._fit_result: FitResult | VIResult | MCMCResult
 
     @property
     def formula(self) -> Formula:
@@ -314,6 +315,7 @@ class GAM:
         weights: NDArray | None = None,
         select: bool = False,
         vi_options: dict | None = None,
+        mcmc_options: dict | None = None,
     ) -> GAM:
         r"""Fit the GAM to data via Penalized Iteratively Reweighted Least Squares (P-IRLS).
 
@@ -366,6 +368,10 @@ class GAM:
             `method="VI"`.  Accepted keys: `n_quad`, `lr`, `max_iter`, `tol`,
             `patience`, `seed`, `cov_structure`, `phi_inference`.  Ignored for
             all other methods.
+        mcmc_options : dict or None
+            Extra keyword arguments forwarded to `~whittaker.fitting.mcmc.mcmc_fit` when
+            `method="MCMC"`.  Accepted keys: `n_samples`, `n_warmup`, `n_chains`,
+            `leapfrog_steps`, `target_accept`, `seed`.  Ignored for all other methods.
 
         Returns
         -------
@@ -398,6 +404,14 @@ class GAM:
                 smoothing_params=smoothing_params,
                 prior_weights=pw,
                 **(vi_options or {}),
+            )
+        elif method.upper() == "MCMC":
+            self._fit_result = mcmc_fit(
+                self._model_matrix,
+                self._family,
+                smoothing_params=smoothing_params,
+                prior_weights=pw,
+                **(mcmc_options or {}),
             )
         elif isinstance(self._family, TweedieEstimated) and not self._family.p_estimated:
             self._fit_result = self._profile_tweedie_power(
@@ -694,7 +708,7 @@ class GAM:
         if W is None:
             W = self._combined_weights()
 
-        if isinstance(self._fit_result, VIResult):
+        if isinstance(self._fit_result, (VIResult, MCMCResult)):
             return self._fit_result.posterior_cov
 
         if unconditional and self._fit_result.method in ("REML", "ML"):
@@ -1061,8 +1075,8 @@ class GAM:
             Deviance of the fitted model.
         """
         self._check_fitted()
-        if isinstance(self._fit_result, VIResult):
-            raise NotImplementedError("deviance is not computed for VI fits; use elbo instead.")
+        if isinstance(self._fit_result, (VIResult, MCMCResult)):
+            raise NotImplementedError("deviance is not computed for Bayesian fits.")
         return self._fit_result.deviance
 
     @property
@@ -1080,10 +1094,8 @@ class GAM:
             GCV score of the fitted model.
         """
         self._check_fitted()
-        if isinstance(self._fit_result, VIResult):
-            raise NotImplementedError(
-                "gcv_score is not computed for VI fits; use vi_result.elbo instead."
-            )
+        if isinstance(self._fit_result, (VIResult, MCMCResult)):
+            raise NotImplementedError("gcv_score is not computed for Bayesian fits.")
         return self._fit_result.gcv_score
 
     @property
@@ -1100,8 +1112,8 @@ class GAM:
             Deviance of the intercept-only model.
         """
         self._check_fitted()
-        if isinstance(self._fit_result, VIResult):
-            raise NotImplementedError("null_deviance is not computed for VI fits.")
+        if isinstance(self._fit_result, (VIResult, MCMCResult)):
+            raise NotImplementedError("null_deviance is not computed for Bayesian fits.")
         assert self._fit_result.null_deviance is not None
         return self._fit_result.null_deviance
 
@@ -1120,8 +1132,8 @@ class GAM:
             the null deviance is non-positive.
         """
         self._check_fitted()
-        if isinstance(self._fit_result, VIResult):
-            raise NotImplementedError("deviance_explained is not computed for VI fits.")
+        if isinstance(self._fit_result, (VIResult, MCMCResult)):
+            raise NotImplementedError("deviance_explained is not computed for Bayesian fits.")
         null_dev = self._fit_result.null_deviance
         if null_dev is None or null_dev <= 0:
             return 0.0
@@ -1141,8 +1153,8 @@ class GAM:
             AIC of the fitted model.
         """
         self._check_fitted()
-        if isinstance(self._fit_result, VIResult):
-            raise NotImplementedError("AIC is not computed for VI fits; use elbo instead.")
+        if isinstance(self._fit_result, (VIResult, MCMCResult)):
+            raise NotImplementedError("AIC is not computed for Bayesian fits.")
         assert self._fit_result.aic is not None
         return self._fit_result.aic
 
@@ -1160,8 +1172,8 @@ class GAM:
             BIC of the fitted model.
         """
         self._check_fitted()
-        if isinstance(self._fit_result, VIResult):
-            raise NotImplementedError("BIC is not computed for VI fits; use elbo instead.")
+        if isinstance(self._fit_result, (VIResult, MCMCResult)):
+            raise NotImplementedError("BIC is not computed for Bayesian fits.")
         assert self._fit_result.bic is not None
         return self._fit_result.bic
 
@@ -1170,6 +1182,12 @@ class GAM:
         """The `VIResult` when the model was fitted with `method="VI"`, else `None`."""
         self._check_fitted()
         return self._fit_result if isinstance(self._fit_result, VIResult) else None
+
+    @property
+    def mcmc_result(self) -> MCMCResult | None:
+        """The `MCMCResult` when the model was fitted with `method="MCMC"`, else `None`."""
+        self._check_fitted()
+        return self._fit_result if isinstance(self._fit_result, MCMCResult) else None
 
     def posterior_samples(self, n: int = 1000, *, seed: int | None = None) -> NDArray:
         """Draw coefficient vectors from the posterior.
@@ -1192,7 +1210,7 @@ class GAM:
         self._check_fitted()
         from whittaker.fitting.inference import _bayesian_covariance
 
-        if isinstance(self._fit_result, VIResult):
+        if isinstance(self._fit_result, (VIResult, MCMCResult)):
             return self._fit_result.draw(n, seed=seed)
 
         W = self._combined_weights()
@@ -1352,8 +1370,8 @@ class GAM:
 
         beta_hat = self._fit_result.coefficients
 
-        if isinstance(self._fit_result, VIResult):
-            # Draw directly from the variational posterior N(m, C)
+        if isinstance(self._fit_result, (VIResult, MCMCResult)):
+            # Draw directly from the Bayesian posterior (variational or MCMC samples)
             beta_draws = self._fit_result.draw(n_sim, seed=seed)
         else:
             W = self._combined_weights()
@@ -1464,7 +1482,12 @@ class GAM:
         r = self._fit_result
         mm = self._model_matrix
 
-        inference_label = "Variational Bayes" if isinstance(r, VIResult) else r.method
+        if isinstance(r, VIResult):
+            inference_label = "Variational Bayes"
+        elif isinstance(r, MCMCResult):
+            inference_label = f"MCMC (HMC, {r.n_chains} chains × {r.n_samples} draws)"
+        else:
+            inference_label = r.method
         lines = [
             "GAM fit summary",
             "=" * 60,
@@ -1475,7 +1498,7 @@ class GAM:
             f"Coefficients: {mm.n_coefs}",
         ]
 
-        if not isinstance(r, VIResult):
+        if not isinstance(r, (VIResult, MCMCResult)):
             ptests = self.parametric_tests()
             if ptests:
                 stat_label = "z value" if self._family.scale_known else "t value"
@@ -1519,6 +1542,18 @@ class GAM:
             lines.append(f"ELBO:       {r.elbo:.4f}")
             lines.append(f"VI iters:   {r.n_iter}")
             lines.append(f"Converged:  {r.converged}")
+        elif isinstance(r, MCMCResult):
+            n_total = r.n_chains * r.n_samples
+            lines.extend(
+                [
+                    f"Draws:      {r.n_chains} chains × {r.n_samples} = {n_total}",
+                    f"Warmup:     {r.n_warmup} per chain",
+                    f"Acceptance: {r.acceptance_rate:.3f}",
+                    f"Step size:  {r.step_size:.5f}",
+                    f"Max R-hat:  {r.r_hat.max():.4f}",
+                    f"Min ESS:    {r.ess.min():.0f}",
+                ]
+            )
         else:
             dev_expl = self.deviance_explained
             lines.extend(
@@ -1794,9 +1829,11 @@ class GAM:
             raise RuntimeError("This GAM has not been fitted yet. Call .fit(data) first.")
 
     def _require_fit_result(self) -> FitResult:
-        """Return ``_fit_result`` narrowed to ``FitResult``, raising for VI fits."""
-        if isinstance(self._fit_result, VIResult):
-            raise NotImplementedError("This method is not available for VI fits (method='VI').")
+        """Return `_fit_result` narrowed to `FitResult`, raising for Bayesian fits."""
+        if isinstance(self._fit_result, (VIResult, MCMCResult)):
+            raise NotImplementedError(
+                f"This method is not available for {self._fit_result.method} fits."
+            )
         return self._fit_result
 
     def __repr__(self) -> str:
