@@ -20,12 +20,14 @@ implementation.
 - **Works with your dataframe library**: Pandas, Polars, PyArrow, or any
   [Narwhals](https://narwhals-dev.github.io/narwhals/)-compatible frame.
 - **Full smooth catalog**: thin plate regression splines, cubic splines, P-splines, tensor products,
-cyclic splines, random effects, factor smooths, and more.
+  cyclic splines, random effects, factor smooths, and more.
 - **Principled smoothness selection**: REML by default, with GCV, ML, and fREML as alternatives.
 - **Beautiful diagnostics**: `wk.check(model)` and `model.plot()` produce interactive Altair charts
-right in your notebook.
+  right in your notebook.
 - **Goes beyond the mean**: distributional regression (GAMLSS), quantile regression, conformal
-prediction, causal inference, streaming GAMs, and functional regression are all built in.
+  prediction, causal inference, streaming GAMs, and functional regression are all built in.
+- **Principled Bayesian inference**: variational inference for fast approximate posteriors, and NUTS
+  MCMC for exact posterior sampling with R-hat, ESS, and divergence diagnostics.
 - **Type-safe**: full annotations, strict Pyright-clean codebase.
 
 ## The analytical pipeline
@@ -148,6 +150,12 @@ simultaneous), prediction intervals, and term-level contributions. All on respon
 
 **Model diagnostics**: `model.summary()` for EDF and significance tests, `wk.check(model)` for basis
 dimension adequacy (k-index test), concurvity analysis, and residual plots.
+
+**Bayesian inference**: variational inference (`method="VI"`) produces a fast Gaussian approximation
+to the posterior with richer uncertainty than the Laplace approximation. MCMC (`method="MCMC"`) uses
+the No-U-Turn Sampler (NUTS) to draw exact posterior samples (no trajectory-length tuning
+required!). Both methods report R-hat convergence statistics, effective sample sizes, and (for MCMC)
+divergent transition counts.
 
 **Distributional regression (GAMLSS)**: model location, scale, and shape simultaneously with
 Gaussian, Gamma, Beta, zero-inflated Poisson, and zero-inflated Negative Binomial families.
