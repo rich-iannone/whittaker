@@ -121,10 +121,10 @@ on the response scale:
 
 ```{python}
 cv_gauss_mse = wk.cross_validate(
-    "y ~ s(x)", count_data, method="REML", metric="mse", seed=42
+    "y ~ s(x)", count_data, method="REML", metric="mse", seed=23
 )
 cv_pois_mse = wk.cross_validate(
-    "y ~ s(x)", count_data, family=wk.Poisson(), method="REML", metric="mse", seed=42
+    "y ~ s(x)", count_data, family=wk.Poisson(), method="REML", metric="mse", seed=23
 )
 
 print(f"Gaussian MSE: {cv_gauss_mse.cv_score:.4f}")
