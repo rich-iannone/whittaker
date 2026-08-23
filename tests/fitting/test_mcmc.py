@@ -356,6 +356,12 @@ class TestMCMCResultAPI:
         """summary() includes R-hat diagnostics."""
         assert "R-hat" in gam.summary()
 
+    def test_n_divergent_accessible(self, gam):
+        """n_divergent is present and non-negative on MCMCResult."""
+        mr = gam.mcmc_result
+        assert isinstance(mr.n_divergent, int)
+        assert mr.n_divergent >= 0
+
     def test_deviance_raises(self, gam):
         """deviance property raises NotImplementedError for MCMC fits."""
         with pytest.raises(NotImplementedError):
@@ -475,3 +481,25 @@ class TestNUTS:
         assert mr.mean_tree_depth <= 2.0, (
             f"mean_tree_depth {mr.mean_tree_depth:.2f} exceeded max_tree_depth=2"
         )
+
+    def test_nuts_no_divergences_on_gaussian(self, nuts_result):
+        """Well-conditioned Gaussian posterior should produce zero divergences."""
+        assert nuts_result.n_divergent == 0, (
+            f"Expected 0 divergences, got {nuts_result.n_divergent}"
+        )
+
+    def test_nuts_n_divergent_is_int(self, nuts_result):
+        """n_divergent must be a non-negative integer."""
+        assert isinstance(nuts_result.n_divergent, int)
+        assert nuts_result.n_divergent >= 0
+
+    def test_hmc_no_divergences_on_gaussian(self, hmc_result):
+        """HMC on a well-conditioned Gaussian should produce zero divergences."""
+        assert hmc_result.n_divergent == 0, (
+            f"Expected 0 divergences, got {hmc_result.n_divergent}"
+        )
+
+    def test_hmc_n_divergent_is_int(self, hmc_result):
+        """HMC n_divergent must be a non-negative integer."""
+        assert isinstance(hmc_result.n_divergent, int)
+        assert hmc_result.n_divergent >= 0
