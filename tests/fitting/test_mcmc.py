@@ -9,17 +9,15 @@ from numpy.testing import assert_allclose
 from whittaker.families.gaussian import Gaussian
 from whittaker.families.poisson import Poisson
 from whittaker.fitting.mcmc import (
-    MCMCResult,
     _grad_U,
     _leapfrog,
     _potential_U,
     mcmc_fit,
 )
 from whittaker.fitting.pirls import pirls_fit
-from whittaker.fitting.inference import _bayesian_covariance
+from whittaker.formula.parser import parse
 from whittaker.gam import GAM
 from whittaker.model_matrix import build_model_matrix
-from whittaker.formula.parser import parse
 
 # ---------------------------------------------------------------------------
 # Shared fixtures
@@ -51,7 +49,7 @@ def _build_components(data: dict, formula: str = "y ~ s(x)", family=None):
     sp = list(fr.smoothing_params)
     p = mm.X.shape[1]
     S_lambda = np.zeros((p, p))
-    for lam, pen in zip(sp, mm.penalties):
+    for lam, pen in zip(sp, mm.penalties, strict=False):
         S_lambda += lam * pen
     return mm, fr, S_lambda, family
 
@@ -202,8 +200,7 @@ class TestGaussianPosterior:
     def fitted(self):
         data = _gaussian_data(seed=5)
         mm, fr, S_lambda, fam = _build_components(data)
-        X, y, scale, offset = mm.X, mm.response, fr.scale, mm.offset
-        sp = list(fr.smoothing_params)
+        X, scale = mm.X, fr.scale
 
         # Analytical posterior
         A = X.T @ X + S_lambda
