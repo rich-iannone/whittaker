@@ -225,7 +225,7 @@ Two samplers are available via the `sampler` key:
   binary tree until a U-turn is detected. Requires no manual tuning of leapfrog steps and generally
   mixes better than fixed-length HMC.
 - **`"HMC"`**: Static-trajectory HMC with a fixed number of leapfrog steps per proposal, controlled
-  by `leapfrog_steps` (default 10).
+  by `leapfrog_steps` (the default is `10`).
 
 ```python
 # Static HMC with 20 leapfrog steps per proposal
@@ -245,7 +245,7 @@ consider raising that limit.
 
 Whittaker uses dual-averaging step-size adaptation (Nesterov 2009, as implemented in Stan) during
 the warmup phase. The adapted step size is fixed for the sampling phase. The default target
-acceptance rate is 0.65. NUTS often benefits from a higher target:
+acceptance rate is `0.65`. NUTS often benefits from a higher target:
 
 ```python
 model = wk.GAM("y ~ s(x)", family=Poisson()).fit(
@@ -264,10 +264,23 @@ lead to larger steps but more rejections.
 
 ### Mass matrix
 
-The sampler uses a diagonal mass matrix $M = \text{diag}(1 / V_\beta)$, where $V_\beta$ is the
-diagonal of the Laplace posterior covariance. This pre-conditions the leapfrog integrator to the
-scale of each coefficient, substantially improving mixing when coefficients differ greatly in
-magnitude (as is common for B-spline bases).
+Whittaker uses a **two-phase warmup** to adapt the diagonal mass matrix.
+
+**Phase 1** (first half of warmup): the sampler runs with a mass matrix initialized from the Laplace
+posterior covariance, $M = \text{diag}(1 / V_\beta)$, collecting draws while the dual-averaging
+algorithm adapts the step size.
+
+**Midpoint**: the empirical variance of the phase-1 draws is used to update the mass matrix,
+$M \leftarrow \text{diag}(1 / \widehat{\sigma}^2_\beta)$. The step-size dual-averaging is reset so
+that phase 2 can re-adapt the step size to the new geometry. This update is skipped when fewer than
+10 warmup steps precede it, so very short warmup schedules are handled gracefully.
+
+**Phase 2** (second half of warmup): dual-averaging continues with the updated mass matrix, and the
+averaged step size from the end of this phase is used for all post-warmup sampling.
+
+This two-phase scheme substantially improves mixing when posterior coefficient scales differ
+by orders of magnitude. And this is common with B-spline bases where an intercept at scale $e^5$
+coexists with smooth components at scale $0.01$.
 
 ## Properties not available for MCMC fits
 
