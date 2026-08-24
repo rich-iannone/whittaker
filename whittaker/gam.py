@@ -1551,7 +1551,8 @@ class GAM:
                 f"Acceptance: {r.acceptance_rate:.3f}",
                 f"Step size:  {r.step_size:.5f}",
                 f"Max R-hat:  {r.r_hat.max():.4f}",
-                f"Min ESS:    {r.ess.min():.0f}",
+                f"Min ESS (bulk): {r.ess.min():.0f}",
+                f"Min ESS (tail): {r.ess_tail.min():.0f}",
             ]
             if r.mean_tree_depth > 0.0:
                 mcmc_lines.append(f"Tree depth: {r.mean_tree_depth:.2f} (mean)")
