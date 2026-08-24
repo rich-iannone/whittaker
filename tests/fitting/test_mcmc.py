@@ -9,8 +9,12 @@ from numpy.testing import assert_allclose
 from whittaker.families.gaussian import Gaussian
 from whittaker.families.poisson import Poisson
 from whittaker.fitting.mcmc import (
+    _build_tree,
+    _ess_autocorr,
     _grad_U,
+    _hmc_chain,
     _leapfrog,
+    _nuts_chain,
     _potential_U,
     mcmc_fit,
 )
@@ -599,5 +603,305 @@ class TestMassMatrixAdaptation:
             n_warmup=10,
             seed=9,
         )
+        assert mr.samples.shape[1] == 50
+        assert mr.r_hat.shape[0] > 0
+
+
+# ---------------------------------------------------------------------------
+# Offset and weights branches in _grad_U / _potential_U
+# ---------------------------------------------------------------------------
+
+
+class TestGradUBranches:
+    """Cover the offset and weights branches in _grad_U and _potential_U."""
+
+    def _system(self):
+        rng = np.random.default_rng(7)
+        n, p = 50, 3
+        X = rng.standard_normal((n, p))
+        beta = np.array([0.5, -0.3, 1.0])
+        S_lambda = 0.1 * np.eye(p)
+        family = Gaussian()
+        scale = 1.0
+        y = X @ beta + rng.normal(scale=0.3, size=n)
+        return X, y, S_lambda, family, scale, beta, n
+
+    def test_grad_U_with_offset(self):
+        """_grad_U with a non-None offset produces a different gradient than without."""
+        X, y, S, fam, scale, beta, n = self._system()
+        offset = np.ones(n) * 0.5
+        g_no_off = _grad_U(beta, X, y, S, fam, scale, None, None)
+        g_off = _grad_U(beta, X, y, S, fam, scale, None, offset)
+
+        assert not np.allclose(g_no_off, g_off)
+
+    def test_grad_U_with_weights(self):
+        """_grad_U with observation weights produces a different gradient than without."""
+        X, y, S, fam, scale, beta, n = self._system()
+        weights = np.full(n, 2.0)
+        g_no_w = _grad_U(beta, X, y, S, fam, scale, None, None)
+        g_w = _grad_U(beta, X, y, S, fam, scale, weights, None)
+
+        assert not np.allclose(g_no_w, g_w)
+
+    def test_potential_U_with_offset(self):
+        """_potential_U with a non-None offset produces a different value than without."""
+        X, y, S, fam, scale, beta, n = self._system()
+        offset = np.ones(n) * 0.5
+        u_no_off = _potential_U(beta, X, y, S, fam, scale, None, None)
+        u_off = _potential_U(beta, X, y, S, fam, scale, None, offset)
+
+        assert u_no_off != u_off
+
+
+# ---------------------------------------------------------------------------
+# _ess_autocorr degenerate branch (near-zero variance)
+# ---------------------------------------------------------------------------
+
+
+class TestEssAutocorrDegenerate:
+    """Cover the acv0 < 1e-15 branch: constant chains → ESS equals n_total."""
+
+    def test_constant_chain_returns_n_total(self):
+        """A chain with zero variance (all identical draws) has ESS = n_total."""
+        # All draws identical → acv0 ≈ 0, so ESS should be set to n_total
+        chains = np.ones((2, 50, 3))
+        result = _ess_autocorr(chains)
+        assert_allclose(result, 100.0)  # n_total = 2 * 50
+
+
+# ---------------------------------------------------------------------------
+# Direct chain function tests (bypass ProcessPoolExecutor for coverage)
+# ---------------------------------------------------------------------------
+
+
+class TestHMCChainDirect:
+    """Call _hmc_chain directly to cover the HMC sampling code path."""
+
+    def _inputs(self):
+        data = _gaussian_data(seed=20)
+        mm, fr, S_lambda, fam = _build_components(data)
+        X, y = mm.X, mm.response
+        p = X.shape[1]
+        M_diag = np.ones(p)
+        return fr.coefficients, M_diag, X, y, S_lambda, fam, fr.scale
+
+    def test_hmc_chain_returns_correct_shapes(self):
+        """_hmc_chain returns (samples, step_size, acceptance_rate, 0.0, n_divergent)."""
+        beta, M, X, y, S, fam, scale = self._inputs()
+        samples, eps, rate, tree_depth, n_div = _hmc_chain(
+            beta,
+            M,
+            X,
+            y,
+            S,
+            fam,
+            scale,
+            None,
+            None,
+            n_samples=30,
+            n_warmup=20,
+            leapfrog_steps=5,
+            step_size_init=0.1,
+            target_accept=0.65,
+            seed=1,
+        )
+
+        assert samples.shape == (len(beta), 30)
+        assert eps > 0
+        assert 0.0 <= rate <= 1.0
+        assert tree_depth == 0.0  # HMC always returns 0.0 for tree depth
+        assert isinstance(n_div, int)
+
+    def test_hmc_chain_with_offset(self):
+        """_hmc_chain runs correctly when an offset is provided."""
+        beta, M, X, y, S, fam, scale = self._inputs()
+        offset = np.zeros(len(y))
+        samples, *_ = _hmc_chain(
+            beta,
+            M,
+            X,
+            y,
+            S,
+            fam,
+            scale,
+            None,
+            offset,
+            n_samples=20,
+            n_warmup=10,
+            leapfrog_steps=5,
+            step_size_init=0.1,
+            target_accept=0.65,
+            seed=2,
+        )
+
+        assert samples.shape[1] == 20
+
+
+class TestNUTSChainDirect:
+    """Call _nuts_chain directly to cover the NUTS sampling code path."""
+
+    def _inputs(self):
+        data = _gaussian_data(seed=21)
+        mm, fr, S_lambda, fam = _build_components(data)
+        X, y = mm.X, mm.response
+        p = X.shape[1]
+        M_diag = np.ones(p)
+        return fr.coefficients, M_diag, X, y, S_lambda, fam, fr.scale
+
+    def test_nuts_chain_returns_correct_shapes(self):
+        """_nuts_chain returns (samples, step_size, acceptance_rate, mean_depth, n_divergent)."""
+        beta, M, X, y, S, fam, scale = self._inputs()
+        samples, eps, rate, depth, n_div = _nuts_chain(
+            beta,
+            M,
+            X,
+            y,
+            S,
+            fam,
+            scale,
+            None,
+            None,
+            n_samples=30,
+            n_warmup=20,
+            max_tree_depth=5,
+            step_size_init=0.1,
+            target_accept=0.65,
+            seed=3,
+        )
+
+        assert samples.shape == (len(beta), 30)
+        assert eps > 0
+        assert 0.0 <= rate <= 1.0
+        assert 0.0 < depth <= 5.0
+        assert isinstance(n_div, int)
+
+    def test_nuts_chain_with_offset(self):
+        """_nuts_chain runs correctly when an offset is provided."""
+        beta, M, X, y, S, fam, scale = self._inputs()
+        offset = np.zeros(len(y))
+        samples, *_ = _nuts_chain(
+            beta,
+            M,
+            X,
+            y,
+            S,
+            fam,
+            scale,
+            None,
+            offset,
+            n_samples=20,
+            n_warmup=10,
+            max_tree_depth=5,
+            step_size_init=0.1,
+            target_accept=0.65,
+            seed=4,
+        )
+
+        assert samples.shape[1] == 20
+
+
+class TestBuildTreeDirect:
+    """Call _build_tree directly to cover the NUTS tree-building code path."""
+
+    def _system(self):
+        data = _gaussian_data(seed=22)
+        mm, fr, S_lambda, fam = _build_components(data)
+        X, y = mm.X, mm.response
+        p = X.shape[1]
+        M_diag_inv = np.ones(p)
+        beta = fr.coefficients.copy()
+        U = _potential_U(beta, X, y, S_lambda, fam, fr.scale, None, None)
+        return beta, X, y, S_lambda, fam, fr.scale, M_diag_inv, U
+
+    def test_build_tree_base_case(self):
+        """_build_tree with j=0 takes exactly one leapfrog step."""
+        beta, X, y, S, fam, scale, M_inv, U = self._system()
+        rng = np.random.default_rng(50)
+        p_mom = rng.standard_normal(len(beta))
+        eps = 0.05
+        H0 = U + 0.5 * float(np.sum(p_mom**2))
+        log_u = -H0 - 1.0
+
+        result = _build_tree(
+            beta,
+            p_mom,
+            log_u,
+            1,
+            0,
+            eps,
+            H0,
+            M_inv,
+            X,
+            y,
+            S,
+            fam,
+            scale,
+            None,
+            None,
+            rng,
+        )
+
+        assert len(result) == 10  # 10-tuple
+
+        beta_minus, p_minus, beta_plus, p_plus, beta_prime, n, s, a_s, na, nd = result
+
+        assert beta_minus.shape == beta.shape
+        assert isinstance(n, int)
+        assert isinstance(nd, int)
+
+    def test_build_tree_recursive(self):
+        """_build_tree with j=1 recurses and returns a valid subtree."""
+        beta, X, y, S, fam, scale, M_inv, U = self._system()
+        rng = np.random.default_rng(51)
+        p_mom = rng.standard_normal(len(beta))
+        eps = 0.05
+        H0 = U + 0.5 * float(np.sum(p_mom**2))
+        log_u = -H0 - 1.0
+
+        result = _build_tree(
+            beta,
+            p_mom,
+            log_u,
+            1,
+            1,
+            eps,
+            H0,
+            M_inv,
+            X,
+            y,
+            S,
+            fam,
+            scale,
+            None,
+            None,
+            rng,
+        )
+
+        assert len(result) == 10
+
+
+# ---------------------------------------------------------------------------
+# mcmc_fit with offset
+# ---------------------------------------------------------------------------
+
+
+class TestMCMCFitOffset:
+    """Cover the offset branch inside mcmc_fit."""
+
+    def test_mcmc_fit_with_offset(self):
+        """mcmc_fit runs correctly when the model matrix has a non-None offset."""
+        rng = np.random.default_rng(77)
+        n = 100
+        x = np.linspace(0, 1, n)
+        offset = np.full(n, 0.5)
+        lam = np.exp(np.sin(2 * np.pi * x) + 1.0 + offset)
+        data = {"y": rng.poisson(lam).astype(float), "x": x, "off": offset}
+
+        formula_obj = parse("y ~ s(x) + offset(off)")
+        mm = build_model_matrix(formula_obj, data)
+        fam = Poisson()
+        mr = mcmc_fit(mm, fam, n_chains=1, n_samples=50, n_warmup=30, seed=5)
+
         assert mr.samples.shape[1] == 50
         assert mr.r_hat.shape[0] > 0
