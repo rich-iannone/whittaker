@@ -353,8 +353,11 @@ class TestMCMCResultAPI:
         assert gam.mcmc_result is None
 
     def test_summary_contains_rhat(self, gam):
-        """summary() includes R-hat diagnostics."""
-        assert "R-hat" in gam.summary()
+        """summary() includes R-hat diagnostics and sampler label."""
+        s = gam.summary()
+        assert "R-hat" in s
+        assert "NUTS" in s
+        assert "Tree depth" in s
 
     def test_n_divergent_accessible(self, gam):
         """n_divergent is present and non-negative on MCMCResult."""
