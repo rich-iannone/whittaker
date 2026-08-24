@@ -46,8 +46,10 @@ class MCMCResult(BayesResult):
     samples:
         All retained posterior draws, shape `(p, n_chains * n_samples)`. Warmup draws are excluded.
     r_hat:
-        Per-parameter Gelman-Rubin statistic, shape `(p,)`. Values close to 1.0 indicate convergence
-        across chains. Values above 1.1 warrant concern.
+        Per-parameter rank-normalized split R-hat (Vehtari et al., 2021), shape `(p,)`. Each chain
+        is split in half before rank normalization, making the statistic sensitive to within-chain
+        non-stationarity and robust to heavy-tailed posteriors. Values below 1.01 are ideal, values
+        below 1.1 are generally acceptable, and values above 1.1 warrant concern.
     ess:
         Per-parameter bulk ESS (effective sample size applied to rank-normalized draws), shape
         `(p,)`. Measures mixing in the bulk of the distribution.
