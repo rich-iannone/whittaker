@@ -313,7 +313,7 @@ def _elbo_and_grad(
     # For numerical stability, compute L^{-T} via triangular solve.
     try:
         L_inv_T = np.linalg.solve(L.T, np.eye(L.shape[0]))  # (p, p)
-    except np.linalg.LinAlgError:
+    except np.linalg.LinAlgError:  # pragma: no cover
         L_inv_T = np.zeros_like(L)
 
     grad_L_kl = S_lambda @ L - L_inv_T
@@ -498,7 +498,7 @@ def vi_fit(
         jitter = 1e-8 * np.eye(p)
         try:
             L_fast = np.linalg.cholesky(V_fast + jitter)
-        except np.linalg.LinAlgError:
+        except np.linalg.LinAlgError:  # pragma: no cover
             eigvals_f, eigvecs_f = np.linalg.eigh(V_fast)
             eigvals_f = np.maximum(eigvals_f, 1e-8)
             L_fast = eigvecs_f @ np.diag(np.sqrt(eigvals_f))
@@ -547,7 +547,7 @@ def vi_fit(
     jitter = 1e-8 * np.eye(p)
     try:
         L = np.linalg.cholesky(V_beta + jitter)
-    except np.linalg.LinAlgError:
+    except np.linalg.LinAlgError:  # pragma: no cover
         eigvals, eigvecs = np.linalg.eigh(V_beta)
         eigvals = np.maximum(eigvals, 1e-8)
         L = eigvecs @ np.diag(np.sqrt(eigvals))
