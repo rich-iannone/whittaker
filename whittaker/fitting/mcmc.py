@@ -579,7 +579,7 @@ def _hmc_chain(
 
 
 # Top-level wrapper (must be at module level for ProcessPoolExecutor pickling)
-def _chain_worker(
+def _chain_worker(  # pragma: no cover
     beta_init: NDArray,
     M_diag: NDArray,
     X: NDArray,
@@ -795,7 +795,7 @@ def _nuts_chain(
     return samples, eps, alpha_sum / n_samples, float(np.mean(depths)), n_divergent_total
 
 
-def _nuts_worker(
+def _nuts_worker(  # pragma: no cover
     beta_init: NDArray,
     M_diag: NDArray,
     X: NDArray,
@@ -1147,7 +1147,7 @@ def mcmc_fit(
         with concurrent.futures.ProcessPoolExecutor(max_workers=n_workers) as executor:
             futures = [executor.submit(worker_fn, *args) for args in chain_args]
             chain_results = [f.result() for f in futures]
-    except Exception:
+    except Exception:  # pragma: no cover
         # Sequential fallback when families or the runtime environment prevent forking
         chain_results = [worker_fn(*args) for args in chain_args]
 
