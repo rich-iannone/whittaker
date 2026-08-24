@@ -462,15 +462,16 @@ def _hmc_chain(
     t0 = 10.0
     kappa = 0.75
 
-    # --- Warmup ---
-    for m in range(1, n_warmup + 1):
-        p_mom = rng.standard_normal(p) * np.sqrt(M_diag)
-        K_curr = 0.5 * float(np.sum(p_mom**2 * M_diag_inv))
-
+    def _hmc_step(
+        beta_in: NDArray, U_in: float, M_d: NDArray, M_d_inv: NDArray
+    ) -> tuple[NDArray, float, float]:
+        """One HMC proposal; returns (beta_out, U_out, alpha)."""
+        p_mom = rng.standard_normal(p) * np.sqrt(M_d)
+        K_curr = 0.5 * float(np.sum(p_mom**2 * M_d_inv))
         beta_prop, p_prop = _leapfrog(
-            beta,
+            beta_in,
             p_mom,
-            M_diag_inv,
+            M_d_inv,
             eps,
             leapfrog_steps,
             X,
@@ -482,20 +483,44 @@ def _hmc_chain(
             offset,
         )
         U_prop = _potential_U(beta_prop, X, y, S_lambda, family, scale, weights, offset)
-        K_prop = 0.5 * float(np.sum(p_prop**2 * M_diag_inv))
+        K_prop = 0.5 * float(np.sum(p_prop**2 * M_d_inv))
+        log_accept = -(U_prop + K_prop) + (U_in + K_curr)
+        a = min(1.0, float(np.exp(np.clip(log_accept, -700.0, 700.0))))
+        if rng.uniform() < a:
+            return beta_prop, U_prop, a
+        return beta_in, U_in, a
 
-        log_accept = -(U_prop + K_prop) + (U_curr + K_curr)
-        alpha = min(1.0, float(np.exp(np.clip(log_accept, -700.0, 700.0))))
+    # --- Warmup Phase 1: step-size adaptation + collect draws for mass matrix ---
+    n_warm1 = n_warmup // 2
+    n_warm2 = n_warmup - n_warm1
+    mass_buf = np.empty((p, n_warm1))
 
-        # Dual-averaging update
+    for m in range(1, n_warm1 + 1):
+        beta, U_curr, alpha = _hmc_step(beta, U_curr, M_diag, M_diag_inv)
+        mass_buf[:, m - 1] = beta
+
         H_bar = (1.0 - 1.0 / (m + t0)) * H_bar + (1.0 / (m + t0)) * (target_accept - alpha)
         log_eps = mu - (float(np.sqrt(m)) / gamma) * H_bar
         eps = float(np.exp(log_eps))
         log_eps_bar = m ** (-kappa) * log_eps + (1.0 - m ** (-kappa)) * log_eps_bar
 
-        if rng.uniform() < alpha:
-            beta = beta_prop
-            U_curr = U_prop
+    # --- Midpoint: update diagonal mass matrix from warmup sample variance ---
+    if n_warm1 >= 10:
+        sample_var = mass_buf.var(axis=1)
+        M_diag_inv = np.maximum(sample_var, 1e-8)
+        M_diag = 1.0 / M_diag_inv
+        mu = float(np.log(10.0 * eps))
+        log_eps_bar = float(np.log(eps))
+        H_bar = 0.0
+
+    # --- Warmup Phase 2: step-size adaptation with updated mass matrix ---
+    for m in range(1, n_warm2 + 1):
+        beta, U_curr, alpha = _hmc_step(beta, U_curr, M_diag, M_diag_inv)
+
+        H_bar = (1.0 - 1.0 / (m + t0)) * H_bar + (1.0 / (m + t0)) * (target_accept - alpha)
+        log_eps = mu - (float(np.sqrt(m)) / gamma) * H_bar
+        eps = float(np.exp(log_eps))
+        log_eps_bar = m ** (-kappa) * log_eps + (1.0 - m ** (-kappa)) * log_eps_bar
 
     # Switch to averaged step size
     eps = float(np.exp(log_eps_bar))
@@ -707,8 +732,34 @@ def _nuts_chain(
         U_new = _potential_U(beta_new, X, y, S_lambda, family, scale, weights, offset)
         return beta_new, U_new, alpha_sum / max(n_alpha, 1), depth, n_divergent
 
-    # --- Warmup (with dual-averaging step-size adaptation) ---
-    for m in range(1, n_warmup + 1):
+    # --- Warmup Phase 1: step-size adaptation + collect draws for mass matrix ---
+    n_warm1 = n_warmup // 2
+    n_warm2 = n_warmup - n_warm1
+    mass_buf = np.empty((p, n_warm1))
+
+    for m in range(1, n_warm1 + 1):
+        beta, U_curr, alpha_mean, _, _ = _one_step(beta, U_curr)
+        mass_buf[:, m - 1] = beta
+
+        H_bar = (1.0 - 1.0 / (m + t0)) * H_bar + (1.0 / (m + t0)) * (target_accept - alpha_mean)
+        log_eps_local = mu - (float(np.sqrt(m)) / gamma) * H_bar
+        eps = float(np.exp(log_eps_local))
+        log_eps_bar = m ** (-kappa) * log_eps_local + (1.0 - m ** (-kappa)) * log_eps_bar
+
+    # --- Midpoint: update diagonal mass matrix from warmup sample variance ---
+    # _one_step reads M_diag and M_diag_inv from this scope; rebinding them here
+    # is picked up by subsequent calls via Python's closure cell mechanism.
+    if n_warm1 >= 10:
+        sample_var = mass_buf.var(axis=1)
+        M_diag_inv = np.maximum(sample_var, 1e-8)
+        M_diag = 1.0 / M_diag_inv
+        # Reset dual-averaging from current adapted eps so phase 2 builds on phase 1
+        mu = float(np.log(10.0 * eps))
+        log_eps_bar = float(np.log(eps))
+        H_bar = 0.0
+
+    # --- Warmup Phase 2: step-size adaptation with updated mass matrix ---
+    for m in range(1, n_warm2 + 1):
         beta, U_curr, alpha_mean, _, _ = _one_step(beta, U_curr)
 
         H_bar = (1.0 - 1.0 / (m + t0)) * H_bar + (1.0 / (m + t0)) * (target_accept - alpha_mean)
