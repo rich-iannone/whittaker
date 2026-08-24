@@ -423,7 +423,11 @@ class TestNUTS:
 
     @pytest.fixture(scope="class")
     def hmc_result(self):
-        """Explicit HMC fit for comparison."""
+        """Explicit HMC fit for comparison.
+
+        Uses 500 samples so the rank-normalized split R-hat (which halves each chain to
+        4 × 250-sample half-chains) is stable enough for a 1.2 threshold.
+        """
         data = _gaussian_data(seed=10)
         gam = GAM("y ~ s(x)")
         gam.fit(
@@ -433,8 +437,8 @@ class TestNUTS:
                 "sampler": "HMC",
                 "leapfrog_steps": 20,
                 "n_chains": 2,
-                "n_samples": 300,
-                "n_warmup": 200,
+                "n_samples": 500,
+                "n_warmup": 300,
                 "seed": 99,
             },
         )
