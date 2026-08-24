@@ -1485,7 +1485,8 @@ class GAM:
         if isinstance(r, VIResult):
             inference_label = "Variational Bayes"
         elif isinstance(r, MCMCResult):
-            inference_label = f"MCMC (HMC, {r.n_chains} chains × {r.n_samples} draws)"
+            _sampler = "NUTS" if r.mean_tree_depth > 0.0 else "HMC"
+            inference_label = f"MCMC ({_sampler}, {r.n_chains} chains × {r.n_samples} draws)"
         else:
             inference_label = r.method
         lines = [
@@ -1544,16 +1545,22 @@ class GAM:
             lines.append(f"Converged:  {r.converged}")
         elif isinstance(r, MCMCResult):
             n_total = r.n_chains * r.n_samples
-            lines.extend(
-                [
-                    f"Draws:      {r.n_chains} chains × {r.n_samples} = {n_total}",
-                    f"Warmup:     {r.n_warmup} per chain",
-                    f"Acceptance: {r.acceptance_rate:.3f}",
-                    f"Step size:  {r.step_size:.5f}",
-                    f"Max R-hat:  {r.r_hat.max():.4f}",
-                    f"Min ESS:    {r.ess.min():.0f}",
-                ]
-            )
+            mcmc_lines = [
+                f"Draws:      {r.n_chains} chains × {r.n_samples} = {n_total}",
+                f"Warmup:     {r.n_warmup} per chain",
+                f"Acceptance: {r.acceptance_rate:.3f}",
+                f"Step size:  {r.step_size:.5f}",
+                f"Max R-hat:  {r.r_hat.max():.4f}",
+                f"Min ESS:    {r.ess.min():.0f}",
+            ]
+            if r.mean_tree_depth > 0.0:
+                mcmc_lines.append(f"Tree depth: {r.mean_tree_depth:.2f} (mean)")
+            if r.n_divergent > 0:
+                mcmc_lines.append(
+                    f"Divergent:  {r.n_divergent} transitions"
+                    " — raise target_accept or reparameterize"
+                )
+            lines.extend(mcmc_lines)
         else:
             dev_expl = self.deviance_explained
             lines.extend(
