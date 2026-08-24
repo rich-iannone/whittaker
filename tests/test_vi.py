@@ -341,6 +341,22 @@ class TestVINotImplemented:
         with pytest.raises(NotImplementedError):
             _ = model.gcv_score
 
+    def test_null_deviance_raises(self, poisson_data):
+        model = GAM("y ~ s(x)", family=Poisson()).fit(poisson_data, method="VI")
+        with pytest.raises(NotImplementedError):
+            _ = model.null_deviance
+
+    def test_deviance_explained_raises(self, poisson_data):
+        model = GAM("y ~ s(x)", family=Poisson()).fit(poisson_data, method="VI")
+        with pytest.raises(NotImplementedError):
+            _ = model.deviance_explained
+
+    def test_require_fit_result_raises_for_vi(self, poisson_data):
+        """Methods that call _require_fit_result raise NotImplementedError for VI fits."""
+        model = GAM("y ~ s(x)", family=Poisson()).fit(poisson_data, method="VI")
+        with pytest.raises(NotImplementedError):
+            _ = model.residuals
+
 
 # ---------------------------------------------------------------------------
 # vi_options passthrough

@@ -386,6 +386,18 @@ class TestMCMCResultAPI:
         with pytest.raises(NotImplementedError):
             _ = gam.deviance
 
+    def test_summary_includes_divergence_warning(self, gam):
+        """summary() appends divergence line when n_divergent > 0."""
+        mr = gam.mcmc_result
+        original = mr.n_divergent
+        try:
+            mr.n_divergent = 3
+            s = gam.summary()
+            assert "Divergent" in s
+            assert "3 transitions" in s
+        finally:
+            mr.n_divergent = original
+
     def test_predict_se_works(self, gam):
         """predict(se=True) runs without error after MCMC fit."""
         data = _gaussian_data(seed=4)
