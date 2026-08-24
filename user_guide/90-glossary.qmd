@@ -238,10 +238,16 @@ Effective degrees of freedom (EDF)
 Effective sample size (ESS)
 : An estimate of how many independent draws the correlated output of an MCMC chain is worth.
   Because successive MCMC samples are correlated, the information content of $N$ draws is less
-  than that of $N$ independent draws. ESS is computed via Geyer's initial positive sequence
-  estimator applied to the empirical autocorrelation function. An ESS / total-draws ratio above
-  0.05 is generally considered adequate. Accessed via `model.mcmc_result.ess`. See also
-  **MCMC**, **R-hat**.
+  than that of $N$ independent draws. Whittaker reports two ESS variants (Vehtari et al. 2021):
+
+  - **ESS bulk** (`mcmc_result.ess`): Geyer's initial positive sequence estimator applied to
+    *rank-normalized* draws. Measures mixing in the bulk of the posterior. An ESS / total-draws
+    ratio above 0.05 is generally adequate.
+  - **ESS tail** (`mcmc_result.ess_tail`): the minimum of the ESS of the binary indicators
+    $I(x \le Q_{0.05})$ and $I(x \ge Q_{0.95})$. Measures how reliably the sampler explores the
+    extreme tails. Low tail ESS can persist even when bulk ESS looks healthy.
+
+  Both are reported in `model.summary()`. See also **MCMC**, **R-hat**.
 
 ELF (Expectile-Like Family) loss
 : The smoothed loss function used by **QuantileGAM** to approximate the quantile check
@@ -638,40 +644,42 @@ Quantile regression
   loss. Useful for heteroscedastic data, risk quantification, and adaptive prediction
   intervals.
 
-R-hat (Gelman-Rubin statistic)
-: A convergence diagnostic for **MCMC** that compares within-chain and between-chain variance. If
-  all chains have converged to the same distribution, within-chain and between-chain variance should
-  be equal and $\hat{R} \approx 1$. Values above 1.1 indicate that the chains have not yet mixed
-  well, suggesting the need for more warmup, more chains, or a smaller step size. R-hat is computed
-  per coefficient and reported in `model.summary()` and `model.mcmc_result`. See also **MCMC**,
+R-hat (rank-normalized split R-hat)
+: A convergence diagnostic for **MCMC** (Vehtari et al., 2021). Each chain is first split in half,
+  giving twice as many half-chains. This detects non-stationarity within a single chain. Classic
+  Gelman-Rubin R-hat is then applied to the *rank-normalized* draws, making the statistic robust to
+  heavy-tailed posteriors where the classic version can give a false sense of convergence.
+  $\hat{R} \approx 1$ when all half-chains have converged to the same distribution. Values below
+  1.01 are ideal, values below 1.1 are generally acceptable, and values above 1.1 suggest
+  insufficient warmup, too few chains, or poor posterior geometry. Computed per coefficient and
+  reported in `model.summary()` and `model.mcmc_result.r_hat`. See also **MCMC**,
   **effective sample size**.
 
 Random effect smooth
-: A smooth term that acts as a penalized random intercept or slope. It is a ridge-penalized
-  set of indicator variables for a grouping factor, equivalent to a normal random effect in
-  mixed models. Specified with `bs="re"` in the formula.
+: A smooth term that acts as a penalized random intercept or slope. It is a ridge-penalized set of
+  indicator variables for a grouping factor, equivalent to a normal random effect in mixed models.
+  Specified with `bs="re"` in the formula.
 
 REML (Restricted Maximum Likelihood)
-: The recommended smoothing parameter selection criterion. REML maximizes a modified
-  likelihood that accounts for the loss of degrees of freedom from estimating the fixed
-  effects, producing more stable and slightly smoother fits than **GCV** or **ML**. Selected
-  with `method="REML"` in `model.fit()`.
+: The recommended smoothing parameter selection criterion. REML maximizes a modified likelihood that
+  accounts for the loss of degrees of freedom from estimating the fixed effects, producing more
+  stable and slightly smoother fits than **GCV** or **ML**. Selected with `method="REML"` in
+  `model.fit()`.
 
 Residuals
-: The difference between observed and fitted values, computed in various forms depending on
-  the family: **deviance residuals** (default), **Pearson residuals**, working residuals, and
-  response residuals. Residual plots are the primary tool for checking model assumptions.
-  Accessed via `model.predict(training_data)` subtracted from the response, or via the
-  `type=` argument.
+: The difference between observed and fitted values, computed in various forms depending on the
+  family: **deviance residuals** (default), **Pearson residuals**, working residuals, and response
+  residuals. Residual plots are the primary tool for checking model assumptions. Accessed via
+  `model.predict(training_data)` subtracted from the response, or via the `type=` argument.
 
 Scale parameter
 : See **dispersion parameter**.
 
 Shape constraint
-: A restriction on the shape of a smooth term, such as monotonicity, convexity, or concavity.
-  Shape constraints are enforced by projecting the P-IRLS solution onto the constrained space
-  at each iteration. Available basis types: `"mpi"` (monotone increasing), `"mpd"` (monotone
-  decreasing), `"cx"` (convex), `"cv"` (concave). See also **PAVA**.
+: A restriction on the shape of a smooth term, such as monotonicity, convexity, or concavity. Shape
+  constraints are enforced by projecting the P-IRLS solution onto the constrained space at each
+  iteration. Available basis types: `"mpi"` (monotone increasing), `"mpd"` (monotone decreasing),
+  `"cx"` (convex), `"cv"` (concave). See also **PAVA**.
 
 Shrinkage smooth
 : A variant of TPRS or CRS that includes an extra penalty component capable of shrinking the
