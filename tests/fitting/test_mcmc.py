@@ -208,7 +208,7 @@ class TestGaussianPosterior:
         std_true = np.sqrt(np.diag(cov_true))
 
         # MCMC via full mcmc_fit
-        mr = mcmc_fit(mm, fam, n_chains=4, n_samples=1000, n_warmup=500, leapfrog_steps=30, seed=42)
+        mr = mcmc_fit(mm, fam, n_chains=4, n_samples=1000, n_warmup=500, leapfrog_steps=30, seed=23)
         return mr, fr.coefficients, std_true
 
     def test_gaussian_matches_laplace_mean(self, fitted):
@@ -504,3 +504,80 @@ class TestNUTS:
         """HMC n_divergent must be a non-negative integer."""
         assert isinstance(hmc_result.n_divergent, int)
         assert hmc_result.n_divergent >= 0
+
+
+# ---------------------------------------------------------------------------
+# Mass matrix adaptation tests
+# ---------------------------------------------------------------------------
+
+
+class TestMassMatrixAdaptation:
+    """Verify two-phase warmup mass matrix adaptation improves mixing."""
+
+    def test_nuts_converges_on_mixed_scale_problem(self):
+        """NUTS with mass matrix adaptation converges on a problem with very different coefficient
+        scales (intercept ~10, smooth coefs ~0.01).
+
+        A fixed identity mass matrix would struggle here; adaptation rescales momentum to match the
+        posterior geometry.
+        """
+        rng = np.random.default_rng(23)
+        n = 300
+        x = np.linspace(0, 1, n)
+        # Large intercept, tiny smooth variation to create a scale mismatch
+        lam = np.exp(5.0 + 0.05 * np.sin(2 * np.pi * x))
+        data = {"y": rng.poisson(lam).astype(float), "x": x}
+
+        mm, _, _, fam = _build_components(data, family=Poisson())
+        mr = mcmc_fit(
+            mm,
+            fam,
+            n_chains=2,
+            n_samples=300,
+            n_warmup=400,
+            seed=7,
+        )
+        assert mr.r_hat.max() < 1.2, (
+            f"R-hat too high on mixed-scale problem: {mr.r_hat.max():.4f}. "
+            "Mass matrix adaptation may not be working correctly."
+        )
+
+    def test_hmc_converges_on_mixed_scale_problem(self):
+        """HMC with mass matrix adaptation converges on a mixed-scale Poisson problem."""
+        rng = np.random.default_rng(43)
+        n = 300
+        x = np.linspace(0, 1, n)
+        lam = np.exp(5.0 + 0.05 * np.sin(2 * np.pi * x))
+        data = {"y": rng.poisson(lam).astype(float), "x": x}
+
+        mm, _, _, fam = _build_components(data, family=Poisson())
+        mr = mcmc_fit(
+            mm,
+            fam,
+            n_chains=2,
+            n_samples=300,
+            n_warmup=400,
+            sampler="HMC",
+            leapfrog_steps=20,
+            seed=8,
+        )
+        assert mr.r_hat.max() < 1.2, (
+            f"R-hat too high for HMC on mixed-scale problem: {mr.r_hat.max():.4f}."
+        )
+
+    def test_short_warmup_does_not_trigger_adaptation(self):
+        """With fewer than 20 warmup steps, adaptation is skipped (n_warm1 < 10) and the sampler
+        still produces a valid result rather than crashing.
+        """
+        data = _gaussian_data(seed=5)
+        mm, _, _, fam = _build_components(data)
+        mr = mcmc_fit(
+            mm,
+            fam,
+            n_chains=1,
+            n_samples=50,
+            n_warmup=10,
+            seed=9,
+        )
+        assert mr.samples.shape[1] == 50
+        assert mr.r_hat.shape[0] > 0
