@@ -62,8 +62,9 @@ model.fit(data, method="MCMC")
 model.summary()
 ```
 
-The summary shows `Inference: MCMC` along with R-hat and ESS diagnostics. GCV, AIC, and BIC are
-not defined for MCMC fits.
+The summary shows `Inference: MCMC (NUTS, …)` along with acceptance rate, R-hat, ESS, mean tree
+depth, and — if any occur — a divergent-transition warning. GCV, AIC, and BIC are not defined for
+MCMC fits.
 
 ## Inspecting the MCMC result
 
