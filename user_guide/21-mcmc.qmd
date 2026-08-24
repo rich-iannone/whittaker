@@ -74,24 +74,35 @@ convergence diagnostics:
 ```{python}
 mr = model.mcmc_result
 
-print(f"Samples shape: {mr.samples.shape}")  # (p, n_chains * n_samples)
-print(f"R-hat (max): {mr.r_hat.max():.4f}")
-print(f"ESS (min):   {mr.ess.min():.1f}")
-print(f"Acceptance rate: {mr.acceptance_rate:.3f}")  # mean per-leaf α for NUTS
-print(f"Mean tree depth: {mr.mean_tree_depth:.2f}")  # NUTS only
-print(f"Divergences:     {mr.n_divergent}")
+print(f"Samples shape:    {mr.samples.shape}")  # (p, n_chains * n_samples)
+print(f"R-hat (max):      {mr.r_hat.max():.4f}")
+print(f"ESS bulk (min):   {mr.ess.min():.1f}")
+print(f"ESS tail (min):   {mr.ess_tail.min():.1f}")
+print(f"Acceptance rate:  {mr.acceptance_rate:.3f}")  # mean per-leaf α for NUTS
+print(f"Mean tree depth:  {mr.mean_tree_depth:.2f}")  # NUTS only
+print(f"Divergences:      {mr.n_divergent}")
 ```
 
 `mcmc_result` is `None` if the model was fitted with any other method.
 
 ### R-hat and ESS
 
-**R-hat** (the Gelman-Rubin statistic) compares within-chain and between-chain variance. Values
-below 1.1 indicate that the chains have mixed well. Values above 1.1 suggest you need more
-warmup iterations, more chains, or a smaller step size.
+**R-hat** is the rank-normalized split R-hat (Vehtari et al. 2021). Each chain is first split in
+half, giving twice as many half-chains. Classic Gelman-Rubin R-hat is then applied to the
+rank-normalized draws. Splitting detects non-stationarity within a single chain. Rank normalization
+makes the statistic robust to heavy-tailed posteriors. Values below 1.01 are ideal. Values below
+1.1 are generally acceptable; values above 1.1 suggest insufficient warmup, too few chains, or
+poor geometry.
 
-**ESS** (effective sample size) estimates how many independent draws the correlated MCMC output
-is worth. An ESS ratio (ESS / total draws) above 0.05 is generally considered adequate.
+**ESS bulk** (`ess`) measures mixing in the bulk of the posterior. It applies the standard
+autocorrelation ESS estimator to the rank-normalized draws. An ESS ratio (ESS / total draws)
+above 0.05 is generally adequate. The value below 0.05 suggests the chains are heavily
+autocorrelated.
+
+**ESS tail** (`ess_tail`) measures how reliably the sampler visits the tails. It is the minimum of
+the ESS of the binary indicator $I(x \le Q_{0.05})$ and $I(x \ge Q_{0.95})$ across all draws. Low
+tail ESS (even when bulk ESS looks fine) signals that the sampler is stuck in the bulk and rarely
+reaches the extremes of the posterior.
 
 ```{python}
 import altair as alt

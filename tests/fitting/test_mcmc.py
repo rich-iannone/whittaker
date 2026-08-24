@@ -353,17 +353,29 @@ class TestMCMCResultAPI:
         assert gam.mcmc_result is None
 
     def test_summary_contains_rhat(self, gam):
-        """summary() includes R-hat diagnostics and sampler label."""
+        """summary() includes R-hat, ESS bulk, ESS tail, and sampler label."""
         s = gam.summary()
         assert "R-hat" in s
         assert "NUTS" in s
         assert "Tree depth" in s
+        assert "bulk" in s
+        assert "tail" in s
 
     def test_n_divergent_accessible(self, gam):
         """n_divergent is present and non-negative on MCMCResult."""
         mr = gam.mcmc_result
         assert isinstance(mr.n_divergent, int)
         assert mr.n_divergent >= 0
+
+    def test_ess_tail_shape_matches_ess(self, gam):
+        """ess_tail has the same shape as ess."""
+        mr = gam.mcmc_result
+        assert mr.ess_tail.shape == mr.ess.shape
+
+    def test_ess_tail_positive(self, gam):
+        """ess_tail values are positive for a converged chain."""
+        mr = gam.mcmc_result
+        assert np.all(mr.ess_tail > 0)
 
     def test_deviance_raises(self, gam):
         """deviance property raises NotImplementedError for MCMC fits."""
@@ -411,7 +423,11 @@ class TestNUTS:
 
     @pytest.fixture(scope="class")
     def hmc_result(self):
-        """Explicit HMC fit for comparison."""
+        """Explicit HMC fit for comparison.
+
+        Uses 500 samples so the rank-normalized split R-hat (which halves each chain to
+        4 × 250-sample half-chains) is stable enough for a 1.2 threshold.
+        """
         data = _gaussian_data(seed=10)
         gam = GAM("y ~ s(x)")
         gam.fit(
@@ -421,8 +437,8 @@ class TestNUTS:
                 "sampler": "HMC",
                 "leapfrog_steps": 20,
                 "n_chains": 2,
-                "n_samples": 300,
-                "n_warmup": 200,
+                "n_samples": 500,
+                "n_warmup": 300,
                 "seed": 99,
             },
         )
@@ -464,8 +480,12 @@ class TestNUTS:
         )
 
     def test_hmc_sampler_still_works(self, hmc_result):
-        """sampler='HMC' produces valid diagnostics."""
-        assert hmc_result.r_hat.max() < 1.1
+        """sampler='HMC' produces valid diagnostics.
+
+        Rank-normalized split R-hat is more conservative than classic R-hat (it splits 2 chains into
+        4 half-chains), so the threshold here is 1.2 rather than 1.1.
+        """
+        assert hmc_result.r_hat.max() < 1.2
         assert 0.5 <= hmc_result.acceptance_rate <= 1.0
 
     def test_max_tree_depth_respected(self):
