@@ -22,6 +22,8 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 from numpy.typing import NDArray
+from scipy.special import ndtri
+from scipy.stats import rankdata
 
 if TYPE_CHECKING:
     from whittaker.families.base import Family
@@ -42,14 +44,17 @@ class MCMCResult(BayesResult):
     Attributes
     ----------
     samples:
-        All retained posterior draws, shape `(p, n_chains * n_samples)`.
-        Warmup draws are excluded.
+        All retained posterior draws, shape `(p, n_chains * n_samples)`. Warmup draws are excluded.
     r_hat:
-        Per-parameter Gelman-Rubin statistic, shape `(p,)`.  Values close
-        to 1.0 indicate convergence across chains; values above 1.1 warrant
-        concern.
+        Per-parameter Gelman-Rubin statistic, shape `(p,)`. Values close to 1.0 indicate convergence
+        across chains. Values above 1.1 warrant concern.
     ess:
-        Per-parameter effective sample size, shape `(p,)`.
+        Per-parameter bulk ESS (effective sample size applied to rank-normalized draws), shape
+        `(p,)`. Measures mixing in the bulk of the distribution.
+    ess_tail:
+        Per-parameter tail ESS: the minimum of the ESS of the 5th-percentile and 95th-percentile
+        tail indicators, shape `(p,)`. Measures how well the sampler explores the tails of the
+        posterior.
     acceptance_rate:
         Mean Metropolis acceptance rate across all chains and post-warmup steps.
     step_size:
@@ -75,6 +80,7 @@ class MCMCResult(BayesResult):
     samples: NDArray = field(default_factory=lambda: np.empty(0))
     r_hat: NDArray = field(default_factory=lambda: np.empty(0))
     ess: NDArray = field(default_factory=lambda: np.empty(0))
+    ess_tail: NDArray = field(default_factory=lambda: np.empty(0))
     acceptance_rate: float = 0.0
     step_size: float = 0.0
     n_chains: int = 1
@@ -288,7 +294,7 @@ def _build_tree(
         divergent = int(H_new - H0 > _DELTA_MAX)
         return beta_new, p_new, beta_new, p_new, beta_new, n_prime, s_prime, alpha, 1, divergent
 
-    # Recursive case — build first half of the subtree
+    # Recursive case: build first half of the subtree
     (
         beta_minus,
         p_minus,
@@ -828,8 +834,46 @@ def _nuts_worker(
 # ---------------------------------------------------------------------------
 
 
+def _rank_normalize(chains: NDArray) -> NDArray:
+    """Rank-normalize pooled draws to standard-normal scores (Vehtari et al. 2021).
+
+    Parameters
+    ----------
+    chains : NDArray, shape `(n_chains, n_samples, p)`
+
+    Returns
+    -------
+    NDArray, shape `(n_chains, n_samples, p)` — rank-normalized draws
+    """
+    n_chains, n_samples, p = chains.shape
+    N = n_chains * n_samples
+    pooled = chains.reshape(N, p)
+
+    z = np.empty_like(pooled, dtype=float)
+    for j in range(p):
+        r = rankdata(pooled[:, j], method="average")
+        # Blom's plotting position: maps ranks to asymptotically N(0,1) quantiles
+        z[:, j] = ndtri((r - 3.0 / 8.0) / (N + 0.25))
+
+    return z.reshape(n_chains, n_samples, p)
+
+
+def _r_hat_classic(chains: NDArray) -> NDArray:
+    """Classic Gelman-Rubin R-hat on pre-processed chains."""
+    n_chains, n_samples, _ = chains.shape
+    chain_means = chains.mean(axis=1)
+    B = n_samples * np.var(chain_means, axis=0, ddof=1)
+    W = np.mean(np.var(chains, axis=1, ddof=1), axis=0)
+    var_plus = ((n_samples - 1) / n_samples) * W + B / n_samples
+    return np.sqrt(var_plus / (W + 1e-15))
+
+
 def _r_hat(chains: NDArray) -> NDArray:
-    """Gelman-Rubin R-hat statistic.
+    """Rank-normalized split R-hat (Vehtari et al. 2021).
+
+    Each chain is split in half, giving 2 × n_chains half-chains. Classic R-hat is then applied to
+    the rank-normalized half-chains. Splitting detects non-stationarity within chains. Rank
+    normalization makes the statistic robust to heavy-tailed posteriors.
 
     Parameters
     ----------
@@ -839,18 +883,14 @@ def _r_hat(chains: NDArray) -> NDArray:
     -------
     NDArray, shape `(p,)`
     """
-    n_chains, n_samples, _ = chains.shape
-    chain_means = chains.mean(axis=1)  # (n_chains, p)
-
-    B = n_samples * np.var(chain_means, axis=0, ddof=1)  # between-chain variance × n
-    W = np.mean(np.var(chains, axis=1, ddof=1), axis=0)  # within-chain variance
-
-    var_plus = ((n_samples - 1) / n_samples) * W + B / n_samples
-    return np.sqrt(var_plus / (W + 1e-15))
+    n_chains, n_samples, p = chains.shape
+    mid = n_samples // 2
+    split = np.concatenate([chains[:, :mid, :], chains[:, mid:, :]], axis=0)
+    return _r_hat_classic(_rank_normalize(split))
 
 
-def _ess(chains: NDArray) -> NDArray:
-    """Effective sample size via Geyer's initial positive sequence.
+def _ess_autocorr(chains: NDArray) -> NDArray:
+    """ESS via Geyer's initial positive sequence on pooled chains.
 
     Parameters
     ----------
@@ -865,10 +905,9 @@ def _ess(chains: NDArray) -> NDArray:
 
     ess = np.empty(p)
     for j in range(p):
-        pooled = chains[:, :, j].ravel()
+        pooled = chains[:, :, j].ravel().copy()
         pooled -= pooled.mean()
 
-        # FFT-based normalized autocorrelation
         n_pad = 2 * n_total
         fft = np.fft.rfft(pooled, n=n_pad)
         acf_raw = np.fft.irfft(fft * np.conj(fft))[:n_total].real
@@ -878,7 +917,6 @@ def _ess(chains: NDArray) -> NDArray:
             continue
         acf = acf_raw / acv0
 
-        # Geyer's initial positive sequence: sum pairs until non-positive
         rho_sum = 0.0
         for t in range(1, n_total // 2):
             pair = acf[2 * t] + acf[2 * t + 1]
@@ -889,6 +927,54 @@ def _ess(chains: NDArray) -> NDArray:
         ess[j] = n_total / (1.0 + 2.0 * rho_sum)
 
     return ess
+
+
+def _ess(chains: NDArray) -> NDArray:
+    """Bulk ESS: autocorrelation ESS on rank-normalized draws (Vehtari et al. 2021).
+
+    Parameters
+    ----------
+    chains : NDArray, shape `(n_chains, n_samples, p)`
+
+    Returns
+    -------
+    NDArray, shape `(p,)`
+    """
+    return _ess_autocorr(_rank_normalize(chains))
+
+
+def _ess_tail(chains: NDArray, prob: float = 0.05) -> NDArray:
+    """Tail ESS: min ESS of lower- and upper-tail indicators (Vehtari et al. 2021).
+
+    For each parameter, computes the ESS of the binary indicator I(x ≤ Q_{prob}) and
+    I(x ≥ Q_{1−prob}), returning the minimum. Low tail ESS means the sampler is not visiting the
+    tails of the posterior reliably.
+
+    Parameters
+    ----------
+    chains : NDArray, shape `(n_chains, n_samples, p)`
+    prob : float
+        Tail probability (default 0.05 → 5th and 95th percentiles).
+
+    Returns
+    -------
+    NDArray, shape `(p,)`
+    """
+    n_chains, n_samples, p = chains.shape
+    pooled = chains.reshape(n_chains * n_samples, p)
+
+    ess_lo = np.empty(p)
+    ess_hi = np.empty(p)
+    for j in range(p):
+        col = pooled[:, j]
+        q_lo = float(np.quantile(col, prob))
+        q_hi = float(np.quantile(col, 1.0 - prob))
+        ind_lo = (chains[:, :, j] <= q_lo).astype(float)
+        ind_hi = (chains[:, :, j] >= q_hi).astype(float)
+        ess_lo[j] = _ess_autocorr(ind_lo[:, :, np.newaxis])[0]
+        ess_hi[j] = _ess_autocorr(ind_hi[:, :, np.newaxis])[0]
+
+    return np.minimum(ess_lo, ess_hi)
 
 
 # ---------------------------------------------------------------------------
@@ -1075,6 +1161,7 @@ def mcmc_fit(
     chains_3d = np.stack([cr[0].T for cr in chain_results], axis=0)  # (n_chains, n_samples, p)
     r_hat = _r_hat(chains_3d)
     ess_vals = _ess(chains_3d)
+    ess_tail_vals = _ess_tail(chains_3d)
 
     # 8. Posterior mean and covariance from samples
     posterior_mean = all_samples.mean(axis=1)
@@ -1108,6 +1195,7 @@ def mcmc_fit(
         samples=all_samples,
         r_hat=r_hat,
         ess=ess_vals,
+        ess_tail=ess_tail_vals,
         acceptance_rate=acceptance_rate,
         step_size=final_step_size,
         n_chains=n_chains,
