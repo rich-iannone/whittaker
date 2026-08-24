@@ -391,3 +391,99 @@ class TestWarmStart:
         # Both should converge; warm start should use no more iters than cold
         assert vr_warm.converged
         assert vr_cold.converged
+
+
+# ---------------------------------------------------------------------------
+# Offset and prior-weights branches
+# ---------------------------------------------------------------------------
+
+
+class TestVIOffset:
+    """Cover the offset branches in vi_fit (Gaussian fast path and general path)."""
+
+    def test_gaussian_vi_with_offset(self):
+        """Gaussian VI fast path: eta_fast += offset."""
+        rng = np.random.default_rng(40)
+        n = 150
+        x = np.linspace(0, 1, n)
+        offset = np.full(n, 0.3)
+        y = np.sin(2 * np.pi * x) + rng.normal(scale=0.3, size=n)
+        data = {"y": y, "x": x, "off": offset}
+
+        model = GAM("y ~ s(x) + offset(off)").fit(data, method="VI")
+        vr = model.vi_result
+        assert vr is not None
+        assert vr.converged
+
+    def test_poisson_vi_with_offset(self):
+        """Poisson VI general path: offset branches in _vi_elbo_and_grad and final assembly."""
+        rng = np.random.default_rng(41)
+        n = 150
+        x = np.linspace(0, 1, n)
+        offset = np.full(n, 0.5)
+        lam = np.exp(np.sin(2 * np.pi * x) + 1.0 + offset)
+        y = rng.poisson(lam).astype(float)
+        data = {"y": y, "x": x, "off": offset}
+
+        model = GAM("y ~ s(x) + offset(off)", family=Poisson()).fit(data, method="VI")
+        vr = model.vi_result
+        assert vr is not None
+        assert vr.converged
+
+
+class TestVIPriorWeights:
+    """Cover the prior-weights branches in _vi_elbo_and_grad."""
+
+    def test_poisson_vi_with_prior_weights(self):
+        """Prior weights are passed through to the gradient computation."""
+        rng = np.random.default_rng(42)
+        n = 150
+        x = np.linspace(0, 1, n)
+        lam = np.exp(np.sin(2 * np.pi * x) + 1.5)
+        y = rng.poisson(lam).astype(float)
+        data = {"y": y, "x": x}
+
+        formula_obj = parse("y ~ s(x)")
+        mm = build_model_matrix(formula_obj, data)
+        weights = np.full(n, 2.0)
+        vr = vi_fit(mm, Poisson(), prior_weights=weights)
+        assert vr.converged
+
+    def test_phi_variational_with_prior_weights(self):
+        """phi_variational block: pw-is-not-None branch."""
+        rng = np.random.default_rng(43)
+        n = 150
+        x = np.linspace(0, 1, n)
+        mu = np.exp(1.5 * np.sin(2 * np.pi * x))
+        y = rng.gamma(shape=2.0, scale=mu / 2.0)
+        data = {"y": y, "x": x}
+
+        formula_obj = parse("y ~ s(x)")
+        mm = build_model_matrix(formula_obj, data)
+        weights = np.ones(n)
+        vr = vi_fit(
+            mm,
+            Gamma(),
+            prior_weights=weights,
+            phi_inference="variational",
+        )
+        assert vr.converged
+        assert vr.phi_variational
+        assert vr.log_phi_mean is not None
+
+    def test_phi_variational_with_offset(self):
+        """phi_variational block: offset branch."""
+        rng = np.random.default_rng(44)
+        n = 150
+        x = np.linspace(0, 1, n)
+        offset = np.full(n, 0.2)
+        mu = np.exp(1.5 * np.sin(2 * np.pi * x) + offset)
+        y = rng.gamma(shape=2.0, scale=mu / 2.0)
+        data = {"y": y, "x": x, "off": offset}
+
+        model = GAM("y ~ s(x) + offset(off)", family=Gamma()).fit(
+            data, method="VI", vi_options={"phi_inference": "variational"}
+        )
+        vr = model.vi_result
+        assert vr is not None
+        assert vr.phi_variational
