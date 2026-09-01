@@ -45,6 +45,7 @@ from whittaker.families import (
     ZeroInflatedPoisson,
     tw,
 )
+from whittaker.fitting.loo import LOOComparison, LOOResult, loo_compare
 from whittaker.formula import Formula, InteractionTerm, LinearTerm, OffsetTerm, SmoothTerm
 from whittaker.formula import parse as parse_formula
 from whittaker.functional import CoefficientFunction, FunctionalGAM, FunctionalTerm
