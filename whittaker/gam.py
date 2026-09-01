@@ -489,6 +489,8 @@ class GAM:
         interval: str | None = None,
         level: float = 0.95,
         unconditional: bool = False,
+        n_sim: int = 1000,
+        seed: int | None = None,
     ) -> PredictionResult | TermsPredictionResult:
         r"""Predict from the fitted model on new data.
 
@@ -525,6 +527,12 @@ class GAM:
               response-distribution variance on top of the uncertainty in $\eta$.
             - `"simultaneous"`: a band with `level` coverage for the *entire* curve
               simultaneously (via posterior simulation), rather than pointwise coverage.
+            - `"credible"`: posterior credible interval for Bayesian fits (`method="VI"` or
+              `method="MCMC"`). Draws `n_sim` coefficient vectors from the posterior, computes
+              the predicted mean at each draw, and returns the `(1-level)/2` and `(1+level)/2`
+              quantiles as `lower` and `upper`. More accurate than `"confidence"` for
+              non-Gaussian families because it does not rely on normal approximation after the
+              link-inverse transform. Raises `ValueError` for non-Bayesian fits.
 
             All interval types are computed on the linear predictor scale and transformed to the
             response scale for `type="response"`.
@@ -537,6 +545,12 @@ class GAM:
             conditional $V_p$. This produces wider, more honest intervals that account for the
             fact that $\lambda$ was itself estimated from the data. Requires that the model was
             fitted with `method="REML"` or `method="ML"`.
+        n_sim : int
+            Number of posterior draws used when `interval="credible"`. Default `1000`. Ignored
+            for all other interval types.
+        seed : int or None
+            Random seed passed to the posterior sampler when `interval="credible"`. Default
+            `None`. Ignored for all other interval types.
 
         Returns
         -------
@@ -583,13 +597,51 @@ class GAM:
 
         if interval is not None:
             interval_lower = interval.lower()
-            if interval_lower not in ("confidence", "prediction", "simultaneous"):
+            if interval_lower not in ("confidence", "prediction", "simultaneous", "credible"):
                 raise ValueError(
                     f"Unknown interval type {interval!r}. "
-                    "Choose from 'confidence', 'prediction', or 'simultaneous'."
+                    "Choose from 'confidence', 'prediction', 'simultaneous', or 'credible'."
                 )
         else:
             interval_lower = None
+
+        if interval_lower == "credible":
+            if not isinstance(self._fit_result, (VIResult, MCMCResult)):
+                raise ValueError(
+                    "interval='credible' requires a Bayesian fit (method='VI' or method='MCMC'). "
+                    f"This model was fitted with method='{self._fit_result.method}'."
+                )
+            X_new = predict_matrix(self._model_matrix, new_data)
+            new_offset = predict_offset(self._model_matrix, new_data)
+            beta_draws = self._fit_result.draw(n_sim, seed=seed)
+            eta_draws = X_new @ beta_draws
+            if new_offset is not None:
+                eta_draws += new_offset[:, np.newaxis]
+            alpha = (1.0 - level) / 2.0
+            eta = X_new @ self._fit_result.coefficients
+            if new_offset is not None:
+                eta = eta + new_offset
+            if type_lower == "link":
+                lower = np.quantile(eta_draws, alpha, axis=1)
+                upper = np.quantile(eta_draws, 1.0 - alpha, axis=1)
+                return PredictionResult(
+                    values=eta,
+                    se=None,
+                    linear_predictor=eta,
+                    lower=lower,
+                    upper=upper,
+                )
+            mu_draws = self._family.link_inverse(eta_draws)
+            lower = np.quantile(mu_draws, alpha, axis=1)
+            upper = np.quantile(mu_draws, 1.0 - alpha, axis=1)
+            mu = self._family.link_inverse(eta)
+            return PredictionResult(
+                values=mu,
+                se=None,
+                linear_predictor=eta,
+                lower=lower,
+                upper=upper,
+            )
 
         X_new = predict_matrix(self._model_matrix, new_data)
         eta = X_new @ self._fit_result.coefficients

@@ -503,3 +503,50 @@ class TestVIPriorWeights:
         vr = model.vi_result
         assert vr is not None
         assert vr.phi_variational
+
+
+# ---------------------------------------------------------------------------
+# Credible intervals via predict(interval="credible")
+# ---------------------------------------------------------------------------
+
+
+class TestCredibleIntervals:
+    """Verify interval='credible' in predict() for Bayesian fits."""
+
+    @pytest.fixture
+    def vi_model(self, poisson_data):
+        return GAM("y ~ s(x)", family=Poisson()).fit(poisson_data, method="VI")
+
+    @pytest.fixture
+    def new_x(self):
+        return {"x": np.linspace(0, 1, 20)}
+
+    def test_vi_credible_interval_shape(self, vi_model, new_x):
+        r = vi_model.predict(new_x, interval="credible", level=0.95, n_sim=200, seed=0)
+        assert r.lower.shape == r.values.shape
+        assert r.upper.shape == r.values.shape
+
+    def test_vi_credible_interval_bounds(self, vi_model, new_x):
+        r = vi_model.predict(new_x, interval="credible", level=0.95, n_sim=200, seed=0)
+        assert np.all(r.lower <= r.values)
+        assert np.all(r.values <= r.upper)
+
+    def test_vi_credible_interval_no_se(self, vi_model, new_x):
+        r = vi_model.predict(new_x, interval="credible", n_sim=200, seed=0)
+        assert r.se is None
+
+    def test_vi_credible_interval_link_scale(self, vi_model, new_x):
+        r = vi_model.predict(new_x, interval="credible", type="link", n_sim=200, seed=0)
+        assert np.all(r.lower <= r.values)
+        assert np.all(r.values <= r.upper)
+
+    def test_vi_credible_wider_at_higher_level(self, vi_model, new_x):
+        r90 = vi_model.predict(new_x, interval="credible", level=0.90, n_sim=500, seed=1)
+        r95 = vi_model.predict(new_x, interval="credible", level=0.95, n_sim=500, seed=1)
+        assert np.all(r95.upper >= r90.upper)
+        assert np.all(r95.lower <= r90.lower)
+
+    def test_credible_raises_for_frequentist_fit(self, poisson_data, new_x):
+        gam = GAM("y ~ s(x)", family=Poisson()).fit(poisson_data)
+        with pytest.raises(ValueError, match="credible"):
+            gam.predict(new_x, interval="credible")

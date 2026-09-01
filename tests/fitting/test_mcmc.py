@@ -410,6 +410,15 @@ class TestMCMCResultAPI:
         sim = gam.simulate(data, n_sim=50)
         assert sim.shape == (len(data["y"]), 50)
 
+    def test_credible_interval_shape_and_bounds(self, gam):
+        """predict(interval='credible') returns lower <= values <= upper."""
+        data = _gaussian_data(seed=4)
+        r = gam.predict(data, interval="credible", level=0.95, n_sim=200, seed=99)
+        assert r.lower.shape == r.values.shape
+        assert r.upper.shape == r.values.shape
+        assert np.all(r.lower <= r.values)
+        assert np.all(r.values <= r.upper)
+
 
 # ---------------------------------------------------------------------------
 # NUTS-specific tests
