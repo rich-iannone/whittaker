@@ -268,6 +268,42 @@ class Family(ABC):
         """
         ...
 
+    def log_lik_pointwise(
+        self, y: NDArray, mu: NDArray, scale: float, *, weights: NDArray | None = None
+    ) -> NDArray:
+        r"""Per-observation log-likelihood contributions $\ell_i(y_i; \mu_i, \phi)$.
+
+        Returns the same values that `log_likelihood` sums, without summing, as a 1-D array. Used by
+        `GAM.loo()` to compute PSIS-LOO cross-validation.
+
+        The default implementation calls `log_likelihood` on each observation individually. Key
+        families override this with a vectorized implementation.
+
+        Parameters
+        ----------
+        y
+            Observed response values, shape `(n,)`.
+        mu
+            Fitted conditional mean values, shape `(n,)`.
+        scale
+            Dispersion (scale) parameter $\phi$.
+        weights
+            Optional prior weights, shape `(n,)`.
+
+        Returns
+        -------
+        NDArray
+            Per-observation log-likelihood values, shape `(n,)`.
+        """
+        import numpy as np
+
+        n = len(y)
+        out = np.empty(n)
+        for i in range(n):
+            w_i = None if weights is None else weights[i : i + 1]
+            out[i] = self.log_likelihood(y[i : i + 1], mu[i : i + 1], scale, weights=w_i)
+        return out
+
     def irls_update(self, y: NDArray, mu: NDArray, eta: NDArray) -> tuple[NDArray, NDArray] | None:
         """Custom IRLS pseudo-response and working weights.
 

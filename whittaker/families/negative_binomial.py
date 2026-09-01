@@ -266,6 +266,24 @@ class NegativeBinomial(Family):
             ll_i = weights * ll_i
         return float(np.sum(ll_i))
 
+    def log_lik_pointwise(
+        self, y: NDArray, mu: NDArray, scale: float, *, weights: NDArray | None = None
+    ) -> NDArray:
+        from scipy.special import gammaln
+
+        mu_c = np.maximum(mu, _EPS)
+        theta = self._theta
+        ll_i = (
+            gammaln(y + theta)
+            - gammaln(theta)
+            - gammaln(y + 1.0)
+            + theta * np.log(theta / (mu_c + theta))
+            + y * np.log(mu_c / (mu_c + theta))
+        )
+        if weights is not None:
+            ll_i = weights * ll_i
+        return ll_i
+
     @property
     def scale_known(self) -> bool:
         """Whether the dispersion parameter is fixed. Always `True` for NegativeBinomial.

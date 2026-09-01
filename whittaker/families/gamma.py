@@ -218,6 +218,25 @@ class Gamma(Family):
             ll_i = weights * ll_i
         return float(np.sum(ll_i))
 
+    def log_lik_pointwise(
+        self, y: NDArray, mu: NDArray, scale: float, *, weights: NDArray | None = None
+    ) -> NDArray:
+        from scipy.special import gammaln
+
+        mu_c = np.maximum(mu, _EPS)
+        y_c = np.maximum(y, _EPS)
+        alpha = 1.0 / scale
+        ll_i = (
+            alpha * np.log(alpha)
+            + (alpha - 1.0) * np.log(y_c)
+            - alpha * y_c / mu_c
+            - alpha * np.log(mu_c)
+            - gammaln(alpha)
+        )
+        if weights is not None:
+            ll_i = weights * ll_i
+        return ll_i
+
     @property
     def scale_known(self) -> bool:
         """Whether the dispersion parameter is fixed. Always `False` for Gamma.

@@ -214,6 +214,15 @@ class Binomial(Family):
             ll_i = weights * ll_i
         return float(np.sum(ll_i))
 
+    def log_lik_pointwise(
+        self, y: NDArray, mu: NDArray, scale: float, *, weights: NDArray | None = None
+    ) -> NDArray:
+        mu_c = np.clip(mu, _EPS, 1.0 - _EPS)
+        ll_i = y * np.log(mu_c) + (1.0 - y) * np.log(1.0 - mu_c)
+        if weights is not None:
+            ll_i = weights * ll_i
+        return ll_i
+
     @property
     def scale_known(self) -> bool:
         """Whether the dispersion parameter is fixed. Always `True` for Binomial.

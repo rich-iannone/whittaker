@@ -207,6 +207,17 @@ class Poisson(Family):
             ll_i = weights * ll_i
         return float(np.sum(ll_i))
 
+    def log_lik_pointwise(
+        self, y: NDArray, mu: NDArray, scale: float, *, weights: NDArray | None = None
+    ) -> NDArray:
+        from scipy.special import gammaln
+
+        mu_c = np.maximum(mu, _EPS)
+        ll_i = y * np.log(mu_c) - mu_c - gammaln(y + 1.0)
+        if weights is not None:
+            ll_i = weights * ll_i
+        return ll_i
+
     @property
     def scale_known(self) -> bool:
         """Whether the dispersion parameter is fixed. Always `True` for Poisson.
