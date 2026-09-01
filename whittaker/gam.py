@@ -1456,6 +1456,100 @@ class GAM:
 
         return mu
 
+    def loo(self, n_draws: int = 2000, *, seed: int | None = None) -> object:
+        """Compute PSIS-LOO cross-validation for a Bayesian fit.
+
+        Uses Pareto-Smoothed Importance Sampling (Vehtari, Gelman & Gabry, 2017) to approximate
+        leave-one-out cross-validation from the existing posterior draws without refitting. Requires
+        a model fitted with `method="VI"` or `method="MCMC"`.
+
+        Parameters
+        ----------
+        n_draws : int
+            Number of posterior draws to use. For MCMC fits, all stored draws are used when
+            `n_draws` exceeds the available count. For VI fits, samples are drawn from the Gaussian
+            posterior approximation. The default is `2000`.
+        seed : int or None
+            Random seed for reproducibility when sampling from the posterior (VI fits only). MCMC
+            fits use all stored draws directly without sampling.
+
+        Returns
+        -------
+        LOOResult
+            Object with `elpd_loo`, `se_elpd_loo`, `p_loo`, `pointwise`, `pareto_k`, and `n_bad_k`.
+            Inspect `pareto_k` to identify observations where the PSIS approximation may be
+            unreliable (values > 0.7).
+
+        Raises
+        ------
+        ValueError
+            If the model was not fitted with `method="VI"` or `method="MCMC"`.
+
+        Examples
+        --------
+        ```{python}
+        import numpy as np
+        from whittaker import GAM
+        from whittaker.families import Poisson
+
+        rng = np.random.default_rng(0)
+        x = np.linspace(0, 5, 100)
+        y = rng.poisson(np.exp(0.4 * x))
+
+        m1 = GAM("y ~ s(x)", family=Poisson()).fit({"x": x, "y": y}, method="VI")
+        m2 = GAM("y ~ x", family=Poisson()).fit({"x": x, "y": y}, method="VI")
+
+        loo1 = m1.loo()
+        loo2 = m2.loo()
+        print(loo1)
+
+        from whittaker import loo_compare
+        print(loo_compare(loo1, loo2))
+        ```
+        """
+        from whittaker.fitting.loo import compute_loo
+
+        self._check_fitted()
+        if not isinstance(self._fit_result, (VIResult, MCMCResult)):
+            raise ValueError(
+                "loo() requires a Bayesian fit (method='VI' or method='MCMC'). "
+                f"This model was fitted with method='{self._fit_result.method}'."
+            )
+
+        mm = self._model_matrix
+        y = mm.response
+        X = mm.X
+        offset = mm.offset
+        scale = self._fit_result.scale
+
+        # For MCMC, use all stored draws directly; for VI, draw n_draws samples.
+        if isinstance(self._fit_result, MCMCResult):
+            beta_draws = self._fit_result.samples  # (p, N_total)
+        else:
+            beta_draws = self._fit_result.draw(n_draws, seed=seed)  # (p, n_draws)
+
+        S = beta_draws.shape[1]
+
+        # Compute mu for all draws: (n, S)
+        eta_draws = X @ beta_draws
+        if offset is not None:
+            eta_draws += offset[:, np.newaxis]
+        mu_draws = self._family.link_inverse(eta_draws)
+
+        # Per-observation, per-draw log-likelihoods: (n, S)
+        n = len(y)
+        log_lik = np.empty((n, S))
+        for s in range(S):
+            log_lik[:, s] = self._family.log_lik_pointwise(y, mu_draws[:, s], scale)
+
+        # Log-likelihood at posterior mean (for p_loo)
+        mu_mean = self._family.link_inverse(
+            X @ self._fit_result.coefficients + (offset if offset is not None else 0.0)
+        )
+        lpd_full = self._family.log_lik_pointwise(y, mu_mean, scale)
+
+        return compute_loo(log_lik, lpd_full)
+
     def concurvity(self, *, full: bool = True) -> object:
         """Compute concurvity diagnostics for all smooth terms.
 
