@@ -184,6 +184,14 @@ class Gaussian(Family):
             ll_i = weights * ll_i
         return float(np.sum(ll_i))
 
+    def log_lik_pointwise(
+        self, y: NDArray, mu: NDArray, scale: float, *, weights: NDArray | None = None
+    ) -> NDArray:
+        ll_i = -0.5 * np.log(2 * np.pi * scale) - 0.5 * (y - mu) ** 2 / scale
+        if weights is not None:
+            ll_i = weights * ll_i
+        return ll_i
+
     def simulate(self, mu: NDArray, scale: float, rng: np.random.Generator) -> NDArray:
         """Simulate Gaussian response values `N(mu, scale)`.
 
