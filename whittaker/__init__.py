@@ -179,9 +179,12 @@ __all__ = [
     "BigGAM",
     "PolarsGAM",
     "DuckDBGAM",
-    # Cross-validation
+    # Cross-validation and model comparison
     "cross_validate",
     "CVResult",
+    "loo_compare",
+    "LOOResult",
+    "LOOComparison",
     # scikit-learn integration
     "GAMRegressor",
     "GAMClassifier",
