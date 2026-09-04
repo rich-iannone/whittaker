@@ -40,6 +40,8 @@ nav_icons:
     "Large datasets": database
     "Variational inference": brain
     "MCMC sampling": activity
+    "Model comparison with LOO": scale
+    "Posterior predictive checks": check-circle
     "Saving and loading models": save
     "Glossary": book-open
 
