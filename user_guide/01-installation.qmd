@@ -34,9 +34,18 @@ The `[dev]` extra installs testing and linting tools (pytest, ruff, pyright).
 
 ## Verifying the installation
 
+After installing, check that Whittaker loads correctly and prints its version.
+
 ```{python}
 import whittaker as wk
 
 # Print the installed version
 print(wk.__version__)
 ```
+
+If no error is raised and a version string appears, the installation is working.
+
+## Where to go next
+
+- **[Quick start](02-quick-start.qmd)**: fit your first GAM in a few lines of code.
+- **[Data input](08-data-input.qmd)**: how to pass data to Whittaker from dicts, Polars, or Pandas.
