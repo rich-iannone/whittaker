@@ -301,11 +301,14 @@ assessment, and posterior predictive checks (via `simulate()`) for model compari
 
 ## Where to go next
 
+- **[Model comparison with LOO](22-loo.qmd)**: use PSIS-LOO to compare the predictive accuracy of
+  competing Bayesian GAM fits.
+- **[Posterior predictive checks](23-ppc.qmd)**: assess whether a model generates data consistent
+  with the observations.
 - **[Variational inference](20-variational-inference.qmd)**: a faster alternative to MCMC for
   non-Gaussian families that gives better-calibrated intervals than the Laplace approximation.
 - **[Prediction and inference](06-prediction.qmd)**: confidence intervals, simultaneous bands,
   and term-level predictions from any fitted model.
 - **[Model diagnostics](07-diagnostics.qmd)**: residual plots and `model.check()`.
-- **[Model fitting](05-fitting.qmd)**: P-IRLS, REML, and smoothness selection.
 - **[Response families](04-families.qmd)**: how the family affects posterior shape and MCMC
   efficiency.
