@@ -1,0 +1,193 @@
+---
+title: "Model comparison with LOO"
+guide-section: "Advanced features"
+---
+
+```{python}
+#| echo: false
+#| output: false
+import great_docs as gd
+
+gd.enable_tbl_preview(n_head=8, n_tail=3)
+```
+
+When you have two or more candidate models for the same data, you need a principled way to decide
+which one predicts better. **Leave-one-out cross-validation (LOO-CV)** estimates each model's
+out-of-sample predictive accuracy by asking: how well does the model predict each observation when
+that observation is left out of the fit?
+
+Refitting the model $n$ times is expensive. **Pareto-Smoothed Importance Sampling (PSIS-LOO)**
+(Vehtari, Gelman & Gabry, 2017) approximates the leave-one-out predictive densities from a single
+set of posterior draws, making LOO-CV practical for Bayesian GAMs. The result is an estimate of the
+**expected log predictive density (ELPD)**, a measure of predictive accuracy where higher values
+indicate better out-of-sample predictions.
+
+## When to use PSIS-LOO
+
+Use `model.loo()` when:
+
+- you have two or more Bayesian GAM fits (`method="VI"` or `method="MCMC"`) on the same data and
+  want to know which predicts better
+- you want a model-selection criterion that accounts for the full posterior, not just the point
+  estimate (unlike AIC or BIC)
+- you need per-observation diagnostics that flag influential points where the LOO approximation may
+  be unreliable
+
+For frequentist fits, AIC and BIC are available through `model.aic` and `model.bic`. PSIS-LOO
+requires posterior draws and is only available after Bayesian fitting.
+
+## Basic usage
+
+Fit two competing models with the same Bayesian method and call `.loo()` on each.
+
+```{python}
+import numpy as np
+import whittaker as wk
+from whittaker.families.poisson import Poisson
+
+rng = np.random.default_rng(23)
+n = 300
+x = np.linspace(0, 2 * np.pi, n)
+lam = np.exp(1.5 * np.sin(x))
+y = rng.poisson(lam).astype(float)
+
+data = {"x": x, "y": y}
+
+# Model 1: smooth effect of x
+m1 = wk.GAM("y ~ s(x)", family=Poisson()).fit(data, method="VI")
+
+# Model 2: linear effect of x only
+m2 = wk.GAM("y ~ x", family=Poisson()).fit(data, method="VI")
+
+loo1 = m1.loo(seed=0)
+loo2 = m2.loo(seed=0)
+print(loo1)
+```
+
+The output shows the ELPD estimate, its standard error, the effective number of parameters
+($p_\text{LOO}$), and how many observations have a Pareto $k$ diagnostic above the reliability
+threshold.
+
+## Understanding the LOO result
+
+The `LOOResult` object contains everything you need to evaluate and compare models.
+
+**`elpd_loo`** is the summed expected log predictive density. Higher values mean better predictive
+accuracy. The value itself is on a log scale, so differences between models are more informative
+than the absolute number.
+
+**`se_elpd_loo`** is the standard error of the ELPD estimate, computed as
+$\sqrt{n \cdot \text{Var}(\text{pointwise})}$. It quantifies sampling uncertainty in the LOO
+approximation.
+
+**`p_loo`** is the effective number of parameters, computed as the difference between the full-data
+log predictive density and the LOO estimate. When `p_loo` is much larger than the actual number of
+model coefficients, it suggests model misspecification or highly influential observations.
+
+```{python}
+print(f"ELPD:           {loo1.elpd_loo:.2f} (SE {loo1.se_elpd_loo:.2f})")
+print(f"p_LOO:          {loo1.p_loo:.2f}")
+print(f"Observations:   {len(loo1.pointwise)}")
+```
+
+These diagnostics give a first indication of how well the model generalizes.
+
+## Pareto $k$ diagnostics
+
+PSIS works by fitting a Generalized Pareto Distribution to the tail of the importance weights for
+each observation. The estimated shape parameter $k$ tells you how reliable the approximation is for
+that specific data point.
+
+| Pareto $k$ range | Interpretation |
+|---|---|
+| $k \le 0.5$ | Good. The estimate is reliable. |
+| $0.5 < k \le 0.7$ | Acceptable. Some noise but generally trustworthy. |
+| $0.7 < k \le 1.0$ | Problematic. The PSIS estimate may be biased. |
+| $k > 1.0$ | Invalid. The importance weights have infinite variance. |
+
+```{python}
+import altair as alt
+
+k_data = [
+    {"observation": i, "pareto_k": float(loo1.pareto_k[i])}
+    for i in range(len(loo1.pareto_k))
+]
+
+threshold = alt.Chart({"values": [{}]}).mark_rule(
+    strokeDash=[4, 4], color="firebrick"
+).encode(y=alt.datum(0.7))
+
+points = alt.Chart({"values": k_data}).mark_circle(size=20, opacity=0.5).encode(
+    x=alt.X("observation:Q", title="Observation index"),
+    y=alt.Y("pareto_k:Q", title="Pareto k"),
+    color=alt.condition(
+        alt.datum.pareto_k > 0.7,
+        alt.value("firebrick"),
+        alt.value("steelblue"),
+    ),
+)
+
+(points + threshold).properties(
+    title="Pareto k diagnostics (red = above 0.7 threshold)",
+    width=500,
+    height=250,
+)
+```
+
+Observations with $k > 0.7$ are flagged in `n_bad_k`. If you see many flagged observations, the
+LOO approximation may not be trustworthy and you should investigate those data points for
+high leverage or model misspecification.
+
+## Comparing models
+
+`loo_compare()` computes the paired difference in ELPD between two models. Because the comparison
+uses pointwise LOO values from both models, it accounts for the correlation across observations and
+gives a tighter standard error than comparing the two ELPD estimates independently.
+
+```{python}
+from whittaker import loo_compare
+
+cmp = loo_compare(loo1, loo2)
+print(cmp)
+```
+
+A positive `elpd_diff` means the first model is preferred; negative means the second. The standard
+error of the difference tells you how confident you can be. As a rough guideline, a difference
+larger than two standard errors is strong evidence in favor of one model.
+
+```{python}
+ratio = abs(cmp.elpd_diff) / cmp.se_diff
+print(f"|ELPD diff| / SE = {ratio:.1f}")
+if ratio > 2:
+    preferred = "model 1 (smooth)" if cmp.elpd_diff > 0 else "model 2 (linear)"
+    print(f"Strong evidence for {preferred}")
+else:
+    print("Models are not clearly distinguishable")
+```
+
+In this example, the smooth model captures the sinusoidal pattern that the linear model cannot,
+which is reflected in the ELPD comparison.
+
+## LOO with MCMC fits
+
+The workflow is identical for MCMC fits. The only difference is that `.loo()` uses all stored
+posterior draws directly instead of sampling from a variational approximation, so the `n_draws=`
+parameter is ignored.
+
+```python
+model = wk.GAM("y ~ s(x)", family=Poisson()).fit(data, method="MCMC")
+loo_result = model.loo()
+```
+
+MCMC fits with more draws produce more stable LOO estimates and better Pareto $k$ diagnostics.
+
+## Where to go next
+
+- **[Posterior predictive checks](23-ppc.qmd)**: assess whether a model generates data that looks
+  like the observed data, complementing LOO's predictive-accuracy perspective.
+- **[MCMC sampling](21-mcmc.qmd)**: fitting models with the No-U-Turn Sampler for exact posterior
+  inference.
+- **[Variational inference](20-variational-inference.qmd)**: a faster Bayesian alternative that
+  also supports LOO.
+- **[Cross-validation](17-cross-validation.qmd)**: K-fold cross-validation for frequentist fits.
+- **[Model diagnostics](07-diagnostics.qmd)**: residual plots and `model.check()`.
