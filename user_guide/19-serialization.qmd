@@ -261,3 +261,15 @@ A typical workflow for deploying a GAM as a prediction service:
 import shutil
 shutil.rmtree(tmpdir)
 ```
+
+You can now save and load fitted GAMs in the native `.npz` format, export to `mgcv`-compatible
+dictionaries for cross-language workflows, and deploy models with full prediction and standard
+error support.
+
+## Where to go next
+
+- **[Prediction and inference](06-prediction.qmd)**: confidence intervals and term-level predictions
+  from a loaded model.
+- **[Model diagnostics](07-diagnostics.qmd)**: verify that a loaded model passes diagnostic checks.
+- **[Large datasets](18-large-datasets.qmd)**: scalable fitting backends whose results can be
+  serialized with the same tools.
