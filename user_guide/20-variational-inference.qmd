@@ -274,8 +274,13 @@ and use posterior predictive checks (via `simulate()`) for model comparison.
 
 ## Where to go next
 
+- **[Model comparison with LOO](22-loo.qmd)**: use PSIS-LOO to compare the predictive accuracy of
+  competing Bayesian GAM fits.
+- **[Posterior predictive checks](23-ppc.qmd)**: assess whether a model generates data consistent
+  with the observations.
+- **[MCMC sampling](21-mcmc.qmd)**: exact posterior inference via the No-U-Turn Sampler, for when
+  VI's Gaussian approximation is insufficient.
 - **[Prediction and inference](06-prediction.qmd)**: confidence intervals, simultaneous bands, and
   term-level predictions from any fitted model.
 - **[Model diagnostics](07-diagnostics.qmd)**: residual plots and `model.check()`.
-- **[Model fitting](05-fitting.qmd)**: P-IRLS, REML, and smoothness selection.
 - **[Response families](04-families.qmd)**: how the family affects VI convergence and calibration.
