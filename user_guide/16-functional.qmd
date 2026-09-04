@@ -308,6 +308,9 @@ model_dict.fit({"curves": X_func, "y": y}, method="REML")
 print(f"EDF: {model_dict.edf_total:.1f}")
 ```
 
+Dictionary specification is convenient when building terms programmatically or reading
+configurations from files.
+
 ::: {.callout-note}
 ## Data format for functional covariates
 
@@ -318,9 +321,22 @@ the `domain`. Scalar covariates and the response are 1-D arrays as usual.
 
 ## Summary
 
+The `summary()` method reports the functional terms with their basis type, number of basis
+functions, domain, and effective degrees of freedom.
+
 ```{python}
 print(model.summary())
 ```
 
-The summary reports the functional terms with their basis type, number of basis functions, domain,
-and effective degrees of freedom.
+You can now fit scalar-on-function regression models with one or more functional covariates, extract
+and visualize the estimated coefficient functions, and combine functional terms with standard smooth
+terms.
+
+## Where to go next
+
+- **[Data input](08-data-input.qmd)**: how to prepare data dictionaries, including 2-D arrays for
+  functional covariates.
+- **[Multi-response models](15-multi-response.qmd)**: jointly model multiple scalar responses.
+- **[Smooth terms](03-smooths.qmd)**: the smooth types available for scalar covariates in mixed
+  models.
+- **[Model diagnostics](07-diagnostics.qmd)**: residual checks for functional GAM fits.
