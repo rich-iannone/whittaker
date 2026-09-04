@@ -372,10 +372,10 @@ the endpoints would be unconstrained, producing a discontinuity in the fitted se
 
 ## Tensor product smooths: `te()` and `ti()` {#tensor}
 
-When you need a smooth function of **two or more** predictors measured on **different scales** (e.g.,
-latitude and time, or temperature and pressure), use tensor product smooths. Unlike `s(x1, x2)`
-(which applies a single isotropic penalty treating all dimensions equally), `te()` applies a
-**separate marginal penalty** to each variable.
+When you need a smooth function of **two or more** predictors measured on **different scales**
+(e.g., latitude and time, or temperature and pressure), use tensor product smooths. Unlike
+`s(x1, x2)` (which applies a single isotropic penalty treating all dimensions equally), `te()`
+applies a **separate marginal penalty** to each variable.
 
 $$f(x_1, x_2) = \sum_j \sum_k \beta_{jk} \, b_j^{(1)}(x_1) \, b_k^{(2)}(x_2)$$
 
