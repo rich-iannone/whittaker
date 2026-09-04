@@ -112,15 +112,25 @@ diag_data = [
     for i in range(len(mr.r_hat))
 ]
 
-alt.Chart({"values": diag_data}).mark_bar().encode(
+threshold = alt.Chart({"values": [{}]}).mark_rule(
+    strokeDash=[4, 4], color="firebrick"
+).encode(y=alt.datum(1.1))
+
+points = alt.Chart({"values": diag_data}).mark_point(size=60, filled=True).encode(
     x=alt.X("coefficient:O", title="Coefficient index"),
-    y=alt.Y("r_hat:Q", title="R-hat", scale=alt.Scale(domainMin=1.0)),
+    y=alt.Y("r_hat:Q", title="R-hat", scale=alt.Scale(zero=False)),
     color=alt.condition(
         alt.datum.r_hat > 1.1,
         alt.value("firebrick"),
         alt.value("steelblue"),
     ),
-).properties(title="R-hat by coefficient (red = > 1.1)", width=500, height=250)
+)
+
+(points + threshold).properties(
+    title="R-hat by coefficient (red = above 1.1 threshold)",
+    width=500,
+    height=250,
+)
 ```
 
 ### Divergences
