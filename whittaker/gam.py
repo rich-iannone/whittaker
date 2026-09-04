@@ -1550,6 +1550,52 @@ class GAM:
 
         return compute_loo(log_lik, lpd_full)
 
+    def ppc(self, n_sim: int = 1000, *, seed: int | None = None) -> object:
+        """Run a posterior predictive check against the training data.
+
+        Draws `n_sim=` datasets from the posterior predictive distribution and compares five test
+        statistics (mean, sd, min, max, and proportion of zeros) between the observed data and the
+        replicated datasets. The result is a `PPCResult` whose Bayesian p-values indicate whether
+        the model generates data consistent with the observations.
+
+        Works with any fitting method. For Bayesian fits (`method="VI"` or `method="MCMC"`) draws
+        come from the full posterior. For frequentist fits the Laplace approximation to the
+        posterior is used.
+
+        Parameters
+        ----------
+        n_sim : int
+            Number of replicated datasets to draw. The default is `1000`.
+        seed : int or None
+            Random seed for reproducibility.
+
+        Returns
+        -------
+        PPCResult
+            Contains `y_rep` (shape `(n, n_sim)`), `observed` (shape `(n,)`), and per-statistic
+            Bayesian p-values.
+
+        Examples
+        --------
+        ```python
+        result = model.ppc(n_sim=1000, seed=0)
+        print(result)
+        # PPCResult (n=300, n_sim=1000)
+        #
+        # Statistic        Observed  Mean(rep)    p-value
+        # -----------------------------------------------
+        # mean                 2.34       2.31      0.520
+        # sd                   1.45       1.43      0.480
+        # ...
+        ```
+        """
+        from whittaker.fitting.ppc import compute_ppc
+
+        self._check_fitted()
+        y = self._model_matrix.response
+        y_rep = self.simulate(unconditional=True, n_sim=n_sim, seed=seed)
+        return compute_ppc(y_rep, y)
+
     def concurvity(self, *, full: bool = True) -> object:
         """Compute concurvity diagnostics for all smooth terms.
 
@@ -1607,22 +1653,21 @@ class GAM:
     def summary(self) -> ModelSummary:
         """Return a text summary of the fitted model, analogous to `summary.gam()` in R's mgcv.
 
-        The summary reports, in order: the formula and family; a table of parametric
-        (non-smooth) coefficients with estimates, standard errors, test statistics (`t` for
-        unknown-scale families such as Gaussian and Gamma, `z` for known-scale families such as
-        Binomial and Poisson), and p-values; a table of approximate significance for each smooth
-        term (effective degrees of freedom, reference degrees of freedom, a chi-squared-type
-        statistic, and a p-value); and overall fit statistics (total EDF, deviance, null
-        deviance, proportion of deviance explained, GCV score, estimated scale, AIC, and BIC).
-        Use this for a quick, human-readable check of which terms are significant and how well
-        the model fits, without extracting individual result objects via `parametric_tests()`
-        and `smooth_tests()`.
+        The summary reports, in order: the formula and family; a table of parametric (non-smooth)
+        coefficients with estimates, standard errors, test statistics (`t` for unknown-scale
+        families such as Gaussian and Gamma, `z` for known-scale families such as Binomial and
+        Poisson), and p-values; a table of approximate significance for each smooth term (effective
+        degrees of freedom, reference degrees of freedom, a chi-squared-type statistic, and a
+        p-value); and overall fit statistics (total EDF, deviance, null deviance, proportion of
+        deviance explained, GCV score, estimated scale, AIC, and BIC). Use this for a quick,
+        human-readable check of which terms are significant and how well the model fits, without
+        extracting individual result objects via `parametric_tests()` and `smooth_tests()`.
 
         Returns
         -------
         ModelSummary
-            Multi-line text summary. Displays cleanly as the last expression in a
-            Jupyter or Quarto cell without needing `print()`.
+            Multi-line text summary. Displays cleanly as the last expression in a Jupyter or Quarto
+            cell without needing `print()`.
         """
         self._check_fitted()
         r = self._fit_result
