@@ -280,3 +280,15 @@ A common heuristic: instead of picking the model with the lowest CV score, pick 
 whose score is within one standard error of the best. This guards against overfitting to the
 validation folds and tends to produce more parsimonious models.
 :::
+
+You can now use K-fold cross-validation to compare models, select basis dimensions, and apply the
+one-SE rule for parsimonious model selection.
+
+## Where to go next
+
+- **[Model comparison with LOO](22-loo.qmd)**: PSIS-LOO cross-validation for Bayesian model
+  comparison without refitting.
+- **[Model diagnostics](07-diagnostics.qmd)**: residual checks and basis adequacy tests as a
+  complement to cross-validation.
+- **[Model fitting](05-fitting.qmd)**: how smoothness selection (REML, GCV) relates to
+  cross-validation.

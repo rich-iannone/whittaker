@@ -564,10 +564,10 @@ The naive difference-in-means estimate is biased because treated individuals ten
 confounder values that are associated with higher outcomes. The DML estimator removes this
 confounding and recovers the true effect.
 
-## References
+## Where to go next
 
-- Chernozhukov, V., Chetverikov, D., Demirer, M., Duflo, E., Hansen, C., Newey, W., & Robins,
-  J. (2018). Double/debiased machine learning for treatment and structural parameters.
-  *The Econometrics Journal*, 21(1), C1--C68.
-- Robinson, P. M. (1988). Root-n-consistent semiparametric regression. *Econometrica*, 56(4),
-  931--954.
+- **[Conformal prediction](12-conformal.qmd)**: distribution-free prediction intervals that
+  complement causal effect estimation.
+- **[Model diagnostics](07-diagnostics.qmd)**: residual checks and basis adequacy tests.
+- **[Prediction and inference](06-prediction.qmd)**: confidence intervals and term-level predictions
+  from the nuisance GAM.

@@ -400,3 +400,15 @@ rather than squared deviations.
 - **Linear terms**: `"y ~ x1 + s(x2)"` combines parametric and smooth terms.
 - **Factor-by smooths**: `"y ~ s(x, by=group)"` fits separate quantile curves per group level,
   useful for comparing distributional differences across categories.
+
+You can now fit quantile GAMs, enforce non-crossing constraints, build adaptive prediction
+intervals, and calibrate the ELF loss bandwidth.
+
+## Where to go next
+
+- **[Distributional regression (GAMLSS)](10-gamlss.qmd)**: model the full conditional distribution
+  parametrically when you need a density estimate (not just individual quantiles).
+- **[Conformal prediction](12-conformal.qmd)**: distribution-free prediction intervals with
+  finite-sample coverage guarantees.
+- **[Model diagnostics](07-diagnostics.qmd)**: residual plots and basis adequacy checks.
+- **[Smooth terms](03-smooths.qmd)**: the smooth types available in quantile GAM formulas.

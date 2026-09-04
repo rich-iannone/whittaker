@@ -186,6 +186,8 @@ model.fit(data_int, method="REML")
 print(f"Fitted with integer covariates: EDF = {model.edf_total:.1f}")
 ```
 
+The integer array is converted internally and the model fits as expected.
+
 ## Functional covariates
 
 For [functional regression](16-functional.qmd), functional covariates are passed as 2-D arrays in
@@ -207,3 +209,14 @@ data_func = {
 print(f"Functional covariate shape: {data_func['curves'].shape}")
 print(f"Response shape: {data_func['y'].shape}")
 ```
+
+The 2-D array stores one curve per row. See the [functional regression page](16-functional.qmd)
+for the full workflow of fitting and interpreting functional GAMs.
+
+## Where to go next
+
+- **[Quick start](02-quick-start.qmd)**: fit a complete GAM from a data dictionary in a few lines.
+- **[Smooth terms](03-smooths.qmd)**: the smooth types available and how to configure them.
+- **[Functional regression](16-functional.qmd)**: fitting models with functional covariates.
+- **[Large datasets](18-large-datasets.qmd)**: scalable backends when the data does not fit in
+  memory.

@@ -1,0 +1,189 @@
+---
+title: "Posterior predictive checks"
+guide-section: "Advanced features"
+---
+
+```{python}
+#| echo: false
+#| output: false
+import great_docs as gd
+
+gd.enable_tbl_preview(n_head=8, n_tail=3)
+```
+
+A model that fits the data well by some criterion (ELPD, AIC, deviance explained) might still
+generate data that looks nothing like the observations. **Posterior predictive checks (PPC)** test
+this directly: draw many replicated datasets from the fitted model and compare them to the real
+data. If the model is adequate, the replicated data should be statistically indistinguishable from
+what was actually observed.
+
+The idea is simple. For each replicated dataset $y^\text{rep}$, compute a test statistic
+$T(y^\text{rep})$ (the mean, the standard deviation, the proportion of zeros, or any other summary).
+Then compare the distribution of $T(y^\text{rep})$ across all replicates to the observed value
+$T(y^\text{obs})$. If the observed value sits in the bulk of the replicated distribution, the model
+captures that aspect of the data well. If it sits in the extreme tail, the model has a systematic
+discrepancy.
+
+## When to use PPC
+
+Use `model.ppc()` when:
+
+- you want to check whether a fitted model generates realistic data, not just whether it predicts
+  well
+- you suspect the model may miss important features of the response distribution (overdispersion,
+  excess zeros, skewness)
+- you want a visual, intuitive diagnostic that complements formal metrics like ELPD or deviance
+
+PPC works with every fitting method. For Bayesian fits (`method="VI"` or `method="MCMC"`), the
+replicated datasets are drawn from the full posterior predictive distribution. For frequentist fits,
+the Laplace approximation to the posterior is used.
+
+## Basic usage
+
+Call `.ppc()` on any fitted model. The result is a `PPCResult` that prints a table of test
+statistics with Bayesian p-values.
+
+```{python}
+import numpy as np
+import whittaker as wk
+from whittaker.families.poisson import Poisson
+
+rng = np.random.default_rng(23)
+n = 300
+x = np.linspace(0, 2 * np.pi, n)
+lam = np.exp(1.5 * np.sin(x))
+y = rng.poisson(lam).astype(float)
+
+data = {"x": x, "y": y}
+
+model = wk.GAM("y ~ s(x)", family=Poisson()).fit(data, method="VI")
+result = model.ppc(n_sim=1000, seed=0)
+print(result)
+```
+
+Each row shows an observed statistic, the mean of that statistic across all replicated datasets, and
+a Bayesian p-value. A p-value near 0.5 means the model reproduces that feature of the data well
+whereas values near 0 or 1 indicate a systematic discrepancy.
+
+## Bayesian p-values
+
+The **Bayesian p-value** for a statistic $T$ is the proportion of replicated datasets where the
+statistic equals or exceeds the observed value:
+
+$$p_B = P\bigl(T(y^\text{rep}) \ge T(y^\text{obs})\bigr)$$
+
+Unlike classical p-values, the Bayesian p-value is a calibration diagnostic, not a hypothesis test.
+It can answer the question: "does the model generate data whose summary statistics are consistent
+with what we observed?" A well-calibrated model should produce p-values scattered around 0.5 for all
+statistics.
+
+You can retrieve the p-value for any individual statistic by name.
+
+```{python}
+print(f"p-value for 'mean': {result.p_value('mean'):.3f}")
+print(f"p-value for 'sd':   {result.p_value('sd'):.3f}")
+print(f"p-value for 'min':  {result.p_value('min'):.3f}")
+print(f"p-value for 'max':  {result.p_value('max'):.3f}")
+```
+
+The available statistic names are listed in `result.stat_names`.
+
+## Visualizing test statistics
+
+For a deeper look, retrieve the full distribution of a statistic across all replicates using
+`result.stat()`. This returns the observed value and the array of replicated values, which you can
+plot as a histogram.
+
+```{python}
+import altair as alt
+
+obs_sd, rep_sd = result.stat("sd")
+
+hist_data = [{"sd": float(v)} for v in rep_sd]
+hist = alt.Chart({"values": hist_data}).mark_bar(opacity=0.6, color="steelblue").encode(
+    x=alt.X("sd:Q", bin=alt.Bin(maxbins=40), title="Standard deviation"),
+    y=alt.Y("count()", title="Count"),
+)
+
+obs_line = alt.Chart({"values": [{"sd": float(obs_sd)}]}).mark_rule(
+    color="firebrick", strokeWidth=2
+).encode(x="sd:Q")
+
+obs_label = alt.Chart({"values": [{"sd": float(obs_sd), "label": "observed"}]}).mark_text(
+    color="firebrick", dy=-10, fontSize=12
+).encode(x="sd:Q", text="label:N")
+
+(hist + obs_line + obs_label).properties(
+    title="PPC: standard deviation (observed vs. replicated)",
+    width=500,
+    height=250,
+)
+```
+
+The observed value (red line) should fall within the bulk of the histogram. If it sits in the tail,
+the model is systematically over- or under-estimating the variability of the response.
+
+## Detecting model problems
+
+PPC is especially useful for catching distributional misspecification. Consider fitting a Poisson
+model to data that is actually overdispersed. The Poisson distribution has variance equal to its
+mean, so the standard deviation of the replicated data will be too low.
+
+```{python}
+# Simulate overdispersed count data (Negative Binomial)
+y_od = rng.negative_binomial(n=3, p=3 / (3 + lam)).astype(float)
+data_od = {"x": x, "y": y_od}
+
+model_pois = wk.GAM("y ~ s(x)", family=Poisson()).fit(data_od, method="VI")
+result_pois = model_pois.ppc(n_sim=1000, seed=0)
+print(result_pois)
+```
+
+A p-value near 0 for `sd` is a clear signal that the Poisson model cannot reproduce the observed
+variability. The `max` statistic may also show an extreme p-value, since overdispersed data produces
+larger outliers than Poisson draws.
+
+## PPC with different fitting methods
+
+PPC works with any fitting method, including frequentist fits. The underlying mechanism differs (the
+Laplace approximation is used for frequentist fits), but the interface is identical.
+
+```{python}
+# Frequentist fit
+model_reml = wk.GAM("y ~ s(x)", family=Poisson()).fit(data, method="REML")
+result_reml = model_reml.ppc(n_sim=500, seed=0)
+print(result_reml)
+```
+
+Frequentist PPC results are generally similar to Bayesian ones for well-identified models with
+moderate to large sample sizes. The main difference appears in small-sample or weakly identified
+settings, where the Laplace approximation underestimates posterior spread.
+
+## Available test statistics
+
+The following statistics are computed automatically for every PPC.
+
+| Statistic | What it checks |
+|---|---|
+| `mean` | Location: does the model get the overall level right? |
+| `sd` | Spread: does the model reproduce the observed variability? |
+| `min` | Lower tail: does the model generate plausible extreme low values? |
+| `max` | Upper tail: does the model generate plausible extreme high values? |
+| `prop_zero` | Zero-inflation: does the model produce the right proportion of zeros? |
+
+The `prop_zero` statistic is particularly useful for count data. A p-value near 0 suggests the model
+underproduces zeros, which is a hallmark of zero-inflation that a standard Poisson or Negative
+Binomial model may not capture.
+
+## Where to go next
+
+- **[Model comparison with LOO](22-loo.qmd)**: use PSIS-LOO to compare the predictive accuracy of
+  competing models, complementing PPC's adequacy perspective.
+- **[MCMC sampling](21-mcmc.qmd)**: fitting models with the No-U-Turn Sampler for exact posterior
+  draws used in PPC.
+- **[Variational inference](20-variational-inference.qmd)**: a faster Bayesian alternative whose
+  posterior draws feed into PPC.
+- **[Model diagnostics](07-diagnostics.qmd)**: residual plots and `model.check()` for
+  complementary diagnostic perspectives.
+- **[Response families](04-families.qmd)**: choosing the right family avoids the distributional
+  misspecification that PPC is designed to detect.

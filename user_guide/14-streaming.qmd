@@ -318,6 +318,9 @@ sgam_fixed.solve()
 print(f"Fixed SP: {sgam_fixed.smoothing_params}")
 ```
 
+Fixing the smoothing parameters avoids the overhead of automatic selection when you already know
+good values from a prior full fit.
+
 ::: {.callout-tip}
 ## When to use StreamingGAM
 
@@ -330,3 +333,14 @@ Use `StreamingGAM` when:
 
 For one-shot large-dataset fitting, consider [BigGAM or PolarsGAM](18-large-datasets.qmd) instead.
 :::
+
+You can now fit GAMs incrementally on streaming data, control the decay rate for non-stationary
+processes, and fix smoothing parameters when they are known in advance.
+
+## Where to go next
+
+- **[Large datasets](18-large-datasets.qmd)**: BigGAM, PolarsGAM, and DuckDBGAM for one-shot
+  fitting on large data.
+- **[Model fitting](05-fitting.qmd)**: how P-IRLS and smoothness selection work under the hood.
+- **[Saving and loading models](19-serialization.qmd)**: persist a fitted streaming model for later
+  use.

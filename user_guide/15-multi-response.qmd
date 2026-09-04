@@ -233,6 +233,9 @@ print(rc3)
 
 ## Summary
 
+The `summary()` method reports per-response fit statistics, including EDF, deviance, and smoothing
+parameters for each response.
+
 ```{python}
 print(model_corr.summary())
 ```
@@ -250,3 +253,15 @@ Use `MultiResponseGAM` when:
 If the responses are truly independent and you do not need correlation estimates, fitting separate
 `GAM` objects is equivalent and may be simpler.
 :::
+
+You can now fit multi-response GAMs with shared or response-specific formulas, estimate residual
+correlations, and access per-response models for further inspection.
+
+## Where to go next
+
+- **[Prediction and inference](06-prediction.qmd)**: confidence intervals and term-level
+  predictions for individual response models.
+- **[Model diagnostics](07-diagnostics.qmd)**: check each response model's residuals and basis
+  adequacy.
+- **[Functional regression](16-functional.qmd)**: another multi-predictor setting where the
+  covariates are entire curves.

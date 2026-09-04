@@ -112,15 +112,25 @@ diag_data = [
     for i in range(len(mr.r_hat))
 ]
 
-alt.Chart({"values": diag_data}).mark_bar().encode(
+threshold = alt.Chart({"values": [{}]}).mark_rule(
+    strokeDash=[4, 4], color="firebrick"
+).encode(y=alt.datum(1.1))
+
+points = alt.Chart({"values": diag_data}).mark_point(size=60, filled=True).encode(
     x=alt.X("coefficient:O", title="Coefficient index"),
-    y=alt.Y("r_hat:Q", title="R-hat", scale=alt.Scale(domainMin=1.0)),
+    y=alt.Y("r_hat:Q", title="R-hat", scale=alt.Scale(zero=False)),
     color=alt.condition(
         alt.datum.r_hat > 1.1,
         alt.value("firebrick"),
         alt.value("steelblue"),
     ),
-).properties(title="R-hat by coefficient (red = > 1.1)", width=500, height=250)
+)
+
+(points + threshold).properties(
+    title="R-hat by coefficient (red = above 1.1 threshold)",
+    width=500,
+    height=250,
+)
 ```
 
 ### Divergences
@@ -301,11 +311,14 @@ assessment, and posterior predictive checks (via `simulate()`) for model compari
 
 ## Where to go next
 
+- **[Model comparison with LOO](22-loo.qmd)**: use PSIS-LOO to compare the predictive accuracy of
+  competing Bayesian GAM fits.
+- **[Posterior predictive checks](23-ppc.qmd)**: assess whether a model generates data consistent
+  with the observations.
 - **[Variational inference](20-variational-inference.qmd)**: a faster alternative to MCMC for
   non-Gaussian families that gives better-calibrated intervals than the Laplace approximation.
 - **[Prediction and inference](06-prediction.qmd)**: confidence intervals, simultaneous bands,
   and term-level predictions from any fitted model.
 - **[Model diagnostics](07-diagnostics.qmd)**: residual plots and `model.check()`.
-- **[Model fitting](05-fitting.qmd)**: P-IRLS, REML, and smoothness selection.
 - **[Response families](04-families.qmd)**: how the family affects posterior shape and MCMC
   efficiency.

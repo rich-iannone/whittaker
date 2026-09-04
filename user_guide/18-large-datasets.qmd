@@ -284,3 +284,15 @@ conn.close()
 import shutil
 shutil.rmtree(tmpdir)
 ```
+
+You can now choose the right scalable backend for your data source and fit GAMs on datasets that
+would not fit in memory with the standard `GAM` class.
+
+## Where to go next
+
+- **[Streaming and online fitting](14-streaming.qmd)**: incremental fitting when data arrives in
+  batches over time.
+- **[Model fitting](05-fitting.qmd)**: how P-IRLS and smoothness selection work in the standard
+  pipeline.
+- **[Saving and loading models](19-serialization.qmd)**: persist a fitted large-data model for
+  deployment.

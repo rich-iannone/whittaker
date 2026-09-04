@@ -12,15 +12,15 @@ gd.enable_tbl_preview(n_head=8, n_tail=3)
 ```
 
 A standard GAM models the conditional **mean** of the response as a smooth function of the
-predictors. Everything else about the distribution---the variance, skewness, zero-inflation---is
+predictors. Everything else about the distribution (the variance, skewness, zero-inflation) is
 treated as fixed. That assumption is often wrong. Reaction-time variability increases under
-cognitive load. Insurance claim amounts become more dispersed in certain regions. Survey
-proportions cluster near 0 or 1 depending on the question.
+cognitive load. Insurance claim amounts become more dispersed in certain regions. Survey proportions
+cluster near 0 or 1 depending on the question.
 
-**Generalized Additive Models for Location, Scale, and Shape** (GAMLSS) remove these restrictions.
-Every parameter of the response distribution---not just the mean---gets its own additive predictor
-with its own smooth terms, its own link function, and its own penalty. The result is a model that
-captures how the **entire conditional distribution** changes with the covariates.
+Generalized Additive Models for Location, Scale, and Shape (GAMLSS) remove these restrictions. Every
+parameter of the response distribution (not just the mean) gets its own additive predictor with its
+own smooth terms, its own link function, and its own penalty. The result is a model that captures
+how the **entire conditional distribution** changes with the covariates.
 
 ## The GAMLSS framework
 
@@ -42,8 +42,8 @@ zero-inflated Poisson, $K = 2$: $\theta_1 = \mu$ (rate) with a log link, and $\t
 ## Formula conventions
 
 In Whittaker's GAMLSS interface, formulas are passed as a dictionary keyed by parameter name. The
-response variable must appear on the left-hand side of every formula, and all formulas must share the
-same response variable:
+response variable must appear on the left-hand side of every formula, and all formulas must share
+the same response variable:
 
 ```python
 formulas = {
@@ -96,9 +96,9 @@ y = mu_true + rng.normal(0, sigma_true)
 data = {"x": x, "y": y}
 ```
 
-The noise level is small near $x = 0$ and large near $x = 6$. A standard GAM would estimate the
-mean correctly but would give uniform-width confidence bands---too cautious on the left, not
-cautious enough on the right.
+The noise level is small near $x = 0$ and large near $x = 6$. A standard GAM would estimate the mean
+correctly but would give uniform-width confidence bands (too cautious on the left, not cautious
+enough on the right).
 
 ### Fitting the model
 
@@ -112,8 +112,8 @@ model_gls.fit(data)
 print(model_gls.summary())
 ```
 
-Both $\mu$ and $\sigma$ have their own smooth terms with separate EDFs and smoothing parameters.
-The summary reports each parameter's additive predictor independently.
+Both $\mu$ and $\sigma$ have their own smooth terms with separate EDFs and smoothing parameters. The
+summary reports each parameter's additive predictor independently.
 
 ### Prediction and visualization
 
@@ -172,14 +172,14 @@ true_line = alt.Chart({"values": true_data}).mark_line(
 ```
 
 The prediction band fans out to the right, reflecting the increasing noise level. A standard GAM
-would produce a band of constant width---too narrow on the right where the data truly are noisy, and
+would produce a band of constant width: too narrow on the right where the data truly are noisy, and
 too wide on the left where the data are precise.
 
 ::: {.callout-tip}
 ## When is a location-scale model worth the extra complexity?
 
-Run a standard GAM first and inspect the residuals. If a plot of squared residuals against $x$
-shows a clear trend, the variance is not constant, and a `GaussianLS` model will give you better
+Run a standard GAM first and inspect the residuals. If a plot of squared residuals against $x$ shows
+a clear trend, the variance is not constant, and a `GaussianLS` model will give you better
 prediction intervals and more honest uncertainty estimates.
 :::
 
@@ -246,10 +246,10 @@ the coefficient of variation increases along the transect.
 
 ## Beta location-scale: proportion data
 
-When modeling proportions on the open interval $(0, 1)$, the `BetaLS()` family lets you model
-both the mean proportion and the **precision** (or equivalently, the variance around that mean) as
-functions of covariates. This is common in ecological data (percent cover), educational data
-(test score fractions), and manufacturing (yield proportions).
+When modeling proportions on the open interval $(0, 1)$, the `BetaLS()` family lets you model both
+the mean proportion and the **precision** (or equivalently, the variance around that mean) as
+functions of covariates. This is common in ecological data (percent cover), educational data (test
+score fractions), and manufacturing (yield proportions).
 
 ```{python}
 rng = np.random.default_rng(12)
@@ -303,30 +303,29 @@ line_beta = alt.Chart({"values": fit_beta}).mark_line(
 )
 ```
 
-The logit link on $\mu$ constrains predictions to $(0, 1)$. The log link on $\sigma$ (the
-precision parameter) keeps it positive. Modeling precision as a function of $x$ avoids the common
-problem of over- or under-dispersed residuals at different covariate values.
+The logit link on $\mu$ constrains predictions to $(0, 1)$. The log link on $\sigma$ (the precision
+parameter) keeps it positive. Modeling precision as a function of $x$ avoids the common problem of
+over- or under-dispersed residuals at different covariate values.
 
 ::: {.callout-note}
 ## Beta boundary values
 
-Like the standard `Beta()` family, `BetaLS()` requires $y \in (0, 1)$---not 0 or 1 exactly. If
-your data contain boundary values, apply a small nudge (e.g., $y' = (y(n-1) + 0.5) / n$) before
-fitting.
+Like the standard `Beta()` family, `BetaLS()` requires $y \in (0, 1)$---not 0 or 1 exactly. If your
+data contain boundary values, apply a small nudge (e.g., $y' = (y(n-1) + 0.5) / n$) before fitting.
 :::
 
 ## Zero-inflated Poisson: counts with excess zeros
 
 Many count datasets contain more zeros than a Poisson distribution can explain. Species that are
 absent from most survey sites, customers who never purchase, medical events that do not occur for
-most patients---all produce **zero-inflated** data.
+most patients: all produce **zero-inflated** data.
 
 The `ZeroInflatedPoisson()` family models two processes simultaneously:
 
-1. A **structural zero process**: with probability $\pi(x)$, the observation is always zero
-   (the species is absent, the customer is inactive).
-2. A **Poisson count process**: with probability $1 - \pi(x)$, the observation follows a
-   Poisson distribution with rate $\mu(x)$.
+1. A **structural zero process**: with probability $\pi(x)$, the observation is always zero (the
+  species is absent, the customer is inactive).
+2. A **Poisson count process**: with probability $1 - \pi(x)$, the observation follows a Poisson
+  distribution with rate $\mu(x)$.
 
 Both $\mu$ and $\pi$ can be smooth functions of different (or the same) covariates.
 
@@ -454,16 +453,16 @@ alt.vconcat(top_panel, bottom_panel).resolve_scale(x="shared")
 ```
 
 The top panel shows the fitted Poisson rate overlaid on the observed counts. The bottom panel shows
-the estimated zero-inflation probability $\hat\pi(x)$ (crimson) against the true generating
-function (gray dashed). The model successfully separates the two sources of zeros: those from the
-Poisson process (rate-driven) and those from structural absence (zero-inflation-driven).
+the estimated zero-inflation probability $\hat\pi(x)$ (crimson) against the true generating function
+(gray dashed). The model successfully separates the two sources of zeros: those from the Poisson
+process (rate-driven) and those from structural absence (zero-inflation-driven).
 
 ## Zero-inflated Negative Binomial
 
-When zero-inflated count data are also **overdispersed** (variance exceeds the mean within the
-count component), the `ZeroInflatedNegativeBinomial()` family adds a dispersion parameter $\sigma$
-alongside the rate $\mu$ and the zero-inflation probability $\pi$. This is the most flexible
-count model in Whittaker.
+When zero-inflated count data are also **overdispersed** (variance exceeds the mean within the count
+component), the `ZeroInflatedNegativeBinomial()` family adds a dispersion parameter $\sigma$
+alongside the rate $\mu$ and the zero-inflation probability $\pi$. This is the most flexible count
+model in Whittaker.
 
 ```{python}
 model_zinb = wk.GAMLSS(
@@ -510,8 +509,8 @@ alt.Chart({"values": fit_compare}).mark_line(strokeWidth=2).encode(
 
 The ZINB model has three smooth functions to estimate, which requires substantially more data than
 a ZIP or standard Poisson. With small samples, the dispersion and zero-inflation parameters can be
-poorly identified. Start with a simpler model (`ZeroInflatedPoisson` or `NegativeBinomial`) and
-add complexity only if residual diagnostics indicate it is needed.
+poorly identified. Start with a simpler model (`ZeroInflatedPoisson` or `NegativeBinomial`) and add
+complexity only if residual diagnostics indicate it is needed.
 :::
 
 ## How fitting works
@@ -529,7 +528,7 @@ distribution parameters:
    (default $10^{-7}$), stop. Otherwise, return to step 2.
 
 This is a **backfitting** algorithm over the distribution parameters. Within each P-IRLS step, the
-smooth terms for that parameter are estimated exactly as in a standard GAM---the REML (or GCV)
+smooth terms for that parameter are estimated exactly as in a standard GAM: the REML (or GCV)
 criterion selects the smoothing parameters, and the basis/penalty machinery is identical.
 
 ::: {.callout-note}
@@ -549,23 +548,22 @@ practical tips:
 ## When to use GAMLSS vs. a standard GAM
 
 A standard GAM (with the appropriate family) is sufficient when the **shape** of the response
-distribution does not change with the covariates---only the mean shifts. GAMLSS adds value in
-three situations:
+distribution does not change with the covariates (only the mean shifts). GAMLSS adds value in three
+situations:
 
-1. **Heteroscedasticity.** The variance (or coefficient of variation) changes systematically with
-   a predictor. Classic example: measurement precision that degrades with distance, concentration,
-   or time. Use `GaussianLS()` or `GammaLS()`.
+1. **Heteroscedasticity.** The variance (or coefficient of variation) changes systematically with a
+   predictor. Classic example: measurement precision that degrades with distance, concentration, or
+   time. Use `GaussianLS()` or `GammaLS()`.
 
 2. **Changing shape.** The skewness or kurtosis of the response varies. For proportions near
    boundaries, the Beta distribution's shape parameters change the degree of asymmetry. Use
    `BetaLS()`.
 
 3. **Structural zeros.** A fraction of the population can never produce a positive count, and that
-   fraction varies with covariates. Use `ZeroInflatedPoisson()` or
-   `ZeroInflatedNegativeBinomial()`.
+   fraction varies with covariates. Use `ZeroInflatedPoisson()` or `ZeroInflatedNegativeBinomial()`.
 
-If none of these apply---the data have roughly constant spread and no excess zeros---a standard
-GAM is simpler, faster, and easier to interpret. The table below summarizes the decision:
+If none of these apply (the data have roughly constant spread and no excess zeros) a standard GAM is
+simpler, faster, and easier to interpret. The table below summarizes the decision:
 
 | Situation | Recommended model |
 |---|---|
