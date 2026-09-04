@@ -217,6 +217,8 @@ model_bad.fit({"x": x, "y": y}, method="REML")
 wk.check(model_bad)
 ```
 
+The k-index test flags the model as inadequate. The fix is to increase the basis dimension.
+
 ```{python}
 # Re-fit with more basis functions
 model_good = wk.GAM("y ~ s(x, k=20)")
@@ -225,6 +227,8 @@ model_good.fit({"x": x, "y": y}, method="REML")
 # The check should now pass
 wk.check(model_good)
 ```
+
+With $k = 20$, the k-index test passes. Now compare the two fits visually to see the difference.
 
 ```{python}
 # Compare fits visually
@@ -273,3 +277,17 @@ The most common diagnostic issue is an inadequate basis dimension. REML will nev
 a generous `k`, so it is always safe to increase `k`. Start with the default (10), check, and
 double if the k-index test is significant. Repeat until the test passes.
 :::
+
+You can now inspect a fitted GAM for basis adequacy, residual patterns, and distributional
+assumptions using the diagnostic tools on this page.
+
+## Where to go next
+
+- **[Model fitting](05-fitting.qmd)**: smoothness selection methods (REML, GCV, ML) that control
+  how flexible the smooth terms are.
+- **[Response families](04-families.qmd)**: choosing a family that matches the data-generating
+  process, which is the most common fix when diagnostics reveal distributional problems.
+- **[Posterior predictive checks](23-ppc.qmd)**: a complementary diagnostic that tests whether the
+  model generates realistic data.
+- **[Prediction and inference](06-prediction.qmd)**: confidence intervals and term-level
+  predictions from a model that passes diagnostics.
