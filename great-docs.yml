@@ -44,6 +44,7 @@ nav_icons:
     "Posterior predictive checks": check-circle
     "Saving and loading models": save
     "Glossary": book-open
+    "Benchmarks": timer
 
 # Page Tags
 # ---------
@@ -415,3 +416,11 @@ sections:
           - save-and-load-a-model.qmd
           - use-in-sklearn-pipeline.qmd
           - export-a-model-to-r-mgcv-format.qmd
+
+  - title: Benchmarks
+    dir: benchmarks
+    navbar_after: Cookbook
+    sidebar_groups:
+      - section: Performance
+        contents:
+          - index.qmd
