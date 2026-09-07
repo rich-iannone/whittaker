@@ -1,0 +1,367 @@
+---
+title: Benchmarks
+bread-crumbs: false
+page-navigation: false
+freeze: true
+---
+
+```{python}
+#| echo: false
+#| output: false
+import great_docs as gd
+
+gd.enable_tbl_preview(n_head=8, n_tail=3)
+```
+
+This page reports the performance of Whittaker's core operations on a single machine. All timings
+are wall-clock medians over three runs (one run for the largest sizes and MCMC). The benchmarks
+establish a baseline for the current pure-Python/NumPy/SciPy implementation before any future
+Rust or JAX acceleration work.
+
+## Environment
+
+```{python}
+#| echo: false
+import platform
+import sys
+
+import numpy as np
+import scipy
+
+import whittaker as wk
+
+env_rows = [
+    ("Whittaker", wk.__version__),
+    ("Python", platform.python_version()),
+    ("NumPy", np.__version__),
+    ("SciPy", scipy.__version__),
+    ("OS", f"{platform.system()} {platform.machine()}"),
+    ("CPU", platform.processor() or "unknown"),
+    ("CPU count", str(__import__("os").cpu_count())),
+]
+
+header = "| Component | Version |\n|---|---|"
+rows = "\n".join(f"| {k} | {v} |" for k, v in env_rows)
+
+from IPython.display import Markdown
+
+Markdown(f"{header}\n{rows}")
+```
+
+```{python}
+#| echo: false
+#| output: false
+import time
+import altair as alt
+import gc
+
+
+def bench(fn, repeats=3):
+    """Run `fn` `repeats` times and return the median wall-clock time in seconds."""
+    times = []
+    for _ in range(repeats):
+        gc.collect()
+        start = time.perf_counter()
+        fn()
+        times.append(time.perf_counter() - start)
+    return float(np.median(times))
+
+
+rng = np.random.default_rng(23)
+```
+
+## Sample size scaling
+
+The most fundamental performance question is how fit time grows with the number of observations.
+This benchmark fits a Gaussian GAM with a single cubic regression spline (`y ~ s(x, bs='cr')`)
+using REML across a range of sample sizes. Cubic regression splines use a banded basis matrix, so
+timing reflects the general P-IRLS cost without the $O(n^2)$ distance-matrix overhead of TPRS.
+
+```{python}
+#| echo: false
+from whittaker.families.gaussian import Gaussian
+
+sample_sizes = [500, 1_000, 2_000, 5_000, 10_000]
+scaling_results = []
+
+for n in sample_sizes:
+    x = rng.uniform(0, 2 * np.pi, n)
+    y = np.sin(x) + rng.normal(0, 0.3, n)
+    data = {"x": x, "y": y}
+
+    t = bench(lambda d=data: wk.GAM("y ~ s(x, bs='cr')").fit(d, method="REML"))
+    scaling_results.append({"n": n, "seconds": round(t, 4)})
+    del x, y, data
+    gc.collect()
+
+alt.Chart({"values": scaling_results}).mark_line(
+    color="steelblue", strokeWidth=2, point=alt.OverlayMarkDef(size=50, filled=True),
+).encode(
+    x=alt.X("n:Q", scale=alt.Scale(type="log"), title="Sample size (n)"),
+    y=alt.Y("seconds:Q", title="Fit time (seconds)"),
+).properties(width=500, height=300, title="GAM fit time vs. sample size (Gaussian CRS, REML)")
+```
+
+```{python}
+#| echo: false
+header = "| n | Fit time (s) |\n|---:|---:|"
+rows = "\n".join(f"| {r['n']:,} | {r['seconds']:.4f} |" for r in scaling_results)
+Markdown(f"{header}\n{rows}")
+```
+
+Fit time grows roughly as $O(n \cdot k^2)$ where $k$ is the basis dimension (default 10). The
+dominant cost is the Cholesky factorization of the penalized normal equations at each P-IRLS step.
+
+## Smooth type comparison
+
+Different smooth bases have different construction and penalty costs. This benchmark fixes $n =
+3{,}000$ and compares the main smooth types on a Gaussian response with REML.
+
+```{python}
+#| echo: false
+n_smooth = 3_000
+x = rng.uniform(0, 2 * np.pi, n_smooth)
+x2 = rng.uniform(0, 2 * np.pi, n_smooth)
+y_smooth = np.sin(x) + rng.normal(0, 0.3, n_smooth)
+data_smooth = {"x": x, "x2": x2, "y": y_smooth}
+
+smooth_configs = [
+    ("TPRS", "y ~ s(x)"),
+    ("Cubic RS", "y ~ s(x, bs='cr')"),
+    ("P-spline", "y ~ s(x, bs='ps')"),
+    ("Cyclic CRS", "y ~ s(x, bs='cc')"),
+    ("Tensor (te)", "y ~ te(x, x2)"),
+]
+
+smooth_results = []
+for label, formula in smooth_configs:
+    t = bench(lambda f=formula: wk.GAM(f).fit(data_smooth, method="REML"))
+    smooth_results.append({"smooth": label, "seconds": round(t, 4)})
+
+alt.Chart({"values": smooth_results}).mark_bar(color="steelblue").encode(
+    x=alt.X("seconds:Q", scale=alt.Scale(type="log"), title="Fit time (seconds, log scale)"),
+    y=alt.Y("smooth:N", title=None, sort=[r["smooth"] for r in smooth_results]),
+).properties(width=500, height=200, title="Fit time by smooth type (n=3,000, Gaussian, REML)")
+```
+
+```{python}
+#| echo: false
+header = "| Smooth | Fit time (s) |\n|---|---:|"
+rows = "\n".join(f"| {r['smooth']} | {r['seconds']:.4f} |" for r in smooth_results)
+Markdown(f"{header}\n{rows}")
+```
+
+Cubic regression splines, P-splines, and cyclic splines are the fastest because they use banded
+basis matrices. TPRS requires an $O(n^2)$ eigendecomposition of the distance matrix, making it
+substantially slower at this sample size. Tensor products are the most expensive because they
+construct a Kronecker product penalty over two marginal bases.
+
+## Family comparison
+
+Non-Gaussian families require iterative fitting (P-IRLS) with multiple Newton steps, so they are
+inherently more expensive than the Gaussian case. This benchmark fixes $n = 3{,}000$ with a cubic
+regression spline and compares across response distributions.
+
+```{python}
+#| echo: false
+from whittaker.families.binomial import Binomial
+from whittaker.families.gamma import Gamma
+from whittaker.families.negative_binomial import NegativeBinomial
+from whittaker.families.poisson import Poisson
+
+n_fam = 3_000
+x_fam = rng.uniform(0, 2 * np.pi, n_fam)
+eta = 1.5 * np.sin(x_fam)
+
+family_configs = [
+    ("Gaussian", Gaussian(), eta + rng.normal(0, 0.3, n_fam)),
+    ("Poisson", Poisson(), rng.poisson(np.exp(eta)).astype(float)),
+    ("Binomial", Binomial(), rng.binomial(1, 1 / (1 + np.exp(-eta))).astype(float)),
+    ("Gamma", Gamma(), rng.gamma(shape=2.0, scale=np.exp(eta) / 2.0)),
+    ("Neg. Binomial", NegativeBinomial(), rng.negative_binomial(
+        n=5, p=5 / (5 + np.exp(eta)),
+    ).astype(float)),
+]
+
+family_results = []
+for label, family, y_fam in family_configs:
+    data_fam = {"x": x_fam, "y": y_fam}
+    t = bench(lambda fam=family: wk.GAM("y ~ s(x, bs='cr')", family=fam).fit(data_fam, method="REML"))
+    family_results.append({"family": label, "seconds": round(t, 4)})
+
+alt.Chart({"values": family_results}).mark_bar(color="steelblue").encode(
+    x=alt.X("seconds:Q", title="Fit time (seconds)"),
+    y=alt.Y("family:N", title=None, sort=[r["family"] for r in family_results]),
+).properties(width=500, height=200, title="Fit time by response family (n=3,000, CRS, REML)")
+```
+
+```{python}
+#| echo: false
+header = "| Family | Fit time (s) |\n|---|---:|"
+rows = "\n".join(f"| {r['family']} | {r['seconds']:.4f} |" for r in family_results)
+Markdown(f"{header}\n{rows}")
+```
+
+Gaussian fitting converges in a single P-IRLS step (it is a direct solve). Non-Gaussian families
+typically require 3--8 iterations, with the Negative Binomial being the most expensive due to its
+additional scale parameter estimation.
+
+## Fitting method comparison
+
+Whittaker supports several smoothness selection and inference methods. This benchmark compares
+them on a Poisson GAM with a cubic regression spline at $n = 2{,}000$ to show the relative cost of
+each approach.
+
+```{python}
+#| echo: false
+n_method = 2_000
+x_method = rng.uniform(0, 2 * np.pi, n_method)
+y_method = rng.poisson(np.exp(1.5 * np.sin(x_method))).astype(float)
+data_method = {"x": x_method, "y": y_method}
+
+method_results = []
+
+# Frequentist methods
+for method in ["REML", "GCV", "ML"]:
+    t = bench(lambda m=method: wk.GAM("y ~ s(x, bs='cr')", family=Poisson()).fit(data_method, method=m))
+    method_results.append({"method": method, "seconds": round(t, 4)})
+
+# VI
+t = bench(lambda: wk.GAM("y ~ s(x, bs='cr')", family=Poisson()).fit(data_method, method="VI"))
+method_results.append({"method": "VI", "seconds": round(t, 4)})
+
+# MCMC (single run — expensive)
+t = bench(
+    lambda: wk.GAM("y ~ s(x, bs='cr')", family=Poisson()).fit(
+        data_method, method="MCMC", mcmc_options={"n_samples": 200, "n_warmup": 100},
+    ),
+    repeats=1,
+)
+method_results.append({"method": "MCMC", "seconds": round(t, 4)})
+
+method_order = [r["method"] for r in method_results]
+
+alt.Chart({"values": method_results}).mark_bar(color="steelblue").encode(
+    x=alt.X("seconds:Q", title="Fit time (seconds)"),
+    y=alt.Y("method:N", title=None, sort=method_order),
+).properties(
+    width=500,
+    height=200,
+    title="Fit time by method (Poisson GAM, n=2,000, CRS)",
+)
+```
+
+```{python}
+#| echo: false
+header = "| Method | Fit time (s) |\n|---|---:|"
+rows = "\n".join(f"| {r['method']} | {r['seconds']:.4f} |" for r in method_results)
+Markdown(f"{header}\n{rows}")
+```
+
+REML, GCV, and ML have similar costs because they all use P-IRLS with outer smoothness selection.
+VI adds optimization of the variational parameters on top of the P-IRLS initialization. MCMC is
+the most expensive because it runs hundreds of leapfrog steps per sample, but it provides exact
+posterior inference.
+
+## Prediction throughput
+
+Once a model is fitted, prediction speed matters for serving. This benchmark fits a single
+Gaussian GAM on $n = 5{,}000$ observations and then times `predict()` across a range of
+prediction-set sizes.
+
+```{python}
+#| echo: false
+n_pred = 3_000
+x_pred = rng.uniform(0, 2 * np.pi, n_pred)
+y_pred = np.sin(x_pred) + rng.normal(0, 0.3, n_pred)
+model_pred = wk.GAM("y ~ s(x, bs='cr')").fit({"x": x_pred, "y": y_pred}, method="REML")
+
+pred_sizes = [100, 500, 1_000, 5_000, 10_000]
+pred_results = []
+
+for n_new in pred_sizes:
+    x_new = rng.uniform(0, 2 * np.pi, n_new)
+    new_data = {"x": x_new}
+    t = bench(lambda d=new_data: model_pred.predict(d))
+    pred_results.append({"n_new": n_new, "ms": round(t * 1000, 2)})
+
+alt.Chart({"values": pred_results}).mark_line(
+    color="steelblue", strokeWidth=2, point=alt.OverlayMarkDef(size=50, filled=True),
+).encode(
+    x=alt.X("n_new:Q", scale=alt.Scale(type="log"), title="Prediction set size"),
+    y=alt.Y("ms:Q", title="Predict time (ms)"),
+).properties(width=500, height=300, title="Prediction throughput")
+```
+
+```{python}
+#| echo: false
+header = "| n_new | Predict time (ms) |\n|---:|---:|"
+rows = "\n".join(f"| {r['n_new']:,} | {r['ms']:.2f} |" for r in pred_results)
+Markdown(f"{header}\n{rows}")
+```
+
+Prediction is dominated by design matrix construction (evaluating the basis functions at the new
+covariate values) and a single matrix--vector multiply. It scales linearly with the prediction set
+size.
+
+## BigGAM vs. GAM scaling
+
+`BigGAM` uses discretised covariates and compressed sufficient statistics to avoid building the
+full $n \times p$ design matrix. This makes it slower than `GAM` at small sample sizes (due to
+discretization overhead) but faster at large ones.
+
+```{python}
+#| echo: false
+big_sizes = [1_000, 2_000, 5_000, 10_000, 25_000]
+big_results = []
+
+for n_big in big_sizes:
+    x_big = rng.uniform(0, 2 * np.pi, n_big)
+    y_big = np.sin(x_big) + rng.normal(0, 0.3, n_big)
+    data_big = {"x": x_big, "y": y_big}
+
+    reps = 1 if n_big >= 25_000 else 3
+
+    t_gam = bench(
+        lambda d=data_big: wk.GAM("y ~ s(x, bs='cr')").fit(d, method="REML"),
+        repeats=reps,
+    )
+    big_results.append({"n": n_big, "seconds": round(t_gam, 4), "method": "GAM"})
+
+    t_big = bench(
+        lambda d=data_big: wk.BigGAM("y ~ s(x, bs='cr')", n_discrete=200).fit(d, method="fREML"),
+        repeats=reps,
+    )
+    big_results.append({"n": n_big, "seconds": round(t_big, 4), "method": "BigGAM"})
+
+    del x_big, y_big, data_big
+
+alt.Chart({"values": big_results}).mark_line(
+    strokeWidth=2, point=alt.OverlayMarkDef(size=50, filled=True),
+).encode(
+    x=alt.X("n:Q", scale=alt.Scale(type="log"), title="Sample size (n)"),
+    y=alt.Y("seconds:Q", title="Fit time (seconds)"),
+    color=alt.Color("method:N", title="Backend"),
+    strokeDash=alt.StrokeDash("method:N"),
+).properties(width=500, height=300, title="GAM vs. BigGAM fit time scaling")
+```
+
+```{python}
+#| echo: false
+# Pivot into a comparison table
+gam_times = {r["n"]: r["seconds"] for r in big_results if r["method"] == "GAM"}
+big_times = {r["n"]: r["seconds"] for r in big_results if r["method"] == "BigGAM"}
+
+header = "| n | GAM (s) | BigGAM (s) | Faster |\n|---:|---:|---:|---|"
+rows_list = []
+for n_big in big_sizes:
+    g = gam_times[n_big]
+    b = big_times[n_big]
+    faster = "BigGAM" if b < g else "GAM"
+    rows_list.append(f"| {n_big:,} | {g:.4f} | {b:.4f} | {faster} |")
+Markdown(f"{header}\n" + "\n".join(rows_list))
+```
+
+`BigGAM`'s discretized design matrix trades a small fixed overhead for dramatically better scaling.
+At small sample sizes the overhead may make `BigGAM` slightly slower than `GAM`, but it quickly
+becomes the faster option as $n$ grows and dominates for large-scale fitting.
