@@ -322,6 +322,16 @@ class TestVISummary:
 
         assert "GCV" not in str(s)
 
+    def test_summary_contains_fit_metrics(self, poisson_data):
+        model = GAM("y ~ s(x)", family=Poisson()).fit(poisson_data, method="VI")
+        s = str(model.summary())
+
+        assert "Deviance:" in s
+        assert "Null dev:" in s
+        assert "Dev. expl:" in s
+        assert "AIC:" in s
+        assert "BIC:" in s
+
 
 # ---------------------------------------------------------------------------
 # vi_result property

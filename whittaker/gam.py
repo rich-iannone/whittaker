@@ -1762,6 +1762,15 @@ class GAM:
             lines.append(f"ELBO:       {r.elbo:.4f}")
             lines.append(f"VI iters:   {r.n_iter}")
             lines.append(f"Converged:  {r.converged}")
+            lines.extend(
+                [
+                    f"Deviance:   {self.deviance:.4f}",
+                    f"Null dev:   {self.null_deviance:.4f}",
+                    f"Dev. expl:  {self.deviance_explained:.1%}",
+                    f"AIC:        {self.aic:.2f}",
+                    f"BIC:        {self.bic:.2f}",
+                ]
+            )
         elif isinstance(r, MCMCResult):
             n_total = r.n_chains * r.n_samples
             mcmc_lines = [
@@ -1781,6 +1790,15 @@ class GAM:
                     " — raise target_accept or reparameterize"
                 )
             lines.extend(mcmc_lines)
+            lines.extend(
+                [
+                    f"Deviance:   {self.deviance:.4f}",
+                    f"Null dev:   {self.null_deviance:.4f}",
+                    f"Dev. expl:  {self.deviance_explained:.1%}",
+                    f"AIC:        {self.aic:.2f}",
+                    f"BIC:        {self.bic:.2f}",
+                ]
+            )
         else:
             dev_expl = self.deviance_explained
             lines.extend(

@@ -389,6 +389,17 @@ class TestMCMCResultAPI:
         assert gam.deviance > 0
         assert np.isfinite(gam.deviance)
 
+    def test_summary_contains_fit_metrics(self, gam):
+        """summary() includes deviance, AIC, and BIC for MCMC fits."""
+        s = str(gam.summary())
+
+        assert "Deviance:" in s
+        assert "Null dev:" in s
+        assert "Dev. expl:" in s
+        assert "AIC:" in s
+        assert "BIC:" in s
+        assert "GCV" not in s
+
     def test_summary_includes_divergence_warning(self, gam):
         """summary() appends divergence line when n_divergent > 0."""
         mr = gam.mcmc_result
