@@ -55,6 +55,10 @@ docs: ## Build the documentation site
 docs-preview: ## Preview the documentation site locally
 	@JUPYTER_PATH="$(JUPYTER_PATH)" .venv/bin/great-docs preview
 
+.PHONY: bench
+bench: ## Run benchmarks locally and freeze the results
+	@JUPYTER_PATH="$(JUPYTER_PATH)" .venv/bin/great-docs build
+
 .PHONY: clean
 clean: clean-build clean-pyc clean-test ## Remove all build, test, coverage and Python artifacts
 
