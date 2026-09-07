@@ -368,23 +368,26 @@ class TestMCMCResultAPI:
     def test_n_divergent_accessible(self, gam):
         """n_divergent is present and non-negative on MCMCResult."""
         mr = gam.mcmc_result
+
         assert isinstance(mr.n_divergent, int)
         assert mr.n_divergent >= 0
 
     def test_ess_tail_shape_matches_ess(self, gam):
         """ess_tail has the same shape as ess."""
         mr = gam.mcmc_result
+
         assert mr.ess_tail.shape == mr.ess.shape
 
     def test_ess_tail_positive(self, gam):
         """ess_tail values are positive for a converged chain."""
         mr = gam.mcmc_result
+
         assert np.all(mr.ess_tail > 0)
 
-    def test_deviance_raises(self, gam):
-        """deviance property raises NotImplementedError for MCMC fits."""
-        with pytest.raises(NotImplementedError):
-            _ = gam.deviance
+    def test_deviance_positive(self, gam):
+        """deviance property returns a positive finite value for MCMC fits."""
+        assert gam.deviance > 0
+        assert np.isfinite(gam.deviance)
 
     def test_summary_includes_divergence_warning(self, gam):
         """summary() appends divergence line when n_divergent > 0."""
@@ -402,18 +405,21 @@ class TestMCMCResultAPI:
         """predict(se=True) runs without error after MCMC fit."""
         data = _gaussian_data(seed=4)
         result = gam.predict(data, se=True)
+
         assert result is not None
 
     def test_simulate_shape(self, gam):
         """simulate(n_sim=50) returns array of shape (n_obs, 50)."""
         data = _gaussian_data(seed=4)
         sim = gam.simulate(data, n_sim=50)
+
         assert sim.shape == (len(data["y"]), 50)
 
     def test_credible_interval_shape_and_bounds(self, gam):
         """predict(interval='credible') returns lower <= values <= upper."""
         data = _gaussian_data(seed=4)
         r = gam.predict(data, interval="credible", level=0.95, n_sim=200, seed=99)
+
         assert r.lower.shape == r.values.shape
         assert r.upper.shape == r.values.shape
         assert np.all(r.lower <= r.values)
