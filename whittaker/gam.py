@@ -1118,8 +1118,10 @@ class GAM:
         """Model deviance at convergence.
 
         Twice the difference between the saturated log-likelihood and the fitted model's
-        log-likelihood, evaluated at the final coefficients. Lower values indicate a better fit
-        to the training data; compare against `null_deviance` via `deviance_explained`.
+        log-likelihood, evaluated at the final coefficients. Lower values indicate a better fit to
+        the training data; compare against `null_deviance` via `deviance_explained`.
+
+        For Bayesian fits (VI, MCMC) the deviance is evaluated at the posterior mean.
 
         Returns
         -------
@@ -1128,7 +1130,10 @@ class GAM:
         """
         self._check_fitted()
         if isinstance(self._fit_result, (VIResult, MCMCResult)):
-            raise NotImplementedError("deviance is not computed for Bayesian fits.")
+            y = self._model_matrix.response
+            mu = self._fit_result.fitted_values
+            pw = self._fit_result.prior_weights
+            return float(self._family.deviance(y, mu, weights=pw))
         return self._fit_result.deviance
 
     @property
@@ -1165,7 +1170,7 @@ class GAM:
         """
         self._check_fitted()
         if isinstance(self._fit_result, (VIResult, MCMCResult)):
-            raise NotImplementedError("null_deviance is not computed for Bayesian fits.")
+            return self._compute_null_deviance()
         assert self._fit_result.null_deviance is not None
         return self._fit_result.null_deviance
 
@@ -1174,8 +1179,10 @@ class GAM:
         """Proportion of null deviance explained by the model (analogous to R²).
 
         Computed as `1 - deviance / null_deviance`. Ranges from `0` (no improvement over an
-        intercept-only model) up to `1` (a perfect fit), and provides a family-agnostic measure
-        of goodness of fit that generalizes R² beyond the Gaussian case.
+        intercept-only model) up to `1` (a perfect fit), and provides a family-agnostic measure of
+        goodness of fit that generalizes R² beyond the Gaussian case.
+
+        For Bayesian fits the deviance is evaluated at the posterior mean.
 
         Returns
         -------
@@ -1184,20 +1191,20 @@ class GAM:
             the null deviance is non-positive.
         """
         self._check_fitted()
-        if isinstance(self._fit_result, (VIResult, MCMCResult)):
-            raise NotImplementedError("deviance_explained is not computed for Bayesian fits.")
-        null_dev = self._fit_result.null_deviance
-        if null_dev is None or null_dev <= 0:
+        null_dev = self.null_deviance
+        if null_dev <= 0:
             return 0.0
-        return 1.0 - self._fit_result.deviance / null_dev
+        return 1.0 - self.deviance / null_dev
 
     @property
     def aic(self) -> float:
         """Akaike Information Criterion of the fitted model.
 
         Balances goodness of fit against model complexity (using the total effective degrees of
-        freedom in place of the raw parameter count). Lower values indicate a preferable
-        trade-off; use it to compare non-nested models fitted to the same data and family.
+        freedom in place of the raw parameter count). Lower values indicate a preferable trade-off.
+        Use it to compare non-nested models fitted to the same data and family.
+
+        For Bayesian fits the log-likelihood is evaluated at the posterior mean.
 
         Returns
         -------
@@ -1206,7 +1213,8 @@ class GAM:
         """
         self._check_fitted()
         if isinstance(self._fit_result, (VIResult, MCMCResult)):
-            raise NotImplementedError("AIC is not computed for Bayesian fits.")
+            ll = self._posterior_mean_log_likelihood()
+            return -2.0 * ll + 2.0 * self._fit_result.edf_total
         assert self._fit_result.aic is not None
         return self._fit_result.aic
 
@@ -1214,9 +1222,11 @@ class GAM:
     def bic(self) -> float:
         """Bayesian Information Criterion of the fitted model.
 
-        Like `aic`, but penalizes model complexity more heavily as sample size grows (using
-        `log(n)` in place of `2` as the per-degree-of-freedom penalty), which tends to favor
-        simpler models than AIC for larger datasets.
+        Like `aic`, but penalizes model complexity more heavily as sample size grows (using `log(n)`
+        in place of `2` as the per-degree-of-freedom penalty), which tends to favor simpler models
+        than AIC for larger datasets.
+
+        For Bayesian fits the log-likelihood is evaluated at the posterior mean.
 
         Returns
         -------
@@ -1225,9 +1235,27 @@ class GAM:
         """
         self._check_fitted()
         if isinstance(self._fit_result, (VIResult, MCMCResult)):
-            raise NotImplementedError("BIC is not computed for Bayesian fits.")
+            ll = self._posterior_mean_log_likelihood()
+            n = self._model_matrix.X.shape[0]
+            return -2.0 * ll + np.log(n) * self._fit_result.edf_total
         assert self._fit_result.bic is not None
         return self._fit_result.bic
+
+    def _posterior_mean_log_likelihood(self) -> float:
+        y = self._model_matrix.response
+        mu = self._fit_result.fitted_values
+        scale = self._fit_result.scale
+        pw = self._fit_result.prior_weights
+        return float(self._family.log_likelihood(y, mu, scale, weights=pw))
+
+    def _compute_null_deviance(self) -> float:
+        y = self._model_matrix.response
+        pw = self._fit_result.prior_weights
+        y_mean = float(np.average(y, weights=pw)) if pw is not None else float(np.mean(y))
+        mu_null = self._family.link_inverse(
+            np.full_like(y, self._family.link(np.atleast_1d(y_mean))[0])
+        )
+        return float(self._family.deviance(y, mu_null, weights=pw))
 
     @property
     def vi_result(self) -> VIResult | None:
@@ -1244,8 +1272,8 @@ class GAM:
     def posterior_samples(self, n: int = 1000, *, seed: int | None = None) -> NDArray:
         """Draw coefficient vectors from the posterior.
 
-        For VI fits, samples from the variational posterior `N(m, C)`.
-        For Laplace fits (REML/GCV/ML), samples from `N(β̂, V_β)`.
+        For VI fits, samples from the variational posterior `N(m, C)`. For Laplace fits
+        (REML/GCV/ML), samples from `N(β̂, V_β)`.
 
         Parameters
         ----------
