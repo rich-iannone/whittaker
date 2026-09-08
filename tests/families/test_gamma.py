@@ -69,3 +69,33 @@ class TestGammaFamily:
 
     def test_repr(self) -> None:
         assert repr(self.fam) == "Gamma(link='log')"
+
+
+class TestLogLikPointwise:
+    def test_shape(self) -> None:
+        fam = Gamma()
+        y = np.array([1.0, 2.0, 3.0, 4.0])
+        mu = np.array([1.5, 2.5, 2.8, 3.5])
+        result = fam.log_lik_pointwise(y, mu, scale=0.5)
+        assert result.shape == (4,)
+
+    def test_sum_matches_log_likelihood(self) -> None:
+        fam = Gamma()
+        rng = np.random.default_rng(23)
+        mu = rng.uniform(1, 10, 50)
+        y = rng.gamma(shape=5.0, scale=mu / 5.0)
+        scale = 0.2
+        pw = fam.log_lik_pointwise(y, mu, scale)
+        ll = fam.log_likelihood(y, mu, scale)
+        assert_allclose(np.sum(pw), ll, rtol=1e-10)
+
+    def test_weighted_sum_matches_log_likelihood(self) -> None:
+        fam = Gamma()
+        rng = np.random.default_rng(23)
+        mu = rng.uniform(1, 10, 50)
+        y = rng.gamma(shape=5.0, scale=mu / 5.0)
+        w = rng.uniform(0.5, 2.0, 50)
+        scale = 0.2
+        pw = fam.log_lik_pointwise(y, mu, scale, weights=w)
+        ll = fam.log_likelihood(y, mu, scale, weights=w)
+        assert_allclose(np.sum(pw), ll, rtol=1e-10)

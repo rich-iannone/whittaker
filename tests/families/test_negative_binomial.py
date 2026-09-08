@@ -117,3 +117,31 @@ class TestNegativeBinomialFamily:
         assert "NegativeBinomial" in r
         assert "3.5" in r
         assert "log" in r
+
+
+class TestLogLikPointwise:
+    def test_shape(self) -> None:
+        fam = NegativeBinomial(theta=2.0)
+        y = np.array([0.0, 1.0, 3.0, 5.0])
+        mu = np.array([1.0, 1.5, 2.5, 4.0])
+        result = fam.log_lik_pointwise(y, mu, scale=1.0)
+        assert result.shape == (4,)
+
+    def test_sum_matches_log_likelihood(self) -> None:
+        fam = NegativeBinomial(theta=2.0)
+        rng = np.random.default_rng(23)
+        mu = rng.uniform(1, 10, 50)
+        y = rng.negative_binomial(n=2, p=2.0 / (mu + 2.0)).astype(float)
+        pw = fam.log_lik_pointwise(y, mu, scale=1.0)
+        ll = fam.log_likelihood(y, mu, scale=1.0)
+        assert_allclose(np.sum(pw), ll, rtol=1e-10)
+
+    def test_weighted_sum_matches_log_likelihood(self) -> None:
+        fam = NegativeBinomial(theta=2.0)
+        rng = np.random.default_rng(23)
+        mu = rng.uniform(1, 10, 50)
+        y = rng.negative_binomial(n=2, p=2.0 / (mu + 2.0)).astype(float)
+        w = rng.uniform(0.5, 2.0, 50)
+        pw = fam.log_lik_pointwise(y, mu, scale=1.0, weights=w)
+        ll = fam.log_likelihood(y, mu, scale=1.0, weights=w)
+        assert_allclose(np.sum(pw), ll, rtol=1e-10)

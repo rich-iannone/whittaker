@@ -71,6 +71,34 @@ class TestLogLikelihood:
         assert ll_good > ll_bad
 
 
+class TestLogLikPointwise:
+    def test_shape(self) -> None:
+        g = Gaussian()
+        y = np.array([1.0, 2.0, 3.0])
+        mu = np.array([1.1, 1.9, 3.2])
+        result = g.log_lik_pointwise(y, mu, scale=1.0)
+        assert result.shape == (3,)
+
+    def test_sum_matches_log_likelihood(self) -> None:
+        g = Gaussian()
+        y = RNG.standard_normal(50)
+        mu = y + RNG.normal(0, 0.1, 50)
+        scale = 0.5
+        pw = g.log_lik_pointwise(y, mu, scale)
+        ll = g.log_likelihood(y, mu, scale)
+        assert_allclose(np.sum(pw), ll, rtol=1e-10)
+
+    def test_weighted_sum_matches_log_likelihood(self) -> None:
+        g = Gaussian()
+        y = RNG.standard_normal(50)
+        mu = y + RNG.normal(0, 0.1, 50)
+        w = RNG.uniform(0.5, 2.0, 50)
+        scale = 0.5
+        pw = g.log_lik_pointwise(y, mu, scale, weights=w)
+        ll = g.log_likelihood(y, mu, scale, weights=w)
+        assert_allclose(np.sum(pw), ll, rtol=1e-10)
+
+
 class TestInitialize:
     def test_initialize_returns_copy_of_y(self) -> None:
         g = Gaussian()

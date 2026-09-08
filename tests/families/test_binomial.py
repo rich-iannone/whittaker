@@ -117,6 +117,34 @@ class TestLogLikelihood:
         assert weighted_ll != unweighted_ll
 
 
+class TestLogLikPointwise:
+    def test_shape(self) -> None:
+        g = Binomial()
+        y = np.array([1.0, 0.0, 1.0, 0.0])
+        mu = np.array([0.8, 0.3, 0.6, 0.2])
+        result = g.log_lik_pointwise(y, mu, scale=1.0)
+        assert result.shape == (4,)
+
+    def test_sum_matches_log_likelihood(self) -> None:
+        g = Binomial()
+        rng = np.random.default_rng(23)
+        mu = rng.uniform(0.1, 0.9, 50)
+        y = rng.binomial(1, mu).astype(float)
+        pw = g.log_lik_pointwise(y, mu, scale=1.0)
+        ll = g.log_likelihood(y, mu, scale=1.0)
+        assert_allclose(np.sum(pw), ll, rtol=1e-10)
+
+    def test_weighted_sum_matches_log_likelihood(self) -> None:
+        g = Binomial()
+        rng = np.random.default_rng(23)
+        mu = rng.uniform(0.1, 0.9, 50)
+        y = rng.binomial(1, mu).astype(float)
+        w = rng.uniform(0.5, 2.0, 50)
+        pw = g.log_lik_pointwise(y, mu, scale=1.0, weights=w)
+        ll = g.log_likelihood(y, mu, scale=1.0, weights=w)
+        assert_allclose(np.sum(pw), ll, rtol=1e-10)
+
+
 class TestInitialize:
     def test_initialize_between_zero_and_one(self) -> None:
         g = Binomial()

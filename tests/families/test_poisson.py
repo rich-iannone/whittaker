@@ -95,6 +95,34 @@ class TestLogLikelihood:
         assert ll_good > ll_bad
 
 
+class TestLogLikPointwise:
+    def test_shape(self) -> None:
+        g = Poisson()
+        y = np.array([0.0, 1.0, 3.0, 5.0])
+        mu = np.array([1.0, 2.0, 3.0, 4.0])
+        result = g.log_lik_pointwise(y, mu, scale=1.0)
+        assert result.shape == (4,)
+
+    def test_sum_matches_log_likelihood(self) -> None:
+        g = Poisson()
+        rng = np.random.default_rng(23)
+        mu = rng.uniform(1, 10, 50)
+        y = rng.poisson(mu).astype(float)
+        pw = g.log_lik_pointwise(y, mu, scale=1.0)
+        ll = g.log_likelihood(y, mu, scale=1.0)
+        assert_allclose(np.sum(pw), ll, rtol=1e-10)
+
+    def test_weighted_sum_matches_log_likelihood(self) -> None:
+        g = Poisson()
+        rng = np.random.default_rng(23)
+        mu = rng.uniform(1, 10, 50)
+        y = rng.poisson(mu).astype(float)
+        w = rng.uniform(0.5, 2.0, 50)
+        pw = g.log_lik_pointwise(y, mu, scale=1.0, weights=w)
+        ll = g.log_likelihood(y, mu, scale=1.0, weights=w)
+        assert_allclose(np.sum(pw), ll, rtol=1e-10)
+
+
 class TestInitialize:
     def test_initialize_positive(self) -> None:
         g = Poisson()
