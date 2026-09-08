@@ -6,6 +6,8 @@ import numpy as np
 import pytest
 from numpy.testing import assert_allclose
 
+from whittaker.families.binomial import Binomial
+from whittaker.families.gamma import Gamma
 from whittaker.families.gaussian import Gaussian
 from whittaker.families.poisson import Poisson
 from whittaker.fitting.mcmc import (
@@ -41,6 +43,20 @@ def _poisson_data(n: int = 200, seed: int = 2) -> dict[str, np.ndarray]:
     x = np.linspace(0, 1, n)
     lam = np.exp(np.sin(2 * np.pi * x) + 1.5)
     return {"y": rng.poisson(lam).astype(float), "x": x}
+
+
+def _binomial_data(n: int = 200, seed: int = 3) -> dict[str, np.ndarray]:
+    rng = np.random.default_rng(seed)
+    x = np.linspace(-2, 2, n)
+    p = 1.0 / (1.0 + np.exp(-x))
+    return {"y": rng.binomial(1, p, n).astype(float), "x": x}
+
+
+def _gamma_data(n: int = 300, seed: int = 4) -> dict[str, np.ndarray]:
+    rng = np.random.default_rng(seed)
+    x = np.linspace(0.1, 2, n)
+    mu_true = np.exp(0.5 * x)
+    return {"y": rng.gamma(shape=5.0, scale=mu_true / 5.0, size=n), "x": x}
 
 
 def _build_components(data: dict, formula: str = "y ~ s(x)", family=None):
@@ -435,6 +451,126 @@ class TestMCMCResultAPI:
         assert r.upper.shape == r.values.shape
         assert np.all(r.lower <= r.values)
         assert np.all(r.values <= r.upper)
+
+
+# ---------------------------------------------------------------------------
+# MCMC fit metrics (AIC, BIC, deviance) across families
+# ---------------------------------------------------------------------------
+
+_MCMC_OPTS_FAST = {
+    "n_chains": 2,
+    "n_samples": 200,
+    "n_warmup": 100,
+    "seed": 42,
+}
+
+
+class TestMCMCFitMetrics:
+    """AIC/BIC formula verification and cross-family fit metric coverage for MCMC."""
+
+    @pytest.fixture(scope="class")
+    def gaussian_mcmc(self):
+        data = _gaussian_data(seed=10)
+        return GAM("y ~ s(x)").fit(data, method="MCMC", mcmc_options=_MCMC_OPTS_FAST)
+
+    @pytest.fixture(scope="class")
+    def poisson_mcmc(self):
+        data = _poisson_data(seed=10)
+        return GAM("y ~ s(x, k=6)", family=Poisson()).fit(
+            data, method="MCMC", mcmc_options=_MCMC_OPTS_FAST
+        )
+
+    @pytest.fixture(scope="class")
+    def binomial_mcmc(self):
+        data = _binomial_data(seed=10)
+        return GAM("y ~ s(x, k=6)", family=Binomial()).fit(
+            data, method="MCMC", mcmc_options=_MCMC_OPTS_FAST
+        )
+
+    @pytest.fixture(scope="class")
+    def gamma_mcmc(self):
+        data = _gamma_data(seed=10)
+        return GAM("y ~ s(x, k=8)", family=Gamma()).fit(
+            data, method="MCMC", mcmc_options=_MCMC_OPTS_FAST
+        )
+
+    # -- AIC / BIC formula --
+
+    def test_aic_formula(self, gaussian_mcmc) -> None:
+        m = gaussian_mcmc
+        ll = m._posterior_mean_log_likelihood()
+        expected = -2.0 * ll + 2.0 * m.edf_total
+        assert_allclose(m.aic, expected, rtol=1e-10)
+
+    def test_bic_formula(self, gaussian_mcmc) -> None:
+        m = gaussian_mcmc
+        ll = m._posterior_mean_log_likelihood()
+        n = 200
+        expected = -2.0 * ll + np.log(n) * m.edf_total
+        assert_allclose(m.bic, expected, rtol=1e-10)
+
+    def test_aic_less_than_bic_large_n(self, gaussian_mcmc) -> None:
+        assert gaussian_mcmc.aic < gaussian_mcmc.bic
+
+    # -- Gaussian --
+
+    def test_gaussian_ll_finite_negative(self, gaussian_mcmc) -> None:
+        ll = gaussian_mcmc._posterior_mean_log_likelihood()
+        assert np.isfinite(ll)
+        assert ll < 0
+
+    def test_gaussian_deviance_explained_in_unit_interval(self, gaussian_mcmc) -> None:
+        de = gaussian_mcmc.deviance_explained
+        assert 0.0 < de <= 1.0
+
+    def test_gaussian_mcmc_aic_close_to_frequentist(self) -> None:
+        data = _gaussian_data(seed=10)
+        freq = GAM("y ~ s(x)").fit(data)
+        mcmc = GAM("y ~ s(x)").fit(data, method="MCMC", mcmc_options=_MCMC_OPTS_FAST)
+        assert abs(mcmc.aic - freq.aic) / abs(freq.aic) < 0.15
+
+    # -- Poisson --
+
+    def test_poisson_aic_bic_finite(self, poisson_mcmc) -> None:
+        assert np.isfinite(poisson_mcmc.aic)
+        assert np.isfinite(poisson_mcmc.bic)
+
+    def test_poisson_deviance_positive(self, poisson_mcmc) -> None:
+        assert poisson_mcmc.deviance > 0
+        assert np.isfinite(poisson_mcmc.deviance)
+
+    def test_poisson_null_deviance_exceeds_deviance(self, poisson_mcmc) -> None:
+        assert poisson_mcmc.null_deviance > poisson_mcmc.deviance
+
+    # -- Binomial --
+
+    def test_binomial_aic_bic_finite(self, binomial_mcmc) -> None:
+        assert np.isfinite(binomial_mcmc.aic)
+        assert np.isfinite(binomial_mcmc.bic)
+
+    def test_binomial_deviance_positive(self, binomial_mcmc) -> None:
+        assert binomial_mcmc.deviance > 0
+        assert np.isfinite(binomial_mcmc.deviance)
+
+    # -- Gamma --
+
+    def test_gamma_aic_bic_finite(self, gamma_mcmc) -> None:
+        assert np.isfinite(gamma_mcmc.aic)
+        assert np.isfinite(gamma_mcmc.bic)
+
+    def test_gamma_deviance_positive(self, gamma_mcmc) -> None:
+        assert gamma_mcmc.deviance > 0
+        assert np.isfinite(gamma_mcmc.deviance)
+
+    def test_gamma_ll_finite(self, gamma_mcmc) -> None:
+        ll = gamma_mcmc._posterior_mean_log_likelihood()
+        assert np.isfinite(ll)
+
+    # -- GCV correctly excluded --
+
+    def test_gcv_raises_for_mcmc(self, gaussian_mcmc) -> None:
+        with pytest.raises(NotImplementedError):
+            _ = gaussian_mcmc.gcv_score
 
 
 # ---------------------------------------------------------------------------
