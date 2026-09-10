@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import warnings
+from unittest.mock import patch
 
 import numpy as np
 import pytest
 
 from whittaker import GAM, LOOComparison, LOOResult, loo_compare
-from whittaker.fitting.loo import _psis_smooth_one, compute_loo
+from whittaker.fitting.loo import _fit_gpd_tail, _psis_smooth_one, compute_loo
 
 # ---------------------------------------------------------------------------
 # Shared fixtures
@@ -246,3 +247,52 @@ class TestComputeLOO:
         result = compute_loo(log_lik, lpd_full)
         assert np.allclose(result.pointwise, ll, atol=1e-6)
         assert abs(result.p_loo) < 1e-5
+
+    def test_bad_k_warning_emitted(self):
+        # Craft log-likelihoods with extreme variation so that at least one
+        # observation gets Pareto k > 0.7 and triggers the warning.
+        rng = np.random.default_rng(42)
+        n, S = 30, 200
+        log_lik = rng.standard_normal((n, S))
+        # Make one observation have a single dominant draw (heavy tail).
+        log_lik[0, :] = -100.0
+        log_lik[0, 0] = 100.0
+        lpd_full = rng.standard_normal(n)
+        with pytest.warns(UserWarning, match="Pareto k > 0.7"):
+            result = compute_loo(log_lik, lpd_full)
+        assert result.n_bad_k > 0
+
+
+# ---------------------------------------------------------------------------
+# _fit_gpd_tail edge cases
+# ---------------------------------------------------------------------------
+
+
+class TestFitGPDTail:
+    def test_normal_input(self):
+        rng = np.random.default_rng(0)
+        z = np.sort(np.abs(rng.standard_normal(100)))
+        k, sigma = _fit_gpd_tail(z)
+        assert np.isfinite(k)
+        assert sigma > 0
+
+    def test_degenerate_constant_input(self):
+        # All exceedances identical — genpareto.fit may fail; fallback should fire.
+        z = np.ones(50)
+        k, sigma = _fit_gpd_tail(z)
+        assert np.isfinite(k)
+        assert sigma > 0
+
+    def test_single_element(self):
+        z = np.array([1.5])
+        k, sigma = _fit_gpd_tail(z)
+        assert np.isfinite(k)
+        assert sigma > 0
+
+    def test_fallback_on_fit_failure(self):
+        z = np.array([1.0, 2.0, 3.0])
+        with patch("whittaker.fitting.loo.genpareto") as mock_gp:
+            mock_gp.fit.side_effect = RuntimeError("fit failed")
+            k, sigma = _fit_gpd_tail(z)
+        assert k == 0.0
+        assert sigma == float(np.mean(z))
