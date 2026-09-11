@@ -617,6 +617,171 @@ class TestSaveLoadGAM:
         assert isinstance(loaded.family, CoxPH)
         assert loaded.family.ties == "breslow"
 
+    def test_vi_roundtrip(self, sin_data, tmp_path):
+        model = GAM("y ~ s(x)").fit(sin_data, method="VI")
+
+        path = tmp_path / "vi.npz"
+        save_gam(model, path)
+        loaded = load_gam(path)
+
+        assert loaded.is_fitted
+        assert loaded.vi_result is not None
+        np.testing.assert_allclose(loaded.coefficients, model.coefficients)
+
+    def test_vi_predictions_match(self, sin_data, tmp_path):
+        model = GAM("y ~ s(x)").fit(sin_data, method="VI")
+
+        path = tmp_path / "vi.npz"
+        save_gam(model, path)
+        loaded = load_gam(path)
+
+        pred_orig = model.predict(sin_data).values
+        pred_loaded = loaded.predict(sin_data).values
+        np.testing.assert_allclose(pred_loaded, pred_orig, atol=1e-10)
+
+    def test_vi_predictions_with_se(self, sin_data, tmp_path):
+        model = GAM("y ~ s(x)").fit(sin_data, method="VI")
+
+        path = tmp_path / "vi.npz"
+        save_gam(model, path)
+        loaded = load_gam(path)
+
+        pred_orig = model.predict(sin_data, se=True)
+        pred_loaded = loaded.predict(sin_data, se=True)
+        np.testing.assert_allclose(pred_loaded.se, pred_orig.se, atol=1e-10)
+
+    def test_vi_summary_works(self, sin_data, tmp_path):
+        model = GAM("y ~ s(x)").fit(sin_data, method="VI")
+
+        path = tmp_path / "vi.npz"
+        save_gam(model, path)
+        loaded = load_gam(path)
+
+        s = str(loaded.summary())
+        assert "Variational" in s
+        assert "ELBO" in s
+        assert "AIC:" in s
+
+    def test_vi_fit_metrics_match(self, sin_data, tmp_path):
+        model = GAM("y ~ s(x)").fit(sin_data, method="VI")
+
+        path = tmp_path / "vi.npz"
+        save_gam(model, path)
+        loaded = load_gam(path)
+
+        np.testing.assert_allclose(loaded.aic, model.aic, rtol=1e-10)
+        np.testing.assert_allclose(loaded.bic, model.bic, rtol=1e-10)
+        np.testing.assert_allclose(loaded.deviance, model.deviance, rtol=1e-10)
+
+    def test_vi_posterior_draws(self, sin_data, tmp_path):
+        model = GAM("y ~ s(x)").fit(sin_data, method="VI")
+
+        path = tmp_path / "vi.npz"
+        save_gam(model, path)
+        loaded = load_gam(path)
+
+        draws_orig = model.vi_result.draw(100, seed=0)
+        draws_loaded = loaded.vi_result.draw(100, seed=0)
+        np.testing.assert_allclose(draws_loaded, draws_orig, atol=1e-10)
+
+    def test_vi_poisson_roundtrip(self, tmp_path):
+        rng = np.random.default_rng(23)
+        x = np.linspace(0, 3, 200)
+        y = rng.poisson(np.exp(0.5 * x)).astype(float)
+        data = {"x": x, "y": y}
+
+        model = GAM("y ~ s(x)", family=Poisson()).fit(data, method="VI")
+
+        path = tmp_path / "vi_poisson.npz"
+        save_gam(model, path)
+        loaded = load_gam(path)
+
+        assert isinstance(loaded.family, Poisson)
+        pred = loaded.predict(data)
+        np.testing.assert_allclose(pred.values, model.predict(data).values, atol=1e-10)
+
+    def test_mcmc_roundtrip(self, sin_data, tmp_path):
+        model = GAM("y ~ s(x)").fit(
+            sin_data,
+            method="MCMC",
+            mcmc_options={"n_chains": 2, "n_samples": 100, "n_warmup": 50, "seed": 0},
+        )
+
+        path = tmp_path / "mcmc.npz"
+        save_gam(model, path)
+        loaded = load_gam(path)
+
+        assert loaded.is_fitted
+        assert loaded.mcmc_result is not None
+        np.testing.assert_allclose(loaded.coefficients, model.coefficients)
+
+    def test_mcmc_predictions_match(self, sin_data, tmp_path):
+        model = GAM("y ~ s(x)").fit(
+            sin_data,
+            method="MCMC",
+            mcmc_options={"n_chains": 2, "n_samples": 100, "n_warmup": 50, "seed": 0},
+        )
+
+        path = tmp_path / "mcmc.npz"
+        save_gam(model, path)
+        loaded = load_gam(path)
+
+        pred_orig = model.predict(sin_data).values
+        pred_loaded = loaded.predict(sin_data).values
+        np.testing.assert_allclose(pred_loaded, pred_orig, atol=1e-10)
+
+    def test_mcmc_diagnostics_preserved(self, sin_data, tmp_path):
+        model = GAM("y ~ s(x)").fit(
+            sin_data,
+            method="MCMC",
+            mcmc_options={"n_chains": 2, "n_samples": 100, "n_warmup": 50, "seed": 0},
+        )
+
+        path = tmp_path / "mcmc.npz"
+        save_gam(model, path)
+        loaded = load_gam(path)
+
+        mr_orig = model.mcmc_result
+        mr_loaded = loaded.mcmc_result
+        assert mr_loaded.n_chains == mr_orig.n_chains
+        assert mr_loaded.n_samples == mr_orig.n_samples
+        assert mr_loaded.n_warmup == mr_orig.n_warmup
+        np.testing.assert_allclose(mr_loaded.r_hat, mr_orig.r_hat)
+        np.testing.assert_allclose(mr_loaded.ess, mr_orig.ess)
+        np.testing.assert_allclose(mr_loaded.ess_tail, mr_orig.ess_tail)
+        np.testing.assert_allclose(mr_loaded.acceptance_rate, mr_orig.acceptance_rate)
+
+    def test_mcmc_summary_works(self, sin_data, tmp_path):
+        model = GAM("y ~ s(x)").fit(
+            sin_data,
+            method="MCMC",
+            mcmc_options={"n_chains": 2, "n_samples": 100, "n_warmup": 50, "seed": 0},
+        )
+
+        path = tmp_path / "mcmc.npz"
+        save_gam(model, path)
+        loaded = load_gam(path)
+
+        s = str(loaded.summary())
+        assert "MCMC" in s
+        assert "R-hat" in s
+        assert "AIC:" in s
+
+    def test_mcmc_samples_preserved(self, sin_data, tmp_path):
+        model = GAM("y ~ s(x)").fit(
+            sin_data,
+            method="MCMC",
+            mcmc_options={"n_chains": 2, "n_samples": 100, "n_warmup": 50, "seed": 0},
+        )
+
+        path = tmp_path / "mcmc.npz"
+        save_gam(model, path)
+        loaded = load_gam(path)
+
+        np.testing.assert_allclose(
+            loaded.mcmc_result.samples, model.mcmc_result.samples
+        )
+
 
 class TestMgcvExport:
     def test_export_structure(self, fitted_gam):
