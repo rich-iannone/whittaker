@@ -15,9 +15,9 @@ Once a GAM is fitted, you often want to save it: for deployment, for sharing wit
 for reproducing results later without re-fitting. Whittaker provides two serialization pathways:
 
 - **Native format** (`save_gam` / `load_gam`): round-trips a fitted GAM to a compact `.npz` archive.
-  Fast, lossless, Python-only.
+  Fast, lossless, Python-only. Supports frequentist, VI, and MCMC fits.
 - **`mgcv` interchange** (`to_mgcv_dict` / `from_mgcv_dict`): converts between Whittaker GAMs and
-  R's `mgcv` `gam` object structure. Useful for cross-language workflows.
+  R's `mgcv` `gam` object structure. Useful for cross-language workflows (frequentist fits only).
 
 ## Saving and loading a fitted GAM
 
@@ -111,7 +111,7 @@ print(f"Mean SE: {pred_se.se.mean():.4f}")
 
 ## Saving models with different families
 
-`save_gam` and `load_gam` handle all response families:
+The `save_gam()` and `load_gam()` functions handle all response families:
 
 ```{python}
 # Poisson model
@@ -133,6 +133,108 @@ print(f"Predictions match: {np.allclose(
     loaded_pois.predict({'x': x_test}).values
 )}")
 ```
+
+## Saving and loading Bayesian fits
+
+Models fitted with `method="VI"` or `method="MCMC"` can be saved and loaded with the same
+`save_gam()` / `load_gam()` functions. The archive stores the full posterior: the posterior mean,
+the posterior covariance (or Cholesky factor for VI), and the MCMC samples and diagnostics for MCMC
+fits.
+
+### Variational inference
+
+```{python}
+tmpdir_bayes = pathlib.Path(tempfile.mkdtemp())
+
+model_vi = wk.GAM("y ~ s(x)")
+model_vi.fit({"x": x, "y": y}, method="VI")
+
+vi_path = tmpdir_bayes / "vi_model.npz"
+wk.save_gam(model_vi, vi_path)
+
+loaded_vi = wk.load_gam(vi_path)
+print(f"VI result preserved: {loaded_vi.vi_result is not None}")
+print(f"ELBO: {loaded_vi.vi_result.elbo:.2f}")
+print(f"Predictions match: {np.allclose(
+    model_vi.predict({'x': x_test}).values,
+    loaded_vi.predict({'x': x_test}).values
+)}")
+```
+
+The loaded VI model retains the full variational posterior, so you can draw posterior samples and
+compute predictions with standard errors exactly as with the original:
+
+```{python}
+# Draw from the posterior
+draws = loaded_vi.vi_result.draw(500, seed=0)
+print(f"Posterior draws shape: {draws.shape}")
+
+# Standard errors
+pred_vi = loaded_vi.predict({"x": x_test}, se=True)
+print(f"Mean SE: {pred_vi.se.mean():.4f}")
+```
+
+Fit metrics such as AIC, BIC, and deviance are computed on the fly from the stored posterior mean
+and are available immediately after loading:
+
+```{python}
+print(f"AIC: {loaded_vi.aic:.2f}")
+print(f"BIC: {loaded_vi.bic:.2f}")
+print(f"Deviance: {loaded_vi.deviance:.2f}")
+```
+
+### MCMC
+
+```{python}
+model_mcmc = wk.GAM("y ~ s(x)")
+model_mcmc.fit(
+    {"x": x, "y": y},
+    method="MCMC",
+    mcmc_options={"n_chains": 2, "n_samples": 500, "n_warmup": 250, "seed": 42},
+)
+
+mcmc_path = tmpdir_bayes / "mcmc_model.npz"
+wk.save_gam(model_mcmc, mcmc_path)
+
+loaded_mcmc = wk.load_gam(mcmc_path)
+print(f"MCMC result preserved: {loaded_mcmc.mcmc_result is not None}")
+print(f"Chains: {loaded_mcmc.mcmc_result.n_chains}")
+print(f"Samples per chain: {loaded_mcmc.mcmc_result.n_samples}")
+```
+
+MCMC diagnostics (R-hat, ESS, acceptance rate) are preserved in the archive:
+
+```{python}
+mr = loaded_mcmc.mcmc_result
+print(f"Max R-hat: {mr.r_hat.max():.4f}")
+print(f"Min bulk ESS: {mr.ess.min():.0f}")
+print(f"Min tail ESS: {mr.ess_tail.min():.0f}")
+print(f"Acceptance rate: {mr.acceptance_rate:.3f}")
+```
+
+The full sample array is stored, so posterior predictive checks and LOO-CV work on the loaded model:
+
+```{python}
+print(f"Samples shape: {loaded_mcmc.mcmc_result.samples.shape}")
+print(f"Predictions match: {np.allclose(
+    model_mcmc.predict({'x': x_test}).values,
+    loaded_mcmc.predict({'x': x_test}).values
+)}")
+```
+
+```{python}
+# Clean up Bayesian temp files
+import shutil
+shutil.rmtree(tmpdir_bayes)
+```
+
+::: {.callout-note}
+## mgcv interchange and Bayesian fits
+
+The `to_mgcv_dict()` export is only available for frequentist fits. R's `mgcv` does not have a
+Bayesian fitting mode that corresponds to Whittaker's VI or MCMC, so there is no meaningful mgcv
+representation for these models.
+:::
 
 ## mgcv interchange
 
@@ -191,7 +293,7 @@ gam_data <- fromJSON("model.json")
 
 ### Importing from mgcv
 
-The `data` parameter provides the original training data, which is needed to rebuild the design
+The `data=` parameter provides the original training data, which is needed to rebuild the design
 matrix for prediction:
 
 ```{python}
@@ -209,7 +311,7 @@ print(f"SE available: {pred_se_reimp.se is not None}")
 
 ## Validation
 
-`save_gam` requires a fitted model:
+`save_gam()` requires a fitted model:
 
 ```{python}
 # Trying to save an unfitted model raises an error
@@ -232,15 +334,15 @@ except TypeError as e:
 
 The `.npz` format is a standard NumPy compressed archive. It is:
 
-- **Compact**: typically 10-100 KB for a standard GAM
-- **Fast**: loading is nearly instantaneous
-- **Portable**: works across Python versions and platforms (any system with NumPy)
-- **Not human-readable**: use `to_mgcv_dict()` + JSON if you need a human-readable format
+- compact: typically 10-100 KB for a standard GAM
+- fast: loading is nearly instantaneous
+- portable: works across Python versions and platforms (any system with NumPy)
+- not human-readable: use `to_mgcv_dict()` + JSON if you need a human-readable format
 
 ::: {.callout-warning}
 ## Security note
 
-`load_gam` uses `np.load` with `allow_pickle=False` by default. The `.npz` files contain only
+`load_gam()` uses `np.load()` with `allow_pickle=False` by default. The `.npz` files contain only
 arrays and metadata, not pickled Python objects. This means loaded models are safe from arbitrary
 code execution, unlike pickle-based serialization.
 :::
@@ -249,12 +351,12 @@ code execution, unlike pickle-based serialization.
 
 A typical workflow for deploying a GAM as a prediction service:
 
-1. **Train**: fit the model on your training data
-2. **Validate**: check diagnostics, cross-validate
-3. **Save**: `wk.save_gam(model, "model_v1.npz")`
-4. **Deploy**: ship the `.npz` file with your application
-5. **Load**: `model = wk.load_gam("model_v1.npz")`
-6. **Predict**: `model.predict(new_data)`
+1. train: fit the model on your training data
+2. validate: check diagnostics, cross-validate
+3. save: `wk.save_gam(model, "model_v1.npz")`
+4. deploy: ship the `.npz` file with your application
+5. load: `model = wk.load_gam("model_v1.npz")`
+6. predict: `model.predict(new_data)`
 
 ```{python}
 # Clean up
@@ -262,7 +364,8 @@ import shutil
 shutil.rmtree(tmpdir)
 ```
 
-You can now save and load fitted GAMs in the native `.npz` format, export to `mgcv`-compatible
+You can now save and load fitted GAMs in the native `.npz` format (including Bayesian fits with
+their full posterior, MCMC samples, and diagnostics) export frequentist models to `mgcv`-compatible
 dictionaries for cross-language workflows, and deploy models with full prediction and standard
 error support.
 
@@ -273,3 +376,7 @@ error support.
 - **[Model diagnostics](07-diagnostics.qmd)**: verify that a loaded model passes diagnostic checks.
 - **[Large datasets](18-large-datasets.qmd)**: scalable fitting backends whose results can be
   serialized with the same tools.
+- **[Variational inference](20-variational-inference.qmd)**: the VI fitting method whose posterior
+  is preserved by `save_gam`.
+- **[MCMC sampling](21-mcmc.qmd)**: the MCMC fitting method whose samples and diagnostics are
+  preserved by `save_gam()`.
