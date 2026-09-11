@@ -56,18 +56,21 @@ class TestPSISSmoothOne:
         rng = np.random.default_rng(0)
         lw = rng.standard_normal(500)
         lw_smooth, k = _psis_smooth_one(lw)
+
         assert lw_smooth.shape == lw.shape
 
     def test_k_hat_is_finite(self):
         rng = np.random.default_rng(1)
         lw = rng.standard_normal(500)
         _, k = _psis_smooth_one(lw)
+
         assert np.isfinite(k)
 
     def test_constant_weights_k_zero(self):
         # All equal weights — no variation in tail, k should be 0.
         lw = np.zeros(200)
         _, k = _psis_smooth_one(lw)
+
         assert k == 0.0
 
     def test_smoothing_reduces_extreme_outlier(self):
@@ -76,6 +79,7 @@ class TestPSISSmoothOne:
         lw = rng.standard_normal(500)
         lw[0] = 100.0  # huge outlier
         lw_smooth, _ = _psis_smooth_one(lw)
+
         # The smoothed max should be less than the raw max.
         assert lw_smooth.max() < lw.max()
 
@@ -93,6 +97,7 @@ class TestLOOResult:
             warnings.simplefilter("ignore")
             result = vi_smooth.loo(n_draws=300, seed=0)
         n = len(gaussian_data["y"])
+
         assert result.pointwise.shape == (n,)
         assert result.pareto_k.shape == (n,)
 
@@ -100,6 +105,7 @@ class TestLOOResult:
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             result = vi_smooth.loo(n_draws=300, seed=0)
+
         assert isinstance(result, LOOResult)
         assert isinstance(result.elpd_loo, float)
         assert isinstance(result.se_elpd_loo, float)
@@ -110,24 +116,28 @@ class TestLOOResult:
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             result = vi_smooth.loo(n_draws=300, seed=0)
+
         assert result.se_elpd_loo > 0.0
 
     def test_n_bad_k_consistent(self, vi_smooth):
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             result = vi_smooth.loo(n_draws=300, seed=0)
+
         assert result.n_bad_k == int(np.sum(result.pareto_k > 0.7))
 
     def test_elpd_equals_sum_of_pointwise(self, vi_smooth):
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             result = vi_smooth.loo(n_draws=300, seed=0)
+
         assert abs(result.elpd_loo - float(np.sum(result.pointwise))) < 1e-8
 
     def test_repr_contains_elpd(self, vi_smooth):
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             result = vi_smooth.loo(n_draws=300, seed=0)
+
         assert "ELPD_LOO" in repr(result)
 
 
@@ -142,22 +152,47 @@ class TestMCMCLOO:
     def test_mcmc_loo_runs(self, mcmc_smooth, gaussian_data):
         result = mcmc_smooth.loo()
         n = len(gaussian_data["y"])
+
         assert result.pointwise.shape == (n,)
 
     def test_mcmc_loo_uses_all_samples(self, mcmc_smooth):
         # MCMC uses all stored draws regardless of n_draws argument.
         r1 = mcmc_smooth.loo(seed=0)
         r2 = mcmc_smooth.loo(n_draws=10, seed=0)  # n_draws ignored for MCMC
+
         assert r1.pointwise.shape == r2.pointwise.shape
 
     def test_mcmc_p_loo_positive(self, mcmc_smooth):
         result = mcmc_smooth.loo()
+
         assert result.p_loo > 0.0
 
 
 # ---------------------------------------------------------------------------
 # Frequentist raises
 # ---------------------------------------------------------------------------
+
+
+class TestLOOWithOffset:
+    """Verify LOO works when the model includes an offset term."""
+
+    def test_vi_loo_with_offset(self):
+        rng = np.random.default_rng(99)
+        n = 80
+        x = np.linspace(0, 3, n)
+        off = rng.normal(0, 0.3, n)
+        y = rng.poisson(np.exp(0.5 * np.sin(x) + off)).astype(float)
+        data = {"x": x, "y": y, "off": off}
+
+        from whittaker.families.poisson import Poisson
+
+        model = GAM("y ~ s(x) + offset(off)", family=Poisson()).fit(data, method="VI")
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            result = model.loo(n_draws=300, seed=0)
+
+        assert result.pointwise.shape == (n,)
+        assert np.isfinite(result.elpd_loo)
 
 
 class TestLOOErrors:
@@ -179,6 +214,7 @@ class TestLOOCompare:
             loo1 = vi_smooth.loo(n_draws=300, seed=0)
             loo2 = vi_linear.loo(n_draws=300, seed=0)
         cmp = loo_compare(loo1, loo2)
+
         assert isinstance(cmp, LOOComparison)
 
     def test_compare_diff_equals_sum_pointwise_diff(self, vi_smooth, vi_linear):
@@ -188,6 +224,7 @@ class TestLOOCompare:
             loo2 = vi_linear.loo(n_draws=300, seed=0)
         cmp = loo_compare(loo1, loo2)
         expected = float(np.sum(loo1.pointwise - loo2.pointwise))
+
         assert abs(cmp.elpd_diff - expected) < 1e-8
 
     def test_compare_se_positive(self, vi_smooth, vi_linear):
@@ -196,6 +233,7 @@ class TestLOOCompare:
             loo1 = vi_smooth.loo(n_draws=300, seed=0)
             loo2 = vi_linear.loo(n_draws=300, seed=0)
         cmp = loo_compare(loo1, loo2)
+
         assert cmp.se_diff > 0.0
 
     def test_compare_raises_mismatched_n(self):
@@ -225,6 +263,7 @@ class TestLOOCompare:
             loo1 = vi_smooth.loo(n_draws=300, seed=0)
             loo2 = vi_linear.loo(n_draws=300, seed=0)
         cmp = loo_compare(loo1, loo2)
+
         assert "ELPD diff" in repr(cmp)
 
 
@@ -245,6 +284,7 @@ class TestComputeLOO:
         log_lik = np.tile(ll[:, np.newaxis], (1, S))
         lpd_full = ll.copy()
         result = compute_loo(log_lik, lpd_full)
+
         assert np.allclose(result.pointwise, ll, atol=1e-6)
         assert abs(result.p_loo) < 1e-5
 
@@ -260,6 +300,7 @@ class TestComputeLOO:
         lpd_full = rng.standard_normal(n)
         with pytest.warns(UserWarning, match="Pareto k > 0.7"):
             result = compute_loo(log_lik, lpd_full)
+
         assert result.n_bad_k > 0
 
 
@@ -273,6 +314,7 @@ class TestFitGPDTail:
         rng = np.random.default_rng(0)
         z = np.sort(np.abs(rng.standard_normal(100)))
         k, sigma = _fit_gpd_tail(z)
+
         assert np.isfinite(k)
         assert sigma > 0
 
@@ -280,12 +322,14 @@ class TestFitGPDTail:
         # All exceedances identical — genpareto.fit may fail; fallback should fire.
         z = np.ones(50)
         k, sigma = _fit_gpd_tail(z)
+
         assert np.isfinite(k)
         assert sigma > 0
 
     def test_single_element(self):
         z = np.array([1.5])
         k, sigma = _fit_gpd_tail(z)
+
         assert np.isfinite(k)
         assert sigma > 0
 
@@ -294,5 +338,6 @@ class TestFitGPDTail:
         with patch("whittaker.fitting.loo.genpareto") as mock_gp:
             mock_gp.fit.side_effect = RuntimeError("fit failed")
             k, sigma = _fit_gpd_tail(z)
+
         assert k == 0.0
         assert sigma == float(np.mean(z))
