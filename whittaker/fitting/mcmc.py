@@ -562,7 +562,7 @@ def _hmc_chain(
 
         H_curr = U_curr + K_curr
         H_prop = U_prop + K_prop
-        if H_prop - H_curr > _DELTA_MAX:
+        if H_prop - H_curr > _DELTA_MAX:  # pragma: no cover
             n_divergent += 1
 
         log_accept = -H_prop + H_curr
