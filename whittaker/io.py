@@ -388,31 +388,72 @@ def save_gam(model: Any, path: str | Path) -> None:
     from whittaker.fitting.mcmc import MCMCResult
     from whittaker.fitting.vi import VIResult
 
-    if isinstance(model._fit_result, (VIResult, MCMCResult)):
-        raise NotImplementedError(f"save_gam does not support {model._fit_result.method} fits.")
-
     path = Path(path)
     fr = model._fit_result
     mm = model._model_matrix
+    is_bayesian = isinstance(fr, (VIResult, MCMCResult))
+
+    fit_meta: dict[str, Any] = {
+        "smoothing_params": fr.smoothing_params,
+        "scale": fr.scale,
+        "edf": fr.edf,
+        "edf_total": fr.edf_total,
+        "n_iter": fr.n_iter,
+        "converged": fr.converged,
+        "method": fr.method,
+    }
+
+    arrays: dict[str, NDArray] = {
+        "coefficients": fr.coefficients,
+        "linear_predictor": fr.linear_predictor,
+        "fitted_values": fr.fitted_values,
+        "X": mm.X,
+        "response": mm.response,
+    }
+
+    if is_bayesian:
+        fit_meta["result_type"] = "VI" if isinstance(fr, VIResult) else "MCMC"
+        arrays["posterior_mean"] = fr.posterior_mean
+        arrays["posterior_cov"] = fr.posterior_cov
+
+        if isinstance(fr, VIResult):
+            arrays["posterior_chol"] = fr.posterior_chol
+            arrays["elbo_history"] = fr.elbo_history
+            fit_meta["elbo"] = fr.elbo
+            fit_meta["phi_variational"] = fr.phi_variational
+            if fr.log_phi_mean is not None:
+                fit_meta["log_phi_mean"] = fr.log_phi_mean
+            if fr.log_phi_var is not None:
+                fit_meta["log_phi_var"] = fr.log_phi_var
+        else:
+            assert isinstance(fr, MCMCResult)
+            arrays["samples"] = fr.samples
+            arrays["r_hat"] = fr.r_hat
+            arrays["ess"] = fr.ess
+            arrays["ess_tail"] = fr.ess_tail
+            fit_meta["acceptance_rate"] = fr.acceptance_rate
+            fit_meta["step_size"] = fr.step_size
+            fit_meta["n_chains"] = fr.n_chains
+            fit_meta["n_samples"] = fr.n_samples
+            fit_meta["n_warmup"] = fr.n_warmup
+            fit_meta["mean_tree_depth"] = fr.mean_tree_depth
+            fit_meta["n_divergent"] = fr.n_divergent
+    else:
+        fit_meta["result_type"] = "frequentist"
+        fit_meta["gcv_score"] = fr.gcv_score
+        fit_meta["deviance"] = fr.deviance
+        fit_meta["hat_matrix_trace"] = fr.hat_matrix_trace
+        fit_meta["null_deviance"] = fr.null_deviance
+        fit_meta["aic"] = fr.aic
+        fit_meta["bic"] = fr.bic
+        arrays["residuals"] = fr.residuals
+        if fr.pseudo_data is not None:
+            arrays["pseudo_data"] = fr.pseudo_data
 
     metadata = {
         "formula": _formula_to_dict(model._formula),
         "family": _family_to_dict(model._family),
-        "fit": {
-            "smoothing_params": fr.smoothing_params,
-            "scale": fr.scale,
-            "gcv_score": fr.gcv_score,
-            "edf": fr.edf,
-            "edf_total": fr.edf_total,
-            "deviance": fr.deviance,
-            "n_iter": fr.n_iter,
-            "converged": fr.converged,
-            "hat_matrix_trace": fr.hat_matrix_trace,
-            "null_deviance": fr.null_deviance,
-            "aic": fr.aic,
-            "bic": fr.bic,
-            "method": fr.method,
-        },
+        "fit": fit_meta,
         "model_matrix": {
             "has_intercept": mm.has_intercept,
             "n_parametric": mm.n_parametric,
@@ -422,21 +463,10 @@ def save_gam(model: Any, path: str | Path) -> None:
         "smooths": [],
     }
 
-    arrays: dict[str, NDArray] = {
-        "coefficients": fr.coefficients,
-        "linear_predictor": fr.linear_predictor,
-        "fitted_values": fr.fitted_values,
-        "residuals": fr.residuals,
-        "X": mm.X,
-        "response": mm.response,
-    }
-
     if fr.weights is not None:
         arrays["weights"] = fr.weights
     if fr.prior_weights is not None:
         arrays["prior_weights"] = fr.prior_weights
-    if fr.pseudo_data is not None:
-        arrays["pseudo_data"] = fr.pseudo_data
     if mm.offset is not None:
         arrays["offset"] = mm.offset
 
@@ -536,28 +566,84 @@ def load_gam(path: str | Path) -> Any:
     family = _family_from_dict(metadata["family"])
 
     fit_meta = metadata["fit"]
-    fr = FitResult(
-        coefficients=data["coefficients"],
-        linear_predictor=data["linear_predictor"],
-        fitted_values=data["fitted_values"],
-        smoothing_params=fit_meta["smoothing_params"],
-        scale=fit_meta["scale"],
-        gcv_score=fit_meta["gcv_score"],
-        edf=fit_meta["edf"],
-        edf_total=fit_meta["edf_total"],
-        deviance=fit_meta["deviance"],
-        n_iter=fit_meta["n_iter"],
-        converged=fit_meta["converged"],
-        hat_matrix_trace=fit_meta["hat_matrix_trace"],
-        residuals=data["residuals"],
-        weights=data.get("weights", None),
-        prior_weights=data.get("prior_weights", None),
-        null_deviance=fit_meta.get("null_deviance"),
-        aic=fit_meta.get("aic"),
-        bic=fit_meta.get("bic"),
-        method=fit_meta.get("method", "GCV"),
-        pseudo_data=data.get("pseudo_data", None),
-    )
+    result_type = fit_meta.get("result_type", "frequentist")
+
+    if result_type == "VI":
+        from whittaker.fitting.vi import VIResult
+
+        fr: FitResult | Any = VIResult(
+            coefficients=data["coefficients"],
+            posterior_mean=data["posterior_mean"],
+            posterior_cov=data["posterior_cov"],
+            linear_predictor=data["linear_predictor"],
+            fitted_values=data["fitted_values"],
+            smoothing_params=fit_meta["smoothing_params"],
+            scale=fit_meta["scale"],
+            edf=fit_meta["edf"],
+            edf_total=fit_meta["edf_total"],
+            n_iter=fit_meta["n_iter"],
+            converged=fit_meta["converged"],
+            weights=data.get("weights", None),
+            prior_weights=data.get("prior_weights", None),
+            posterior_chol=data["posterior_chol"],
+            elbo_history=data["elbo_history"],
+            elbo=fit_meta["elbo"],
+            phi_variational=fit_meta.get("phi_variational", False),
+            log_phi_mean=fit_meta.get("log_phi_mean"),
+            log_phi_var=fit_meta.get("log_phi_var"),
+        )
+    elif result_type == "MCMC":
+        from whittaker.fitting.mcmc import MCMCResult
+
+        fr = MCMCResult(
+            coefficients=data["coefficients"],
+            posterior_mean=data["posterior_mean"],
+            posterior_cov=data["posterior_cov"],
+            linear_predictor=data["linear_predictor"],
+            fitted_values=data["fitted_values"],
+            smoothing_params=fit_meta["smoothing_params"],
+            scale=fit_meta["scale"],
+            edf=fit_meta["edf"],
+            edf_total=fit_meta["edf_total"],
+            n_iter=fit_meta["n_iter"],
+            converged=fit_meta["converged"],
+            weights=data.get("weights", None),
+            prior_weights=data.get("prior_weights", None),
+            samples=data["samples"],
+            r_hat=data["r_hat"],
+            ess=data["ess"],
+            ess_tail=data["ess_tail"],
+            acceptance_rate=fit_meta["acceptance_rate"],
+            step_size=fit_meta["step_size"],
+            n_chains=fit_meta["n_chains"],
+            n_samples=fit_meta["n_samples"],
+            n_warmup=fit_meta["n_warmup"],
+            mean_tree_depth=fit_meta.get("mean_tree_depth", 0.0),
+            n_divergent=fit_meta.get("n_divergent", 0),
+        )
+    else:
+        fr = FitResult(
+            coefficients=data["coefficients"],
+            linear_predictor=data["linear_predictor"],
+            fitted_values=data["fitted_values"],
+            smoothing_params=fit_meta["smoothing_params"],
+            scale=fit_meta["scale"],
+            gcv_score=fit_meta["gcv_score"],
+            edf=fit_meta["edf"],
+            edf_total=fit_meta["edf_total"],
+            deviance=fit_meta["deviance"],
+            n_iter=fit_meta["n_iter"],
+            converged=fit_meta["converged"],
+            hat_matrix_trace=fit_meta["hat_matrix_trace"],
+            residuals=data["residuals"],
+            weights=data.get("weights", None),
+            prior_weights=data.get("prior_weights", None),
+            null_deviance=fit_meta.get("null_deviance"),
+            aic=fit_meta.get("aic"),
+            bic=fit_meta.get("bic"),
+            method=fit_meta.get("method", "GCV"),
+            pseudo_data=data.get("pseudo_data", None),
+        )
 
     mm_meta = metadata["model_matrix"]
     n_penalties = sum(len(s["penalty_indices"]) for s in metadata["smooths"])
