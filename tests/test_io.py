@@ -778,14 +778,51 @@ class TestSaveLoadGAM:
         save_gam(model, path)
         loaded = load_gam(path)
 
-        np.testing.assert_allclose(
-            loaded.mcmc_result.samples, model.mcmc_result.samples
+        np.testing.assert_allclose(loaded.mcmc_result.samples, model.mcmc_result.samples)
+
+    def test_vi_variational_phi_roundtrip(self, tmp_path):
+        from whittaker.families.gamma import Gamma
+
+        rng = np.random.default_rng(23)
+        n = 150
+        x = np.linspace(0.1, 3, n)
+        mu = np.exp(0.5 * np.sin(x))
+        y = rng.gamma(shape=5.0, scale=mu / 5.0)
+        data = {"x": x, "y": y}
+
+        model = GAM("y ~ s(x)", family=Gamma()).fit(
+            data, method="VI", vi_options={"phi_inference": "variational"}
         )
+
+        assert model.vi_result.log_phi_mean is not None
+        assert model.vi_result.log_phi_var is not None
+
+        path = tmp_path / "vi_phi.npz"
+        save_gam(model, path)
+        loaded = load_gam(path)
+
+        np.testing.assert_allclose(loaded.coefficients, model.coefficients)
+        assert loaded.vi_result is not None
+
+    def test_to_mgcv_raises_for_vi(self, sin_data):
+        model = GAM("y ~ s(x)").fit(sin_data, method="VI")
+        with pytest.raises(NotImplementedError, match="VI"):
+            to_mgcv_dict(model)
+
+    def test_to_mgcv_raises_for_mcmc(self, sin_data):
+        model = GAM("y ~ s(x)").fit(
+            sin_data,
+            method="MCMC",
+            mcmc_options={"n_chains": 2, "n_samples": 50, "n_warmup": 25, "seed": 0},
+        )
+        with pytest.raises(NotImplementedError, match="MCMC"):
+            to_mgcv_dict(model)
 
 
 class TestMgcvExport:
     def test_export_structure(self, fitted_gam):
         d = to_mgcv_dict(fitted_gam)
+
         assert "coefficients" in d
         assert "sp" in d
         assert "smooth" in d
@@ -795,13 +832,17 @@ class TestMgcvExport:
 
     def test_coefficients_list(self, fitted_gam):
         d = to_mgcv_dict(fitted_gam)
+
         assert isinstance(d["coefficients"], list)
         assert len(d["coefficients"]) == len(fitted_gam.coefficients)
 
     def test_smooth_info(self, fitted_gam):
         d = to_mgcv_dict(fitted_gam)
+
         assert len(d["smooth"]) == 1
+
         s = d["smooth"][0]
+
         assert "term" in s
         assert "bs" in s
         assert "S" in s
@@ -809,8 +850,11 @@ class TestMgcvExport:
     def test_json_serializable(self, fitted_gam):
         d = to_mgcv_dict(fitted_gam)
         json_str = json.dumps(d)
+
         assert isinstance(json_str, str)
+
         parsed = json.loads(json_str)
+
         assert parsed["n"] == 200
 
     def test_unfitted_raises(self):
@@ -834,6 +878,7 @@ class TestMgcvExport:
 
         d = to_mgcv_dict(model)
         s = d["smooth"][0]
+
         assert s["by"] == "group"
         assert "by.level" in s
 
@@ -848,6 +893,7 @@ class TestMgcvExport:
 
         d = to_mgcv_dict(model)
         s = d["smooth"][0]
+
         assert s["bs"] == "re"
         assert "levels" in s
 
@@ -856,6 +902,7 @@ class TestMgcvExport:
         model.fit(sin_data)
         d = to_mgcv_dict(model)
         s = d["smooth"][0]
+
         assert s["bs"] == "cr"
         assert "knots" in s
 
@@ -869,8 +916,11 @@ class TestMgcvExport:
         model.fit({"x1": x1, "x2": x2, "y": y})
 
         d = to_mgcv_dict(model)
+
         assert len(d["smooth"]) == 1
+
         s = d["smooth"][0]
+
         assert set(s["term"]) == {"x1", "x2"}
         assert len(s["S"]) >= 1
 
@@ -885,6 +935,7 @@ class TestMgcvExport:
         model.fit({"x": x, "y": y})
 
         d = to_mgcv_dict(model)
+
         assert d["family"]["power"] == pytest.approx(1.5)
 
     def test_negative_binomial_theta_exported(self):
@@ -896,6 +947,7 @@ class TestMgcvExport:
         model.fit({"x": x, "y": y})
 
         d = to_mgcv_dict(model)
+
         assert "theta" in d["family"]
 
 
@@ -906,8 +958,11 @@ class TestMgcvImport:
         mgcv_d = to_mgcv_dict(model)
 
         imported = from_mgcv_dict(mgcv_d, data=sin_data)
+
         assert imported.is_fitted
+
         pred = imported.predict(sin_data)
+
         assert pred.values.shape == (200,)
         assert np.all(np.isfinite(pred.values))
 
@@ -921,6 +976,7 @@ class TestMgcvImport:
             "intercept": True,
         }
         imported = from_mgcv_dict(d)
+
         assert not imported.is_fitted
 
     def test_roundtrip_via_mgcv(self, sin_data):
@@ -931,6 +987,7 @@ class TestMgcvImport:
 
         pred_orig = model.predict(sin_data)
         pred_imported = imported.predict(sin_data)
+
         np.testing.assert_allclose(pred_imported.values, pred_orig.values, atol=0.1)
 
     def test_family_info_as_string(self):
@@ -957,6 +1014,7 @@ class TestMgcvImport:
             "intercept": True,
         }
         imported = from_mgcv_dict(d)
+
         assert isinstance(imported.family, Tweedie)
         assert imported.family._p == pytest.approx(1.4)
 
@@ -970,6 +1028,7 @@ class TestMgcvImport:
             "intercept": True,
         }
         imported = from_mgcv_dict(d)
+
         assert isinstance(imported.family, NegativeBinomial)
         assert imported.family.theta == pytest.approx(2.5)
 
@@ -983,6 +1042,7 @@ class TestMgcvImport:
             "intercept": False,
         }
         imported = from_mgcv_dict(d)
+
         assert isinstance(imported.family, CoxPH)
 
     def test_formula_without_tilde_builds_smooth_terms(self):
@@ -995,9 +1055,12 @@ class TestMgcvImport:
             "intercept": True,
         }
         imported = from_mgcv_dict(d)
+
         assert not imported.is_fitted
         assert imported._formula.response == "y"
+
         smooth_term = imported._formula.terms[0]
+
         assert smooth_term.variables == ("x1", "x2")
         assert smooth_term.bs == "tp"
         assert smooth_term.k == 3
@@ -1014,9 +1077,12 @@ class TestMgcvImport:
         mgcv_d = to_mgcv_dict(model)
 
         imported = from_mgcv_dict(mgcv_d, data=data)
+
         assert imported.is_fitted
         assert isinstance(imported.family, Poisson)
+
         pred = imported.predict(data)
+
         assert np.all(np.isfinite(pred.values))
 
     def test_import_with_data_and_offset_term(self):
@@ -1030,10 +1096,14 @@ class TestMgcvImport:
         model = GAM("y ~ s(x) + offset(log_exposure)", family=Poisson())
         model.fit(data)
         mgcv_d = to_mgcv_dict(model)
+
         assert "offset(log_exposure)" in mgcv_d["formula"]
 
         imported = from_mgcv_dict(mgcv_d, data=data)
+
         assert imported.is_fitted
         assert imported._model_matrix.offset is not None
+
         pred = imported.predict(data)
+
         assert np.all(np.isfinite(pred.values))
