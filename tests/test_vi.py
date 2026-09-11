@@ -105,6 +105,7 @@ class TestBayesResult:
             converged=True,
         )
         draws = br.draw(5000, seed=7)
+
         np.testing.assert_allclose(draws.mean(axis=1), m, atol=0.05)
 
 
@@ -602,3 +603,36 @@ class TestCredibleIntervals:
         gam = GAM("y ~ s(x)", family=Poisson()).fit(poisson_data)
         with pytest.raises(ValueError, match="credible"):
             gam.predict(new_x, interval="credible")
+
+    def test_vi_credible_with_offset(self):
+        rng = np.random.default_rng(99)
+        n = 100
+        x = np.linspace(0, 2, n)
+        off = rng.normal(0, 0.3, n)
+        y = rng.poisson(np.exp(0.5 * np.sin(x) + off)).astype(float)
+        data = {"x": x, "y": y, "off": off}
+
+        model = GAM("y ~ s(x) + offset(off)", family=Poisson()).fit(data, method="VI")
+
+        new_data = {"x": np.linspace(0, 2, 10), "off": np.zeros(10)}
+        r = model.predict(new_data, interval="credible", n_sim=200, seed=0)
+
+        assert r.lower is not None
+        assert r.upper is not None
+        assert np.all(r.lower <= r.upper)
+
+    def test_vi_credible_link_with_offset(self):
+        rng = np.random.default_rng(99)
+        n = 100
+        x = np.linspace(0, 2, n)
+        off = rng.normal(0, 0.3, n)
+        y = rng.poisson(np.exp(0.5 * np.sin(x) + off)).astype(float)
+        data = {"x": x, "y": y, "off": off}
+
+        model = GAM("y ~ s(x) + offset(off)", family=Poisson()).fit(data, method="VI")
+
+        new_data = {"x": np.linspace(0, 2, 10), "off": np.zeros(10)}
+        r = model.predict(new_data, interval="credible", type="link", n_sim=200, seed=0)
+
+        assert r.lower is not None
+        assert np.all(r.lower <= r.upper)
