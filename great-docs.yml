@@ -41,6 +41,7 @@ nav_icons:
     "Variational inference": brain
     "MCMC sampling": activity
     "Model comparison with LOO": scale
+    "Model comparison with WAIC": scale
     "Posterior predictive checks": check-circle
     "Saving and loading models": save
     "Glossary": book-open
