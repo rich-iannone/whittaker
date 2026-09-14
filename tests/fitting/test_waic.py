@@ -244,16 +244,16 @@ class TestWAICvsLOO:
         w = vi_smooth.waic(n_draws=500, seed=0)
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            l = vi_smooth.loo(n_draws=500, seed=0)
+            loo_result = vi_smooth.loo(n_draws=500, seed=0)
 
         # Both should agree on sign (both negative for log-density, or both positive).
         # For Gaussian with moderate data, both should be finite and roughly similar.
         assert np.isfinite(w.elpd_waic)
-        assert np.isfinite(l.elpd_loo)
+        assert np.isfinite(loo_result.elpd_loo)
 
         # p_waic and p_loo should both be positive and in the same ballpark.
         assert w.p_waic > 0
-        assert l.p_loo > 0
+        assert loo_result.p_loo > 0
 
     def test_waic_loo_elpd_within_tolerance(self, vi_smooth):
         import warnings
@@ -261,10 +261,11 @@ class TestWAICvsLOO:
         w = vi_smooth.waic(n_draws=1000, seed=42)
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            l = vi_smooth.loo(n_draws=1000, seed=42)
+            loo_result = vi_smooth.loo(n_draws=1000, seed=42)
 
         # For well-behaved models, WAIC and LOO ELPD should be close.
-        assert abs(w.elpd_waic - l.elpd_loo) < 3.0 * max(w.se_elpd_waic, l.se_elpd_loo)
+        max_se = max(w.se_elpd_waic, loo_result.se_elpd_loo)
+        assert abs(w.elpd_waic - loo_result.elpd_loo) < 3.0 * max_se
 
 
 # ---------------------------------------------------------------------------
