@@ -18,8 +18,8 @@ data-generating process, **conformal prediction** offers an alternative: distrib
 intervals with finite-sample coverage guarantees.
 
 This page covers the three conformal methods available in Whittaker, shows how to fit and visualize
-them, and explains when to reach for conformal intervals instead of (or alongside) the classical
-Bayesian intervals from `predict()`.
+them, and explains when to use conformal intervals instead of (or alongside) the classical Bayesian
+intervals from `predict()`.
 
 ## What conformal prediction is
 
