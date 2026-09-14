@@ -183,7 +183,9 @@ MCMC fits with more draws produce more stable LOO estimates and better Pareto $k
 
 ## Where to go next
 
-- **[Posterior predictive checks](23-ppc.qmd)**: assess whether a model generates data that looks
+- **[Model comparison with WAIC](23-waic.qmd)**: a cheaper alternative to LOO that uses the
+  variance of the log-likelihood instead of importance sampling.
+- **[Posterior predictive checks](24-ppc.qmd)**: assess whether a model generates data that looks
   like the observed data, complementing LOO's predictive-accuracy perspective.
 - **[MCMC sampling](21-mcmc.qmd)**: fitting models with the No-U-Turn Sampler for exact posterior
   inference.
