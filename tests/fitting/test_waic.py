@@ -53,10 +53,12 @@ class TestWAICResult:
     def test_vi_waic_shape(self, vi_smooth, gaussian_data):
         result = vi_smooth.waic(n_draws=300, seed=0)
         n = len(gaussian_data["y"])
+
         assert result.pointwise.shape == (n,)
 
     def test_vi_waic_types(self, vi_smooth):
         result = vi_smooth.waic(n_draws=300, seed=0)
+
         assert isinstance(result, WAICResult)
         assert isinstance(result.elpd_waic, float)
         assert isinstance(result.se_elpd_waic, float)
@@ -65,23 +67,28 @@ class TestWAICResult:
 
     def test_se_positive(self, vi_smooth):
         result = vi_smooth.waic(n_draws=300, seed=0)
+
         assert result.se_elpd_waic > 0.0
 
     def test_p_waic_positive(self, vi_smooth):
         result = vi_smooth.waic(n_draws=300, seed=0)
+
         assert result.p_waic > 0.0
 
     def test_waic_equals_minus_two_elpd(self, vi_smooth):
         result = vi_smooth.waic(n_draws=300, seed=0)
+
         assert abs(result.waic - (-2.0 * result.elpd_waic)) < 1e-10
 
     def test_elpd_equals_sum_of_pointwise(self, vi_smooth):
         result = vi_smooth.waic(n_draws=300, seed=0)
+
         assert abs(result.elpd_waic - float(np.sum(result.pointwise))) < 1e-8
 
     def test_repr_contains_waic(self, vi_smooth):
         result = vi_smooth.waic(n_draws=300, seed=0)
         r = repr(result)
+
         assert "ELPD_WAIC" in r
         assert "p_WAIC" in r
         assert "WAIC" in r
@@ -98,15 +105,18 @@ class TestMCMCWAIC:
     def test_mcmc_waic_runs(self, mcmc_smooth, gaussian_data):
         result = mcmc_smooth.waic()
         n = len(gaussian_data["y"])
+
         assert result.pointwise.shape == (n,)
 
     def test_mcmc_waic_p_positive(self, mcmc_smooth):
         result = mcmc_smooth.waic()
+
         assert result.p_waic > 0.0
 
     def test_mcmc_waic_uses_all_samples(self, mcmc_smooth):
         r1 = mcmc_smooth.waic(seed=0)
         r2 = mcmc_smooth.waic(n_draws=10, seed=0)
+
         assert r1.pointwise.shape == r2.pointwise.shape
 
 
@@ -132,6 +142,7 @@ class TestWAICCompare:
         w1 = vi_smooth.waic(n_draws=300, seed=0)
         w2 = vi_linear.waic(n_draws=300, seed=0)
         cmp = waic_compare(w1, w2)
+
         assert isinstance(cmp, WAICComparison)
 
     def test_compare_diff_equals_sum_pointwise_diff(self, vi_smooth, vi_linear):
@@ -139,12 +150,14 @@ class TestWAICCompare:
         w2 = vi_linear.waic(n_draws=300, seed=0)
         cmp = waic_compare(w1, w2)
         expected = float(np.sum(w1.pointwise - w2.pointwise))
+
         assert abs(cmp.elpd_diff - expected) < 1e-8
 
     def test_compare_se_positive(self, vi_smooth, vi_linear):
         w1 = vi_smooth.waic(n_draws=300, seed=0)
         w2 = vi_linear.waic(n_draws=300, seed=0)
         cmp = waic_compare(w1, w2)
+
         assert cmp.se_diff > 0.0
 
     def test_compare_raises_mismatched_n(self):
@@ -169,6 +182,7 @@ class TestWAICCompare:
         w1 = vi_smooth.waic(n_draws=300, seed=0)
         w2 = vi_linear.waic(n_draws=300, seed=0)
         cmp = waic_compare(w1, w2)
+
         assert "ELPD diff" in repr(cmp)
 
 
@@ -186,6 +200,7 @@ class TestComputeWAIC:
         ll_vals = np.random.default_rng(5).standard_normal(n)
         log_lik = np.tile(ll_vals[:, np.newaxis], (1, S))
         result = compute_waic(log_lik)
+
         assert abs(result.p_waic) < 1e-10
         np.testing.assert_allclose(result.pointwise, ll_vals, atol=1e-10)
 
@@ -200,6 +215,7 @@ class TestComputeWAIC:
         expected_lppd = logsumexp(log_lik, axis=1) - np.log(S)
         expected_p = np.var(log_lik, axis=1, ddof=1)
         expected_pointwise = expected_lppd - expected_p
+
         np.testing.assert_allclose(result.pointwise, expected_pointwise, atol=1e-12)
 
     def test_p_waic_increases_with_variance(self):
@@ -210,6 +226,7 @@ class TestComputeWAIC:
         log_lik_high = rng.standard_normal((n, S)) * 1.0 - 5.0
         r_low = compute_waic(log_lik_low)
         r_high = compute_waic(log_lik_high)
+
         assert r_high.p_waic > r_low.p_waic
 
 
@@ -228,10 +245,12 @@ class TestWAICvsLOO:
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             l = vi_smooth.loo(n_draws=500, seed=0)
+
         # Both should agree on sign (both negative for log-density, or both positive).
         # For Gaussian with moderate data, both should be finite and roughly similar.
         assert np.isfinite(w.elpd_waic)
         assert np.isfinite(l.elpd_loo)
+
         # p_waic and p_loo should both be positive and in the same ballpark.
         assert w.p_waic > 0
         assert l.p_loo > 0
@@ -243,6 +262,7 @@ class TestWAICvsLOO:
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             l = vi_smooth.loo(n_draws=1000, seed=42)
+
         # For well-behaved models, WAIC and LOO ELPD should be close.
         assert abs(w.elpd_waic - l.elpd_loo) < 3.0 * max(w.se_elpd_waic, l.se_elpd_loo)
 
@@ -264,6 +284,7 @@ class TestWAICPoisson:
 
         model = GAM("y ~ s(x)", family=Poisson()).fit(data, method="VI")
         result = model.waic(n_draws=300, seed=0)
+
         assert result.pointwise.shape == (n,)
         assert np.isfinite(result.waic)
         assert result.p_waic > 0
