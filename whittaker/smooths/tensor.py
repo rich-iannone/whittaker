@@ -47,9 +47,9 @@ class TensorProductBasis(SmoothBasis):
     distance, a tensor product smooth applies a separate marginal penalty (and, in principle, a
     separate smoothing parameter) to each covariate direction, so that the anisotropic scaling of
     the covariates does not distort the fitted surface. Choose `TensorProductBasis` over `TPRS`
-    whenever the covariates involved are not naturally on comparable scales, and reach for
-    `TensorInteractionBasis` instead when a decomposition into separate main-effect and pure-
-    interaction terms (an ANOVA-style model) is wanted.
+    whenever the covariates involved are not naturally on comparable scales, and use
+    `TensorInteractionBasis` instead when a decomposition into separate main-effect and
+    pure-interaction terms (an ANOVA-style model) is wanted.
 
     Parameters
     ----------
