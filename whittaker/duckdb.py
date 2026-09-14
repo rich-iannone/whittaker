@@ -53,7 +53,7 @@ def _count_rows(conn, source_query: str) -> int:
 
 def _fetch_as_dict(conn, source_query: str) -> InternalData:
     """Fetch all rows from a DuckDB query as dict[str, NDArray]."""
-    arrow_table = conn.sql(source_query).fetch_arrow_table()
+    arrow_table = conn.sql(source_query).to_arrow_table()
     return {
         col: _to_array(arrow_table.column(col).to_numpy(zero_copy_only=False))
         for col in arrow_table.column_names
@@ -66,7 +66,7 @@ def _stream_as_dict(conn, source_query: str, chunk_size: int = 100_000) -> Inter
     Builds the result incrementally so that only one batch is in memory at a
     time (plus the accumulating output arrays).
     """
-    reader = conn.sql(source_query).fetch_arrow_reader(batch_size=chunk_size)
+    reader = conn.sql(source_query).to_arrow_reader(batch_size=chunk_size)
     columns: dict[str, list[NDArray]] = {}
     for batch in reader:
         for col in batch.schema.names:
@@ -84,7 +84,7 @@ class DuckDBGAM(BigGAM):
     including joins, filters, aggregations, and window functions — and DuckDB does
     the work of producing the resulting rows. Internally, `_stream_as_dict` reads
     those rows through DuckDB's Arrow batch interface
-    (`conn.sql(query).fetch_arrow_reader(batch_size=chunk_size)`), concatenating
+    (`conn.sql(query).to_arrow_reader(batch_size=chunk_size)`), concatenating
     `chunk_size`-row Arrow batches into the column-oriented dict that
     `build_discretized_model_matrix` and `bam_fit` (the same discretized-basis
     machinery used by `BigGAM`) consume to fit the model. Use `DuckDBGAM` whenever
@@ -124,7 +124,7 @@ class DuckDBGAM(BigGAM):
     basis only at the discretization grid. `_stream_as_dict` is what keeps the raw
     data at `O(n d)` rather than materializing a full *n x p* matrix twice as
     `conn.sql(...).df()` would: it pulls one `chunk_size`-row Arrow batch at a time
-    from `fetch_arrow_reader` and appends each batch's columns to a list, so DuckDB
+    from `to_arrow_reader` and appends each batch's columns to a list, so DuckDB
     never has to build (and Python never has to hold) more than one batch's worth
     of Arrow data plus the columns accumulated so far.
 
@@ -180,7 +180,7 @@ class DuckDBGAM(BigGAM):
         """Arrow batch size used when streaming from DuckDB.
 
         This is the `chunk_size` value passed to `__init__`: the number of rows per Arrow batch
-        that `_stream_as_dict` requests from `conn.sql(query).fetch_arrow_reader(batch_size=...)`
+        that `_stream_as_dict` requests from `conn.sql(query).to_arrow_reader(batch_size=...)`
         while reading `fit()`'s data source.
 
         Returns
