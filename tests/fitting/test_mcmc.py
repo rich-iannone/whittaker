@@ -217,7 +217,8 @@ class TestGaussianPosterior:
     """For Gaussian response the HMC posterior must match the Laplace approximation."""
 
     @pytest.fixture(scope="class")
-    def fitted(self):
+    @classmethod
+    def fitted(cls):
         data = _gaussian_data(seed=5)
         mm, fr, S_lambda, fam = _build_components(data)
         X, scale = mm.X, fr.scale
@@ -257,7 +258,8 @@ class TestGaussianPosterior:
 
 class TestPoissonPosterior:
     @pytest.fixture(scope="class")
-    def fitted(self):
+    @classmethod
+    def fitted(cls):
         data = _poisson_data(seed=6)
         gam = GAM("y ~ s(x)", family=Poisson())
         gam.fit(
@@ -303,7 +305,8 @@ class TestPoissonPosterior:
 
 class TestConvergenceDiagnostics:
     @pytest.fixture(scope="class")
-    def mr(self):
+    @classmethod
+    def mr(cls):
         data = _gaussian_data(seed=3)
         gam = GAM("y ~ s(x)")
         gam.fit(
@@ -339,7 +342,8 @@ class TestConvergenceDiagnostics:
 
 class TestMCMCResultAPI:
     @pytest.fixture(scope="class")
-    def gam(self):
+    @classmethod
+    def gam(cls):
         data = _gaussian_data(seed=4)
         gam = GAM("y ~ s(x)")
         gam.fit(
@@ -469,26 +473,30 @@ class TestMCMCFitMetrics:
     """AIC/BIC formula verification and cross-family fit metric coverage for MCMC."""
 
     @pytest.fixture(scope="class")
-    def gaussian_mcmc(self):
+    @classmethod
+    def gaussian_mcmc(cls):
         data = _gaussian_data(seed=10)
         return GAM("y ~ s(x)").fit(data, method="MCMC", mcmc_options=_MCMC_OPTS_FAST)
 
     @pytest.fixture(scope="class")
-    def poisson_mcmc(self):
+    @classmethod
+    def poisson_mcmc(cls):
         data = _poisson_data(seed=10)
         return GAM("y ~ s(x, k=6)", family=Poisson()).fit(
             data, method="MCMC", mcmc_options=_MCMC_OPTS_FAST
         )
 
     @pytest.fixture(scope="class")
-    def binomial_mcmc(self):
+    @classmethod
+    def binomial_mcmc(cls):
         data = _binomial_data(seed=10)
         return GAM("y ~ s(x, k=6)", family=Binomial()).fit(
             data, method="MCMC", mcmc_options=_MCMC_OPTS_FAST
         )
 
     @pytest.fixture(scope="class")
-    def gamma_mcmc(self):
+    @classmethod
+    def gamma_mcmc(cls):
         data = _gamma_data(seed=10)
         return GAM("y ~ s(x, k=8)", family=Gamma()).fit(
             data, method="MCMC", mcmc_options=_MCMC_OPTS_FAST
@@ -582,7 +590,8 @@ class TestNUTS:
     """Verify NUTS-specific behaviour: default sampler, tree depth, HMC fallback."""
 
     @pytest.fixture(scope="class")
-    def nuts_result(self):
+    @classmethod
+    def nuts_result(cls):
         """NUTS fit on a small Gaussian problem (fast)."""
         data = _gaussian_data(seed=10)
         gam = GAM("y ~ s(x)")
@@ -600,7 +609,8 @@ class TestNUTS:
         return gam.mcmc_result
 
     @pytest.fixture(scope="class")
-    def hmc_result(self):
+    @classmethod
+    def hmc_result(cls):
         """Explicit HMC fit for comparison.
 
         Uses 500 samples so the rank-normalized split R-hat (which halves each chain to
