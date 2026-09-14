@@ -124,6 +124,10 @@ markers = [
     "rparity: numeric validation against R fixtures",
     "slow: longer-running tests",
 ]
+filterwarnings = [
+    "ignore:Determining the column names:polars.exceptions.PerformanceWarning:narwhals",
+    "ignore:invalid value encountered in scalar:RuntimeWarning:scipy",
+]
 
 [tool.coverage.report]
 exclude_also = ["if TYPE_CHECKING:"]
