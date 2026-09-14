@@ -287,7 +287,7 @@ assumptions using the diagnostic tools on this page.
   how flexible the smooth terms are.
 - **[Response families](04-families.qmd)**: choosing a family that matches the data-generating
   process, which is the most common fix when diagnostics reveal distributional problems.
-- **[Posterior predictive checks](23-ppc.qmd)**: a complementary diagnostic that tests whether the
+- **[Posterior predictive checks](24-ppc.qmd)**: a complementary diagnostic that tests whether the
   model generates realistic data.
 - **[Prediction and inference](06-prediction.qmd)**: confidence intervals and term-level
   predictions from a model that passes diagnostics.
