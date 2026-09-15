@@ -45,6 +45,7 @@ from whittaker.families import (
     ZeroInflatedPoisson,
     tw,
 )
+from whittaker.fitting.compare import ComparisonResult, ComparisonRow, compare
 from whittaker.fitting.loo import LOOComparison, LOOResult, loo_compare
 from whittaker.fitting.ppc import PPCResult
 from whittaker.fitting.stacking import StackingResult, stacking
@@ -204,6 +205,9 @@ __all__ = [
     "WAICComparison",
     "stacking",
     "StackingResult",
+    "compare",
+    "ComparisonResult",
+    "ComparisonRow",
     "PPCResult",
     # scikit-learn integration
     "GAMRegressor",
