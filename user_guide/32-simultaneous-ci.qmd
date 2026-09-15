@@ -1,0 +1,204 @@
+---
+title: "Simultaneous confidence bands"
+guide-section: "Advanced features"
+---
+
+```{python}
+#| echo: false
+#| output: false
+import great_docs as gd
+
+gd.enable_tbl_preview(n_head=8, n_tail=3)
+```
+
+Pointwise confidence intervals cover the true function at each *individual* point with the stated
+probability, but they say nothing about whether the *entire* curve lies within the band. A 95%
+pointwise band means each point has 95% coverage independently (across many points, you would expect
+some to miss). Simultaneous confidence bands guarantee (approximately) that the whole function lies
+within the band with the stated probability.
+
+Whittaker provides two ways to get simultaneous bands:
+
+- **`predict(..., interval="simultaneous")`** — overall simultaneous bands for the full linear
+  predictor or response, covered in the [prediction guide](06-prediction.qmd).
+- **`simultaneous_ci()`** — term-level simultaneous bands for individual smooth terms, useful for
+  inference about where a specific smooth is significantly different from zero.
+
+This article focuses on `simultaneous_ci()`.
+
+## Why simultaneous bands matter
+
+When you look at a pointwise confidence band for a smooth and ask *"where does this band exclude
+zero?"*, you are performing multiple implicit tests (one at every evaluation point). Pointwise bands
+do not adjust for this multiplicity, so some apparent "significant" regions may be false positives.
+
+Simultaneous bands solve this by computing a wider critical value that accounts for the supremum of
+the standardized deviation across the entire curve. If the simultaneous band excludes zero at a
+region, you can be confident the smooth is truly non-zero there at the stated level.
+
+## Setup
+
+```{python}
+import numpy as np
+import whittaker as wk
+
+rng = np.random.default_rng(23)
+n = 300
+x = np.linspace(0, 2 * np.pi, n)
+y = np.sin(x) + rng.normal(0, 0.3, n)
+data = {"x": x, "y": y}
+
+model = wk.GAM("y ~ s(x, k=10)").fit(data, method="REML")
+model.summary()
+```
+
+## Computing simultaneous bands for a smooth
+
+`simultaneous_ci()` returns a dictionary with the smooth's estimate, standard errors, lower and
+upper bounds, the term label, and the critical value used:
+
+```{python}
+grid = {"x": np.linspace(0, 2 * np.pi, 200)}
+sci = model.simultaneous_ci(grid, term=0)
+
+print(f"Term: {sci['term_label']}")
+print(f"Critical value: {sci['crit_value']:.3f}")
+print(f"Compare to z_{0.975} = 1.96 for pointwise")
+```
+
+The critical value is always larger than the pointwise z-value (1.96 for 95%), which is why the
+simultaneous band is wider.
+
+## Pointwise vs. simultaneous comparison
+
+Let's visualize both bands side by side to see the difference:
+
+```{python}
+import altair as alt
+
+preds = model.predict(grid, type="terms", se=True)
+
+term_label = sci["term_label"]
+pw_estimate = preds.terms[term_label]
+pw_se = preds.se[term_label]
+pw_lower = pw_estimate - 1.96 * pw_se
+pw_upper = pw_estimate + 1.96 * pw_se
+
+x_vals = grid["x"]
+
+plot_data = []
+for i in range(len(x_vals)):
+    plot_data.append({
+        "x": float(x_vals[i]),
+        "estimate": float(sci["estimate"][i]),
+        "pw_lower": float(pw_lower[i]),
+        "pw_upper": float(pw_upper[i]),
+        "sim_lower": float(sci["lower"][i]),
+        "sim_upper": float(sci["upper"][i]),
+    })
+
+pw_band = alt.Chart({"values": plot_data}).mark_area(
+    opacity=0.3, color="steelblue"
+).encode(x=alt.X("x:Q"), y="pw_lower:Q", y2="pw_upper:Q")
+
+sim_band = alt.Chart({"values": plot_data}).mark_area(
+    opacity=0.15, color="darkorange"
+).encode(x=alt.X("x:Q"), y="sim_lower:Q", y2="sim_upper:Q")
+
+line = alt.Chart({"values": plot_data}).mark_line(
+    color="black"
+).encode(x="x:Q", y=alt.Y("estimate:Q", title="s(x)"))
+
+zero = alt.Chart({"values": [{"y": 0}]}).mark_rule(
+    color="firebrick", strokeDash=[4, 4]
+).encode(y="y:Q")
+
+(sim_band + pw_band + line + zero).properties(
+    width=500, height=300,
+    title="Pointwise (blue) vs. simultaneous (orange) 95% bands"
+)
+```
+
+The simultaneous band (orange) is wider everywhere. Where the simultaneous band excludes zero, you
+have strong evidence that the smooth is non-zero, adjusted for the fact that you are making this
+claim about the entire curve.
+
+## Selecting a specific term
+
+For models with multiple smooths, specify the term by index or name:
+
+```{python}
+x2 = rng.uniform(0, 5, n)
+y2 = np.sin(x) + 0.5 * x2 + rng.normal(0, 0.3, n)
+data2 = {"x": x, "x2": x2, "y": y2}
+
+model2 = wk.GAM("y ~ s(x) + s(x2)").fit(data2, method="REML")
+
+grid2 = {"x": np.linspace(0, 2 * np.pi, 100), "x2": np.linspace(0, 5, 100)}
+
+sci_x = model2.simultaneous_ci(grid2, term="x")
+sci_x2 = model2.simultaneous_ci(grid2, term="x2")
+
+print(f"s(x)  critical value: {sci_x['crit_value']:.3f}")
+print(f"s(x2) critical value: {sci_x2['crit_value']:.3f}")
+```
+
+Each term gets its own critical value because the multiplicity correction depends on the term's
+basis dimension and the correlation structure of its basis functions.
+
+## Unconditional bands
+
+By default, the bands are conditional on the estimated smoothing parameters. Setting
+`unconditional=True` additionally accounts for the uncertainty in the smoothing parameters
+themselves, producing even wider bands:
+
+```{python}
+sci_cond = model.simultaneous_ci(grid, term=0)
+sci_uncond = model.simultaneous_ci(grid, term=0, unconditional=True)
+
+mean_width_cond = (sci_cond["upper"] - sci_cond["lower"]).mean()
+mean_width_uncond = (sci_uncond["upper"] - sci_uncond["lower"]).mean()
+
+print(f"Mean band width (conditional):    {mean_width_cond:.4f}")
+print(f"Mean band width (unconditional):  {mean_width_uncond:.4f}")
+print(f"Ratio:                            {mean_width_uncond / mean_width_cond:.2f}x")
+```
+
+Use unconditional bands when the smoothing parameter is uncertain (e.g., when the REML criterion
+surface is flat as shown by [smoothing parameter sensitivity](27-sensitivity.qmd)).
+
+## Controlling the simulation
+
+The critical value is computed via posterior simulation (drawing from the Bayesian posterior of the
+coefficients and computing the maximum standardized deviation). You can control the number of
+simulations and the random seed:
+
+```{python}
+sci_1k = model.simultaneous_ci(grid, term=0, n_sim=1_000, seed=0)
+sci_50k = model.simultaneous_ci(grid, term=0, n_sim=50_000, seed=0)
+
+print(f"Critical value (1,000 sims):  {sci_1k['crit_value']:.4f}")
+print(f"Critical value (50,000 sims): {sci_50k['crit_value']:.4f}")
+```
+
+The default of 10,000 simulations is usually sufficient. Increase it if you need very precise
+critical values (e.g., for publication).
+
+## When to use simultaneous vs. pointwise
+
+| Scenario | Use |
+|---|---|
+| *"Is the smooth significantly non-zero at this specific x?"* | Pointwise CI |
+| *"Over what range of x is the smooth significantly non-zero?"* | Simultaneous band |
+| *"Can I claim the entire fitted curve lies within this band?"* | Simultaneous band |
+| Exploratory analysis, quick checks | Pointwise CI |
+| Publication-quality inference | Simultaneous band |
+
+## Where to go next
+
+- **[Prediction and inference](06-prediction.qmd)**: overall simultaneous bands via
+  `predict(..., interval="simultaneous")`.
+- **[Derivatives and marginal effects](28-derivatives.qmd)**: detecting where a smooth is
+  significantly increasing or decreasing.
+- **[Smoothing parameter sensitivity](27-sensitivity.qmd)**: check whether the smoothing
+  parameter is well-determined before relying on conditional bands.
