@@ -17,8 +17,8 @@ residuals, and how link functions affect interpretation for non-Gaussian models.
 
 ## Point predictions on the response scale
 
-The `predict()` method generates predictions for new covariate values. By default, predictions are on
-the **response scale** -- meaning the inverse link function has already been applied:
+The `predict()` method generates predictions for new covariate values. By default, predictions are
+on the **response scale** (meaning the inverse link function has already been applied):
 
 $$\hat\mu = g^{-1}(\hat\eta) = g^{-1}(X_{\text{new}} \hat\beta)$$
 
@@ -690,6 +690,8 @@ zero_t = alt.Chart({"values": [{}]}).mark_rule(
 
 ## Where to go next
 
+- **[Derivatives and marginal effects](28-derivatives.qmd)**: rates of change, partial effects, and
+  pairwise comparisons for smooth terms.
 - **[Diagnostics](07-diagnostics.qmd)**: residual plots, `gam_check()`, and basis dimension checks.
 - **[Model fitting](05-fitting.qmd)**: how P-IRLS works, GCV vs. REML, and convergence settings.
 - **[Response families](04-families.qmd)**: all supported distributions and their link functions.
