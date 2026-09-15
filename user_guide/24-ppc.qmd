@@ -177,6 +177,8 @@ Binomial model may not capture.
 
 ## Where to go next
 
+- **[Posterior predictive distributions](25-posterior-predict.qmd)**: access the full predictive
+  sample for custom checks beyond the built-in statistics.
 - **[Model comparison with LOO](22-loo.qmd)**: use PSIS-LOO to compare the predictive accuracy of
   competing models, complementing PPC's adequacy perspective.
 - **[MCMC sampling](21-mcmc.qmd)**: fitting models with the No-U-Turn Sampler for exact posterior
