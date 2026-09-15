@@ -186,7 +186,7 @@ class TestWeightBehavior:
 
     def test_dominant_model_gets_weight_near_one(self):
         n = 100
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         pw_good = rng.standard_normal(n) * 0.1 - 2.0
         pw_bad = rng.standard_normal(n) * 0.1 - 10.0
         r1 = LOOResult(
@@ -273,11 +273,13 @@ class TestStackingWeightsCore:
     def test_one_model_dominates(self):
         n = 100
         rng = np.random.default_rng(7)
-        lpd = np.column_stack([
-            rng.standard_normal(n) * 0.1 - 1.0,
-            rng.standard_normal(n) * 0.1 - 5.0,
-            rng.standard_normal(n) * 0.1 - 10.0,
-        ])
+        lpd = np.column_stack(
+            [
+                rng.standard_normal(n) * 0.1 - 1.0,
+                rng.standard_normal(n) * 0.1 - 5.0,
+                rng.standard_normal(n) * 0.1 - 10.0,
+            ]
+        )
         weights = _stacking_weights(lpd)
 
         assert weights[0] > 0.9
