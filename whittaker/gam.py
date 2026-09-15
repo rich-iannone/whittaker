@@ -24,10 +24,10 @@ from whittaker.model_matrix import ModelMatrix, build_model_matrix, predict_matr
 class PredictionResult:
     """Container returned by `GAM.predict()` for `type="response"` or `type="link"`.
 
-    Bundles the point predictions together with their optional standard errors and interval
-    bounds so that all quantities produced by a single `predict()` call travel together. Use
-    `values` for the predictions themselves; the other attributes are populated only when the
-    corresponding arguments (`se=True`, `interval=...`) were requested.
+    Bundles the point predictions together with their optional standard errors and interval bounds
+    so that all quantities produced by a single `predict()` call travel together. Use `values` for
+    the predictions themselves; the other attributes are populated only when the corresponding
+    arguments (`se=True`, `interval=...`) were requested.
 
     Attributes
     ----------
@@ -35,8 +35,8 @@ class PredictionResult:
         Predicted values, shape `(n,)`. On the response scale (`mu`) when `type="response"`, or on
         the linear predictor scale (`eta`) when `type="link"`.
     se : numpy.ndarray or None
-        Standard errors of the linear predictor, shape `(n,)`. `None` unless `se=True` was passed
-        to `predict()`.
+        Standard errors of the linear predictor, shape `(n,)`. `None` unless `se=True` was passed to
+        `predict()`.
     linear_predictor : numpy.ndarray
         Predictions on the linear predictor scale, shape `(n,)`. Always populated, regardless of
         `type`, so that the response-scale mean can be recovered via the link function.
@@ -99,8 +99,8 @@ class PosteriorPredictResult:
     Attributes
     ----------
     samples : numpy.ndarray
-        Posterior predictive draws, shape `(n, n_draws)`. Each column is one draw from the
-        posterior predictive distribution (coefficient uncertainty *plus* observation noise).
+        Posterior predictive draws, shape `(n, n_draws)`. Each column is one draw from the posterior
+        predictive distribution (coefficient uncertainty *plus* observation noise).
     """
 
     samples: NDArray
@@ -152,6 +152,70 @@ class PosteriorPredictResult:
 
     def __repr__(self) -> str:
         return f"PosteriorPredictResult(n_obs={self.n_obs}, n_draws={self.n_draws})"
+
+
+@dataclass
+class GoodnessOfFit:
+    """Goodness-of-fit statistics returned by `GAM.goodness_of_fit()`.
+
+    Bundles all fit-quality metrics into a single object so they can be inspected, compared, or
+    logged without calling each property individually.
+
+    Attributes
+    ----------
+    deviance : float
+        Model deviance at convergence.
+    null_deviance : float
+        Deviance of the intercept-only model.
+    deviance_explained : float
+        Proportion of null deviance explained, in `[0, 1]`.
+    r_squared_adj : float
+        Adjusted R-squared, accounting for model complexity via the effective degrees of freedom.
+    aic : float
+        Akaike Information Criterion.
+    bic : float
+        Bayesian Information Criterion.
+    gcv_score : float or None
+        GCV score. `None` for Bayesian fits (VI, MCMC).
+    scale : float
+        Estimated scale (dispersion) parameter.
+    edf_total : float
+        Total effective degrees of freedom.
+    n_obs : int
+        Number of observations.
+    """
+
+    deviance: float
+    null_deviance: float
+    deviance_explained: float
+    r_squared_adj: float
+    aic: float
+    bic: float
+    gcv_score: float | None
+    scale: float
+    edf_total: float
+    n_obs: int
+
+    def __repr__(self) -> str:
+        lines = [
+            "GoodnessOfFit",
+            f"  Deviance:          {self.deviance:.4f}",
+            f"  Null deviance:     {self.null_deviance:.4f}",
+            f"  Deviance explained: {self.deviance_explained:.1%}",
+            f"  Adj. R-squared:    {self.r_squared_adj:.4f}",
+            f"  AIC:               {self.aic:.2f}",
+            f"  BIC:               {self.bic:.2f}",
+        ]
+        if self.gcv_score is not None:
+            lines.append(f"  GCV:               {self.gcv_score:.6f}")
+        lines.extend(
+            [
+                f"  Scale:             {self.scale:.6f}",
+                f"  EDF total:         {self.edf_total:.2f}",
+                f"  Observations:      {self.n_obs}",
+            ]
+        )
+        return "\n".join(lines)
 
 
 @dataclass
@@ -1305,6 +1369,46 @@ class GAM:
             return -2.0 * ll + np.log(n) * self._fit_result.edf_total
         assert self._fit_result.bic is not None
         return self._fit_result.bic
+
+    def goodness_of_fit(self) -> GoodnessOfFit:
+        """Return all goodness-of-fit statistics in a single object.
+
+        Collects deviance, null deviance, deviance explained, adjusted R-squared, AIC, BIC, GCV
+        (when available), scale, EDF, and the number of observations into a `GoodnessOfFit`
+        dataclass. This is a convenience method that avoids calling each property individually.
+
+        The adjusted R-squared is computed as
+        `1 - (1 - deviance_explained) * (n - 1) / (n - edf_total - 1)`, generalizing the classical
+        formula by using the effective degrees of freedom in place of the raw parameter count.
+
+        Returns
+        -------
+        GoodnessOfFit
+        """
+        self._check_fitted()
+        n = self._model_matrix.X.shape[0]
+        dev_expl = self.deviance_explained
+        edf_tot = self.edf_total
+        denom = n - edf_tot - 1.0
+        r_sq_adj = 1.0 - (1.0 - dev_expl) * (n - 1.0) / denom if denom > 0 else float("nan")
+
+        try:
+            gcv = self.gcv_score
+        except NotImplementedError:
+            gcv = None
+
+        return GoodnessOfFit(
+            deviance=self.deviance,
+            null_deviance=self.null_deviance,
+            deviance_explained=dev_expl,
+            r_squared_adj=r_sq_adj,
+            aic=self.aic,
+            bic=self.bic,
+            gcv_score=gcv,
+            scale=self.scale,
+            edf_total=edf_tot,
+            n_obs=n,
+        )
 
     def _posterior_mean_log_likelihood(self) -> float:
         y = self._model_matrix.response
