@@ -333,6 +333,8 @@ assumptions using the diagnostic tools on this page.
   process, which is the most common fix when diagnostics reveal distributional problems.
 - **[Posterior predictive checks](24-ppc.qmd)**: a complementary diagnostic that tests whether the
   model generates realistic data.
+- **[Advanced diagnostics](29-advanced-diagnostics.qmd)**: influence, concurvity, dispersion tests,
+  and quantile residuals for deeper model checking.
 - **[Smoothing parameter sensitivity](27-sensitivity.qmd)**: check how much predictions change as
   smoothing parameters vary, to assess robustness of conclusions.
 - **[Prediction and inference](06-prediction.qmd)**: confidence intervals and term-level
