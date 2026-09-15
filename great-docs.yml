@@ -48,6 +48,7 @@ nav_icons:
     "Derivatives and marginal effects": trending-up
     "Advanced diagnostics": search
     "ANOVA for GAMs": git-compare
+    "Model comparison with compare()": scale
     "Posterior predictive checks": check-circle
     "Saving and loading models": save
     "Glossary": book-open
