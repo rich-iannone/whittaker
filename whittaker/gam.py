@@ -2,6 +2,7 @@ r"""Top-level GAM class: the primary user-facing API."""
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import Any, cast
 
@@ -215,6 +216,83 @@ class GoodnessOfFit:
                 f"  Observations:      {self.n_obs}",
             ]
         )
+        return "\n".join(lines)
+
+
+@dataclass
+class SensitivityResult:
+    """Result of a smoothing-parameter sensitivity analysis.
+
+    Shows how predictions and fit statistics change as the smoothing parameters are scaled by a
+    set of multipliers around their estimated (or fixed) values. Each row corresponds to one
+    multiplier value applied uniformly to all smoothing parameters.
+
+    Attributes
+    ----------
+    multipliers : NDArray
+        Multiplier values used, shape `(n_steps,)`.
+    predictions : NDArray
+        Fitted values at each multiplier, shape `(n_steps, n_obs)`.
+    edf_total : NDArray
+        Total effective degrees of freedom at each step, shape `(n_steps,)`.
+    deviance_explained : NDArray
+        Deviance explained at each step, shape `(n_steps,)`.
+    gcv_scores : NDArray
+        GCV score at each step, shape `(n_steps,)`.
+    aic_values : NDArray
+        AIC at each step, shape `(n_steps,)`.
+    smoothing_params : NDArray
+        Actual smoothing parameters used, shape `(n_steps, n_penalties)`.
+    baseline_idx : int
+        Index into `multipliers` corresponding to the original fit (multiplier closest to 1).
+    """
+
+    multipliers: NDArray
+    predictions: NDArray
+    edf_total: NDArray
+    deviance_explained: NDArray
+    gcv_scores: NDArray
+    aic_values: NDArray
+    smoothing_params: NDArray
+    baseline_idx: int
+
+    @property
+    def n_steps(self) -> int:
+        """Number of multiplier steps."""
+        return len(self.multipliers)
+
+    @property
+    def n_obs(self) -> int:
+        """Number of observations."""
+        return self.predictions.shape[1]
+
+    @property
+    def baseline_predictions(self) -> NDArray:
+        """Predictions at the baseline (original) smoothing parameters."""
+        return self.predictions[self.baseline_idx]
+
+    def max_abs_change(self) -> NDArray:
+        """Maximum absolute prediction change relative to baseline, per step.
+
+        Returns
+        -------
+        NDArray
+            Shape `(n_steps,)`. The entry at `baseline_idx` is zero.
+        """
+        return np.max(np.abs(self.predictions - self.baseline_predictions), axis=1)
+
+    def __repr__(self) -> str:
+        baseline_mult = self.multipliers[self.baseline_idx]
+        lo, hi = self.multipliers[0], self.multipliers[-1]
+        mac = self.max_abs_change()
+        worst = float(np.max(mac))
+        edf_range = (float(np.min(self.edf_total)), float(np.max(self.edf_total)))
+        lines = [
+            f"SensitivityResult({self.n_steps} steps, {self.n_obs} observations)",
+            f"  Multiplier range:    [{lo:.4g}, {hi:.4g}] (baseline={baseline_mult:.4g})",
+            f"  EDF range:           [{edf_range[0]:.1f}, {edf_range[1]:.1f}]",
+            f"  Max |prediction change|: {worst:.4g}",
+        ]
         return "\n".join(lines)
 
 
@@ -1408,6 +1486,102 @@ class GAM:
             scale=self.scale,
             edf_total=edf_tot,
             n_obs=n,
+        )
+
+    def smoothing_sensitivity(
+        self,
+        new_data: InputData | None = None,
+        *,
+        multipliers: Sequence[float] | None = None,
+        n_steps: int = 11,
+        log_range: tuple[float, float] = (-2.0, 2.0),
+    ) -> SensitivityResult:
+        """Sweep smoothing parameters and record how predictions and fit statistics change.
+
+        Re-fits the model at each multiplier value, scaling *all* smoothing parameters uniformly.
+        This reveals how sensitive the predictions are to the specific smoothing-parameter values
+        chosen by the fitting criterion (GCV, REML, or ML).
+
+        Parameters
+        ----------
+        new_data : dict[str, numpy.ndarray] or None
+            Data at which to evaluate predictions. If `None`, uses the training data.
+        multipliers : sequence of float or None
+            Explicit multiplier values. If `None`, `n_steps` values are generated log-uniformly over
+            `log_range`.
+        n_steps : int
+            Number of log-spaced multiplier values when `multipliers` is `None`.
+        log_range : tuple[float, float]
+            `(lo, hi)` on the log10 scale for auto-generated multipliers. The default `(-2, 2)`
+            sweeps from 0.01x to 100x.
+
+        Returns
+        -------
+        SensitivityResult
+
+        Examples
+        --------
+        ```{python}
+        import numpy as np
+        import whittaker as wk
+
+        rng = np.random.default_rng(0)
+        x = np.linspace(0, 2 * np.pi, 200)
+        y = np.sin(x) + rng.normal(0, 0.3, 200)
+        model = wk.GAM("y ~ s(x)").fit({"x": x, "y": y})
+
+        sens = model.smoothing_sensitivity()
+        print(sens)
+        ```
+        """
+        self._check_fitted()
+
+        if isinstance(self._fit_result, (VIResult, MCMCResult)):
+            raise NotImplementedError(
+                "smoothing_sensitivity() is only available for frequentist fits (GCV, REML, ML)."
+            )
+
+        baseline_sp = self.smoothing_params
+
+        if multipliers is not None:
+            mults = np.asarray(multipliers, dtype=float)
+        else:
+            mults = np.logspace(log_range[0], log_range[1], n_steps)
+
+        baseline_idx = int(np.argmin(np.abs(np.log10(mults))))
+
+        pred_data: InputData | None = new_data
+
+        all_predictions = []
+        all_edf = []
+        all_dev_expl = []
+        all_gcv = []
+        all_aic = []
+        all_sp = []
+
+        for mult in mults:
+            sp = [float(mult * s) for s in baseline_sp]
+
+            tmp = GAM(self._formula, family=self._family)
+            tmp.fit(self._data, smoothing_params=sp)
+
+            pred = tmp.predict(pred_data if pred_data is not None else self._data)
+            all_predictions.append(pred.values)
+            all_edf.append(tmp.edf_total)
+            all_dev_expl.append(tmp.deviance_explained)
+            all_gcv.append(tmp.gcv_score)
+            all_aic.append(tmp.aic)
+            all_sp.append(sp)
+
+        return SensitivityResult(
+            multipliers=mults,
+            predictions=np.array(all_predictions),
+            edf_total=np.array(all_edf),
+            deviance_explained=np.array(all_dev_expl),
+            gcv_scores=np.array(all_gcv),
+            aic_values=np.array(all_aic),
+            smoothing_params=np.array(all_sp),
+            baseline_idx=baseline_idx,
         )
 
     def _posterior_mean_log_likelihood(self) -> float:
