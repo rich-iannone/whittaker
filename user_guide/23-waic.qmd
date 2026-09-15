@@ -148,6 +148,8 @@ w = model.waic()
 
 ## Where to go next
 
+- **[Model averaging with stacking](26-stacking.qmd)**: combine multiple models using optimal
+  stacking weights computed from LOO or WAIC results.
 - **[Model comparison with LOO](22-loo.qmd)**: PSIS-LOO with per-observation Pareto $k$ diagnostics.
 - **[Posterior predictive checks](24-ppc.qmd)**: assess whether the model generates realistic data.
 - **[MCMC sampling](21-mcmc.qmd)**: fitting models with the No-U-Turn Sampler.
