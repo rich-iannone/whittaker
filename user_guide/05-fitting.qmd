@@ -623,6 +623,8 @@ After calling `model.fit()`, the following attributes are available:
   and term-level predictions from a fitted model.
 - **[Model diagnostics](07-diagnostics.qmd)**: residual plots, k-index tests, and
   `model.check()`.
+- **[Smoothing parameter sensitivity](27-sensitivity.qmd)**: verify that predictions are robust to
+  the specific smoothing parameters chosen by REML, GCV, or ML.
 - **[Variational inference](20-variational-inference.qmd)**: a principled Bayesian posterior
   for non-Gaussian families, using `method="VI"`.
 - **[Smooth terms](03-smooths.qmd)**: choosing the right basis and basis dimension.
