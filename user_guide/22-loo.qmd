@@ -183,6 +183,8 @@ MCMC fits with more draws produce more stable LOO estimates and better Pareto $k
 
 ## Where to go next
 
+- **[Model averaging with stacking](26-stacking.qmd)**: combine multiple models using optimal
+  stacking weights computed from LOO or WAIC results.
 - **[Model comparison with WAIC](23-waic.qmd)**: a cheaper alternative to LOO that uses the
   variance of the log-likelihood instead of importance sampling.
 - **[Posterior predictive checks](24-ppc.qmd)**: assess whether a model generates data that looks
