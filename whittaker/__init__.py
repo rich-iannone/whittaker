@@ -55,6 +55,7 @@ from whittaker.functional import CoefficientFunction, FunctionalGAM, FunctionalT
 from whittaker.gam import (
     GAM,
     GamCheckResult,
+    GoodnessOfFit,
     PosteriorPredictResult,
     PredictionResult,
     TermsPredictionResult,
@@ -104,6 +105,7 @@ __all__ = [
     "PosteriorPredictResult",
     "TermsPredictionResult",
     "GamCheckResult",
+    "GoodnessOfFit",
     # Formula
     "Formula",
     "SmoothTerm",
