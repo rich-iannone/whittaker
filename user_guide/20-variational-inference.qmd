@@ -276,6 +276,8 @@ and use posterior predictive checks (via `simulate()`) for model comparison.
 
 - **[Model comparison with LOO](22-loo.qmd)**: use PSIS-LOO to compare the predictive accuracy of
   competing Bayesian GAM fits.
+- **[Posterior predictive distributions](25-posterior-predict.qmd)**: the full predictive
+  distribution at new data points, including observation noise.
 - **[Posterior predictive checks](24-ppc.qmd)**: assess whether a model generates data consistent
   with the observations.
 - **[MCMC sampling](21-mcmc.qmd)**: exact posterior inference via the No-U-Turn Sampler, for when
