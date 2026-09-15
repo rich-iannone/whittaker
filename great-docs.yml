@@ -49,6 +49,10 @@ nav_icons:
     "Advanced diagnostics": search
     "ANOVA for GAMs": git-compare
     "Model comparison with compare()": scale
+    "Simultaneous confidence bands": shield
+    "Programmatic formula construction": code
+    "scikit-learn integration": puzzle
+    "Built-in datasets": package
     "Posterior predictive checks": check-circle
     "Saving and loading models": save
     "Glossary": book-open
