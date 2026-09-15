@@ -51,7 +51,13 @@ from whittaker.fitting.waic import WAICComparison, WAICResult, waic_compare
 from whittaker.formula import Formula, InteractionTerm, LinearTerm, OffsetTerm, SmoothTerm
 from whittaker.formula import parse as parse_formula
 from whittaker.functional import CoefficientFunction, FunctionalGAM, FunctionalTerm
-from whittaker.gam import GAM, GamCheckResult, PredictionResult, TermsPredictionResult
+from whittaker.gam import (
+    GAM,
+    GamCheckResult,
+    PosteriorPredictResult,
+    PredictionResult,
+    TermsPredictionResult,
+)
 from whittaker.gamlss import GAMLSS, GAMLSSPrediction
 from whittaker.io import from_mgcv_dict, load_gam, save_gam, to_mgcv_dict
 from whittaker.model_matrix import ModelMatrix, SmoothInfo, build_model_matrix, predict_matrix
@@ -94,6 +100,7 @@ __all__ = [
     # Core model
     "GAM",
     "PredictionResult",
+    "PosteriorPredictResult",
     "TermsPredictionResult",
     "GamCheckResult",
     # Formula
