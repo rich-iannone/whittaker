@@ -43,6 +43,7 @@ nav_icons:
     "Model comparison with LOO": scale
     "Model comparison with WAIC": scale
     "Posterior predictive distributions": bar-chart-2
+    "Model averaging with stacking": layers
     "Posterior predictive checks": check-circle
     "Saving and loading models": save
     "Glossary": book-open
