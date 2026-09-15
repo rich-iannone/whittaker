@@ -55,6 +55,48 @@ print(f"Scale (sigma^2):   {model.scale:.4f}")
 print(f"Deviance:          {model.deviance:.2f}")
 ```
 
+## Goodness of fit
+
+Rather than accessing each fit statistic individually, the `goodness_of_fit()` method returns a
+single `GoodnessOfFit` object that bundles together the most commonly used measures of model
+quality. This is especially convenient when you want a quick snapshot of how well the model fits the
+data, or when comparing several models side by side.
+
+```{python}
+gof = model.goodness_of_fit()
+print(gof)
+```
+
+The printed summary includes deviance explained, adjusted $R^2$, AIC, BIC, GCV (when available), the
+scale estimate, and the total effective degrees of freedom. Adjusted $R^2$ penalizes for model
+complexity using the effective degrees of freedom rather than the raw parameter count, so it gives a
+fairer comparison between models of different flexibility:
+
+$$R^2_{\text{adj}} = 1 - (1 - R^2) \cdot \frac{n - 1}{n - \text{EDF} - 1}$$
+
+Each field is accessible as a plain attribute, which makes it straightforward to build comparison
+tables or apply decision rules programmatically:
+
+```{python}
+print(f"Deviance explained: {gof.deviance_explained:.1%}")
+print(f"Adjusted R-squared: {gof.r_squared_adj:.4f}")
+print(f"AIC:                {gof.aic:.2f}")
+print(f"BIC:                {gof.bic:.2f}")
+print(f"GCV:                {gof.gcv_score:.6f}")
+print(f"Observations:       {gof.n_obs}")
+```
+
+For Bayesian fits (VI or MCMC), the GCV score is not applicable and is reported as `None`. All other
+fields remain available.
+
+::: {.callout-tip}
+## Comparing models with goodness of fit
+
+When comparing two or more models, collect each one's `GoodnessOfFit` and compare the metrics that
+matter for your goal. Lower AIC or BIC favors predictive accuracy with a complexity penalty. Higher
+deviance explained and adjusted $R^2$ indicate better in-sample fit.
+:::
+
 ## Basis dimension adequacy
 
 The basis dimension $k$ sets the maximum complexity of each smooth. If $k$ is too small, the model
@@ -264,10 +306,12 @@ sine components. The `check()` method correctly flagged the k=5 model.
 A good diagnostic workflow after fitting any GAM:
 
 1. **`model.summary()`**: check that EDF values make sense, deviance explained is reasonable
-2. **`wk.check(model)`**: verify basis dimensions are adequate (k-index test)
-3. **Residuals vs. fitted**: check for patterns indicating wrong family or missing terms
-4. **QQ plot**: check the distributional assumption
-5. **If any diagnostic fails**: consider increasing `k`, changing the family, adding terms, or
+2. **`model.goodness_of_fit()`**: get a compact snapshot of AIC, BIC, adjusted $R^2$, and other
+   quality metrics in one call
+3. **`wk.check(model)`**: verify basis dimensions are adequate (k-index test)
+4. **Residuals vs. fitted**: check for patterns indicating wrong family or missing terms
+5. **QQ plot**: check the distributional assumption
+6. **If any diagnostic fails**: consider increasing `k`, changing the family, adding terms, or
    restructuring the model
 
 ::: {.callout-tip}
