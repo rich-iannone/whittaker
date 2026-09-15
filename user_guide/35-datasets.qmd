@@ -1,0 +1,202 @@
+---
+title: "Built-in datasets"
+guide-section: "Getting started"
+---
+
+```{python}
+#| echo: false
+#| output: false
+import great_docs as gd
+
+gd.enable_tbl_preview(n_head=8, n_tail=3)
+```
+
+Whittaker ships with 10 synthetic datasets covering a range of response families and modeling
+scenarios. They are generated with fixed random seeds, so they are fully reproducible without
+internet access or optional dependencies. Use them for quick demonstrations, testing, and learning.
+
+## Listing available datasets
+
+`list_datasets()` returns metadata for every built-in dataset:
+
+```{python}
+import whittaker as wk
+
+for ds in wk.list_datasets():
+    print(f"{ds['name']:>14}  {ds['family']:<12}  {ds['description']}")
+```
+
+Each entry includes the dataset `name`, a short `description`, the intended response `family`,
+the `variables` it contains, and a `note` about what modeling scenario it illustrates.
+
+## Loading a dataset
+
+`load_dataset()` returns a column-oriented dictionary that can be passed directly to `GAM.fit()`:
+
+```{python}
+data = wk.load_dataset("mcycle")
+
+print(f"Type: {type(data)}")
+print(f"Keys: {list(data.keys())}")
+print(f"Observations: {len(data['times'])}")
+```
+
+```{python}
+model = wk.GAM("accel ~ s(times)").fit(data)
+model.summary()
+```
+
+### Loading as a DataFrame
+
+Pass `as_frame=True` to get a pandas DataFrame instead (requires pandas):
+
+```{python}
+df = wk.load_dataset("wages", as_frame=True)
+df.head()
+```
+
+## Dataset catalog
+
+### mcycle — Gaussian, heteroscedastic
+
+Simulated motorcycle-crash accelerometer data (n=133). Head acceleration measured at various times
+after impact. Strongly non-linear and heteroscedastic — a standard stress test for smoothing.
+
+```{python}
+data = wk.load_dataset("mcycle")
+model = wk.GAM("accel ~ s(times)").fit(data)
+gof = model.goodness_of_fit()
+print(f"EDF: {gof.edf_total:.1f}, Dev. explained: {gof.deviance_explained:.1%}")
+```
+
+### co2 — Gaussian, trend + seasonal
+
+Synthetic monthly CO2 concentrations (n=504, 1958–1999) with a rising trend and annual cycle. Good
+for cyclic smooths and additive decomposition.
+
+```{python}
+data = wk.load_dataset("co2")
+model = wk.GAM("co2 ~ s(t) + s(month, bs='cc', k=12)").fit(data, method="REML")
+gof = model.goodness_of_fit()
+print(f"EDF: {gof.edf_total:.1f}, Dev. explained: {gof.deviance_explained:.1%}")
+```
+
+### fish — Poisson counts
+
+Fish-abundance survey (n=300) with a hump-shaped temperature effect and a linear depth effect.
+
+```{python}
+from whittaker.families.poisson import Poisson
+
+data = wk.load_dataset("fish")
+model = wk.GAM("count ~ s(temperature) + s(depth)", family=Poisson()).fit(data)
+gof = model.goodness_of_fit()
+print(f"EDF: {gof.edf_total:.1f}, Dev. explained: {gof.deviance_explained:.1%}")
+```
+
+### credit — Binomial (binary)
+
+Credit-default dataset (n=1000) with smooth effects of income and debt ratio on default probability.
+
+```{python}
+from whittaker.families.binomial import Binomial
+
+data = wk.load_dataset("credit")
+model = wk.GAM("default ~ s(income) + s(debt_ratio) + s(age)", family=Binomial()).fit(data)
+gof = model.goodness_of_fit()
+print(f"EDF: {gof.edf_total:.1f}, Dev. explained: {gof.deviance_explained:.1%}")
+```
+
+### wages — Gamma
+
+Worker-earnings dataset (n=800) with log-wages shaped by smooth age and experience effects.
+
+```{python}
+from whittaker.families.gamma import Gamma
+
+data = wk.load_dataset("wages")
+model = wk.GAM("wage ~ s(age) + s(experience)", family=Gamma()).fit(data)
+gof = model.goodness_of_fit()
+print(f"EDF: {gof.edf_total:.1f}, Dev. explained: {gof.deviance_explained:.1%}")
+```
+
+### proportions — Beta
+
+Seed-germination dataset (n=400) with a bounded `[0, 1]` response and a non-linear temperature
+optimum.
+
+```{python}
+from whittaker.families.beta import Beta
+
+data = wk.load_dataset("proportions")
+model = wk.GAM("germination_rate ~ s(temperature) + s(water)", family=Beta()).fit(data)
+gof = model.goodness_of_fit()
+print(f"EDF: {gof.edf_total:.1f}, Dev. explained: {gof.deviance_explained:.1%}")
+```
+
+### meuse — Gaussian, spatial
+
+River-bank heavy-metals dataset (n=155) with map coordinates. Log(zinc) decreases with distance
+from the river. Good for 2D spatial smooths.
+
+```{python}
+import numpy as np
+
+data = wk.load_dataset("meuse")
+data["log_zinc"] = np.log(data["zinc"])
+model = wk.GAM("log_zinc ~ s(x, y) + s(dist)").fit(data, method="REML")
+gof = model.goodness_of_fit()
+print(f"EDF: {gof.edf_total:.1f}, Dev. explained: {gof.deviance_explained:.1%}")
+```
+
+### survival — Cox PH
+
+Clinical-trial survival dataset (n=250) with a smooth age effect and a binary treatment arm.
+Approximately 30% censored.
+
+```{python}
+from whittaker.families.cox_ph import CoxPH
+
+data = wk.load_dataset("survival")
+model = wk.GAM("time ~ s(age) + treatment", family=CoxPH(status="event")).fit(data)
+print(f"EDF: {model.goodness_of_fit().edf_total:.1f}")
+```
+
+### abalone — Gaussian, multi-predictor
+
+Abalone morphology dataset (n=500) with four predictors and a ring count response. Good for
+tensor products and multi-term additive models.
+
+```{python}
+data = wk.load_dataset("abalone")
+model = wk.GAM("rings ~ s(length) + s(shucked_weight)").fit(data)
+gof = model.goodness_of_fit()
+print(f"EDF: {gof.edf_total:.1f}, Dev. explained: {gof.deviance_explained:.1%}")
+```
+
+### climate — GaussianLS (location-scale)
+
+Climate station dataset (n=600) where both the mean and variance of temperature depend on altitude
+and latitude. Designed for GAMLSS location-scale modeling.
+
+```{python}
+data = wk.load_dataset("climate")
+model = wk.GAM("temperature ~ s(altitude) + s(latitude) + s(month, bs='cc', k=12)").fit(
+    data, method="REML"
+)
+gof = model.goodness_of_fit()
+print(f"EDF: {gof.edf_total:.1f}, Dev. explained: {gof.deviance_explained:.1%}")
+```
+
+::: {.callout-tip}
+## GAMLSS with the climate dataset
+
+For the full location-scale analysis, see [Distributional regression (GAMLSS)](10-gamlss.qmd),
+which models both the mean and variance as smooth functions of the predictors.
+:::
+
+## Where to go next
+
+- **[Quick start](02-quick-start.qmd)**: fitting your first model.
+- **[Response families](04-families.qmd)**: choosing the right family for your data.
+- **[Data input](08-data-input.qmd)**: using your own data with pandas, polars, or pyarrow.
