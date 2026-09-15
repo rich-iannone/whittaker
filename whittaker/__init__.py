@@ -58,6 +58,7 @@ from whittaker.gam import (
     GoodnessOfFit,
     PosteriorPredictResult,
     PredictionResult,
+    SensitivityResult,
     TermsPredictionResult,
 )
 from whittaker.gamlss import GAMLSS, GAMLSSPrediction
@@ -106,6 +107,7 @@ __all__ = [
     "TermsPredictionResult",
     "GamCheckResult",
     "GoodnessOfFit",
+    "SensitivityResult",
     # Formula
     "Formula",
     "SmoothTerm",
