@@ -90,6 +90,71 @@ class TermsPredictionResult:
 
 
 @dataclass
+class PosteriorPredictResult:
+    """Container returned by `GAM.posterior_predict()`.
+
+    Holds the full `(n, n_draws)` posterior predictive sample matrix and provides convenience
+    methods for computing quantile summaries, means, and intervals.
+
+    Attributes
+    ----------
+    samples : numpy.ndarray
+        Posterior predictive draws, shape `(n, n_draws)`. Each column is one draw from the
+        posterior predictive distribution (coefficient uncertainty *plus* observation noise).
+    """
+
+    samples: NDArray
+
+    @property
+    def n_obs(self) -> int:
+        """Number of prediction points."""
+        return self.samples.shape[0]
+
+    @property
+    def n_draws(self) -> int:
+        """Number of posterior draws."""
+        return self.samples.shape[1]
+
+    def mean(self) -> NDArray:
+        """Posterior predictive mean at each observation, shape `(n,)`."""
+        return np.mean(self.samples, axis=1)
+
+    def std(self) -> NDArray:
+        """Posterior predictive standard deviation at each observation, shape `(n,)`."""
+        return np.std(self.samples, axis=1, ddof=1)
+
+    def quantile(self, q: float | list[float]) -> NDArray:
+        """Compute quantile(s) of the posterior predictive distribution.
+
+        Parameters
+        ----------
+        q:
+            Quantile(s) in [0, 1]. A scalar returns shape `(n,)`; a list returns `(len(q), n)`.
+        """
+        return np.quantile(self.samples, q, axis=1)
+
+    def interval(self, level: float = 0.95) -> tuple[NDArray, NDArray]:
+        """Equal-tailed posterior predictive interval.
+
+        Parameters
+        ----------
+        level:
+            Coverage probability (default 0.95).
+
+        Returns
+        -------
+        tuple[NDArray, NDArray]
+            `(lower, upper)` arrays, each of shape `(n,)`.
+        """
+        alpha = (1.0 - level) / 2.0
+        lower, upper = self.quantile([alpha, 1.0 - alpha])
+        return lower, upper
+
+    def __repr__(self) -> str:
+        return f"PosteriorPredictResult(n_obs={self.n_obs}, n_draws={self.n_draws})"
+
+
+@dataclass
 class GamCheckResult:
     """Container returned by `GAM.gam_check()`, bundling residual diagnostics with fit summary
     statistics and basis-dimension adequacy checks.
@@ -1483,6 +1548,75 @@ class GAM:
             return result
 
         return mu
+
+    def posterior_predict(
+        self,
+        new_data: InputData | None = None,
+        *,
+        n_draws: int = 1000,
+        seed: int | None = None,
+    ) -> PosteriorPredictResult:
+        """Draw from the posterior predictive distribution at new data points.
+
+        Generates the full `(n, n_draws)` posterior predictive sample by:
+
+        1. drawing coefficient vectors from the posterior (or Laplace approximation).
+        2. computing the linear predictor η = X @ β* (+ offset if present).
+        3. transforming to the response scale: μ = g⁻¹(η).
+        4. sampling observation noise from the family distribution at each μ.
+
+        The result includes both coefficient uncertainty and observation-level noise, giving the
+        distribution of *new observations* rather than of the conditional mean.
+
+        Parameters
+        ----------
+        new_data:
+            Column-oriented data for prediction. If `None`, uses the training data.
+        n_draws:
+            Number of posterior draws (the default is `1000`).
+        seed:
+            Random seed for reproducibility.
+
+        Returns
+        -------
+        PosteriorPredictResult
+            Object with the `(n, n_draws)` sample matrix and convenience methods for `mean()`,
+            `std()`, `quantile()`, and `interval()`.
+
+        Examples
+        --------
+        Draw 2000 posterior predictive samples at five new points and compute the posterior
+        predictive mean:
+
+        ```{python}
+        import numpy as np
+        from whittaker import GAM
+
+        rng = np.random.default_rng(0)
+        x = np.sort(rng.uniform(0, 10, 200))
+        y = np.sin(x) + rng.normal(scale=0.2, size=200)
+
+        model = GAM("y ~ s(x)").fit({"x": x, "y": y}, method="VI")
+        x_new = np.linspace(0, 10, 5)
+        pp = model.posterior_predict({"x": x_new}, n_draws=2000, seed=42)
+        pp.mean()
+        ```
+
+        The 95% equal-tailed posterior predictive interval:
+
+        ```{python}
+        lower, upper = pp.interval()
+        lower, upper
+        ```
+
+        The posterior predictive median:
+
+        ```{python}
+        pp.quantile(0.5)
+        ```
+        """
+        y_rep = self.simulate(new_data, unconditional=True, n_sim=n_draws, seed=seed)
+        return PosteriorPredictResult(samples=y_rep)
 
     def loo(self, n_draws: int = 2000, *, seed: int | None = None) -> object:
         """Compute PSIS-LOO cross-validation for a Bayesian fit.
