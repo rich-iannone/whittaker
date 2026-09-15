@@ -47,6 +47,7 @@ from whittaker.families import (
 )
 from whittaker.fitting.loo import LOOComparison, LOOResult, loo_compare
 from whittaker.fitting.ppc import PPCResult
+from whittaker.fitting.stacking import StackingResult, stacking
 from whittaker.fitting.waic import WAICComparison, WAICResult, waic_compare
 from whittaker.formula import Formula, InteractionTerm, LinearTerm, OffsetTerm, SmoothTerm
 from whittaker.formula import parse as parse_formula
@@ -197,6 +198,8 @@ __all__ = [
     "waic_compare",
     "WAICResult",
     "WAICComparison",
+    "stacking",
+    "StackingResult",
     "PPCResult",
     # scikit-learn integration
     "GAMRegressor",
