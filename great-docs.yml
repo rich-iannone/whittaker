@@ -45,6 +45,9 @@ nav_icons:
     "Posterior predictive distributions": bar-chart-2
     "Model averaging with stacking": layers
     "Smoothing parameter sensitivity": sliders-horizontal
+    "Derivatives and marginal effects": trending-up
+    "Advanced diagnostics": search
+    "ANOVA for GAMs": git-compare
     "Posterior predictive checks": check-circle
     "Saving and loading models": save
     "Glossary": book-open
