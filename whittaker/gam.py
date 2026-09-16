@@ -297,6 +297,56 @@ class SensitivityResult:
 
 
 @dataclass
+class PartialDependenceResult:
+    """Partial dependence data for one smooth term.
+
+    Contains the evaluation grid, estimated effect, standard errors, and confidence bounds for
+    a single smooth term. This is the data underlying `partial_effects()` plots, exposed as arrays
+    for custom plotting or downstream analysis.
+
+    Attributes
+    ----------
+    term : str
+        Term label (e.g. `"s(x)"`).
+    x : dict[str, NDArray]
+        Evaluation grid. For 1-D smooths, a single key mapping to a 1-D array. For 2-D smooths,
+        two keys mapping to 1-D marginal grids (use `np.meshgrid` to expand).
+    effect : NDArray
+        Estimated partial effect at each grid point, shape `(n_grid,)`.
+    se : NDArray
+        Standard errors, shape `(n_grid,)`.
+    lower : NDArray
+        Lower confidence bound, shape `(n_grid,)`.
+    upper : NDArray
+        Upper confidence bound, shape `(n_grid,)`.
+    edf : float
+        Effective degrees of freedom for this term.
+    level : float
+        Confidence level used for the bounds.
+    """
+
+    term: str
+    x: dict[str, NDArray]
+    effect: NDArray
+    se: NDArray
+    lower: NDArray
+    upper: NDArray
+    edf: float
+    level: float
+
+    @property
+    def n_grid(self) -> int:
+        """Number of evaluation points."""
+        return len(self.effect)
+
+    def __repr__(self) -> str:
+        return (
+            f"PartialDependenceResult(term={self.term!r}, n_grid={self.n_grid}, "
+            f"edf={self.edf:.1f}, level={self.level})"
+        )
+
+
+@dataclass
 class GamCheckResult:
     """Container returned by `GAM.gam_check()`, bundling residual diagnostics with fit summary
     statistics and basis-dimension adequacy checks.
@@ -1169,6 +1219,117 @@ class GAM:
             "crit_value": crit,
         }
 
+    def partial_dependence(
+        self,
+        *,
+        n_points: int = 200,
+        level: float = 0.95,
+    ) -> list[PartialDependenceResult]:
+        """Compute partial dependence data for each smooth term.
+
+        Returns the same underlying data that `partial_effects()` plots, but as structured arrays
+        rather than Altair chart objects. This is useful for custom plotting with matplotlib or
+        other libraries, or for downstream numerical analysis of the smooth effects.
+
+        Parameters
+        ----------
+        n_points:
+            Number of evenly spaced evaluation points per smooth. For 2-D smooths, each marginal
+            gets approximately `sqrt(n_points)` points.
+        level:
+            Confidence level for the bands (default `0.95`).
+
+        Returns
+        -------
+        list[PartialDependenceResult]
+            One result per smooth term, in formula order.
+        """
+        from scipy.stats import norm
+
+        from whittaker.model_matrix import SmoothInfo, _apply_constraint
+        from whittaker.plotting import _smooth_grid, _smooth_grid_2d
+
+        self._check_fitted()
+        z_val = float(norm.ppf(1.0 - (1.0 - level) / 2.0))
+
+        mm = self._model_matrix
+        beta = self._fit_result.coefficients
+        sp = self._fit_result.smoothing_params
+        scale = self._fit_result.scale
+
+        X_train = mm.X
+        p = X_train.shape[1]
+        XtX = X_train.T @ X_train
+        S_total = np.zeros_like(XtX)
+        for lam, pen in zip(sp, mm.penalties, strict=False):
+            S_total += lam * pen
+        A = XtX + S_total
+        A = (A + A.T) * 0.5
+
+        eigvals, eigvecs = np.linalg.eigh(A)
+        tol = np.max(eigvals) * p * np.finfo(float).eps
+        keep = eigvals > tol
+        eigvals_inv = np.zeros_like(eigvals)
+        eigvals_inv[keep] = 1.0 / eigvals[keep]
+
+        results: list[PartialDependenceResult] = []
+        for idx, info in enumerate(mm.smooths):
+            assert isinstance(info, SmoothInfo)
+            is_2d = len(info.term.variables) >= 2
+
+            if is_2d:
+                n_side = max(int(np.ceil(np.sqrt(n_points))), 15)
+                x1_grid, x2_grid, x_flat = _smooth_grid_2d(info, n_side)
+                B_grid = info.basis.basis_matrix(x_flat)
+                x_dict: dict[str, NDArray] = {
+                    info.term.variables[0]: x1_grid,
+                    info.term.variables[1]: x2_grid,
+                }
+                n_grid = len(x_flat)
+            else:
+                x_grid = _smooth_grid(info, n_points)
+                B_grid = info.basis.basis_matrix(x_grid)
+                x_dict = {info.term.variables[0]: x_grid}
+                n_grid = n_points
+
+            has_by = info.by_var is not None
+            if not has_by:
+                constraint = info.basis.identifiability_constraints()
+                n_constrained = info.col_end - info.col_start
+                if constraint is not None and n_constrained < info.basis.n_basis:
+                    B_grid = _apply_constraint(B_grid, constraint)
+
+            beta_j = beta[info.col_start : info.col_end]
+            f_j = B_grid @ beta_j
+
+            X_partial = np.zeros((n_grid, p))
+            X_partial[:, info.col_start : info.col_end] = B_grid
+
+            Xp_V = X_partial @ eigvecs
+            var_diag = np.sum(Xp_V**2 * eigvals_inv[np.newaxis, :], axis=1) * scale
+            se_j = np.sqrt(np.maximum(var_diag, 0.0))
+
+            edf_j = self._fit_result.edf[idx]
+
+            label = repr(info.term)
+            if info.by_level is not None:
+                label = f"{label}:{info.by_level}"
+
+            results.append(
+                PartialDependenceResult(
+                    term=label,
+                    x=x_dict,
+                    effect=f_j,
+                    se=se_j,
+                    lower=f_j - z_val * se_j,
+                    upper=f_j + z_val * se_j,
+                    edf=edf_j,
+                    level=level,
+                )
+            )
+
+        return results
+
     @property
     def coefficients(self) -> NDArray:
         r"""Estimated coefficients $\boldsymbol{\beta}$.
@@ -1697,7 +1858,7 @@ class GAM:
         Parameters
         ----------
         n_sim:
-            Number of random permutations for the p-value simulation (default `400`).
+            Number of random permutations for the p-value simulation (the default is `400`).
 
         Returns
         -------
@@ -1722,7 +1883,7 @@ class GAM:
         Parameters
         ----------
         n_sim:
-            Number of permutations for the k-check p-values (default `100`).
+            Number of permutations for the k-check p-values (the default is `100`).
 
         Returns
         -------
@@ -1765,7 +1926,7 @@ class GAM:
         new_data:
             Column-oriented data for prediction. If `None`, uses the training data.
         n_sim:
-            Number of posterior draws (default `1000`).
+            Number of posterior draws (the default is `1000`).
         seed:
             Random seed for reproducibility.
         unconditional:
@@ -1899,15 +2060,15 @@ class GAM:
     def loo(self, n_draws: int = 2000, *, seed: int | None = None) -> object:
         """Compute PSIS-LOO cross-validation for a Bayesian fit.
 
-        Uses Pareto-Smoothed Importance Sampling (Vehtari, Gelman & Gabry, 2017) to approximate
-        leave-one-out cross-validation from the existing posterior draws without refitting. Requires
-        a model fitted with `method="VI"` or `method="MCMC"`.
+        Uses Pareto-Smoothed Importance Sampling to approximate leave-one-out cross-validation from
+        the existing posterior draws without refitting. Requires a model fitted with `method="VI"`
+        or `method="MCMC"`.
 
         Parameters
         ----------
         n_draws : int
             Number of posterior draws to use. For MCMC fits, all stored draws are used when
-            `n_draws` exceeds the available count. For VI fits, samples are drawn from the Gaussian
+            `n_draws=` exceeds the available count. For VI fits, samples are drawn from the Gaussian
             posterior approximation. The default is `2000`.
         seed : int or None
             Random seed for reproducibility when sampling from the posterior (VI fits only). MCMC
@@ -2465,16 +2626,16 @@ class GAM:
     ) -> list:
         """Compute marginal (partial) effects of a variable.
 
-        Evaluates the smooth term(s) involving *variable* over a grid while
-        holding other variables at their means or at values specified via *at*.
+        Evaluates the smooth term(s) involving *variable* over a grid while holding other variables
+        at their means or at values specified via *at*.
 
         Parameters
         ----------
         variable:
             The focal covariate.
         at:
-            Dict mapping other variable names to fixed values (or lists of
-            values for a grid). Variables not listed are held at their mean.
+            Dict mapping other variable names to fixed values (or lists of values for a grid).
+            Variables not listed are held at their mean.
         n_points:
             Number of evaluation points along the variable's range.
         level:
