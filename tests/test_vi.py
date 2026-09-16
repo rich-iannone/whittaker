@@ -83,7 +83,7 @@ class TestBayesResult:
             n_iter=0,
             converged=True,
         )
-        draws = br.draw(100, seed=42)
+        draws = br.draw(100, seed=23)
 
         assert draws.shape == (p, 100)
 
@@ -278,7 +278,7 @@ class TestVISimulate:
 
     def test_posterior_samples_shape(self, poisson_data):
         model = GAM("y ~ s(x)", family=Poisson()).fit(poisson_data, method="VI")
-        samps = model.posterior_samples(n=300, seed=42)
+        samps = model.posterior_samples(n=300, seed=23)
         p = model.vi_result.posterior_cov.shape[0]
 
         assert samps.shape == (p, 300)
@@ -497,7 +497,7 @@ class TestVIPriorWeights:
 
     def test_poisson_vi_with_prior_weights(self):
         """Prior weights are passed through to the gradient computation."""
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 150
         x = np.linspace(0, 1, n)
         lam = np.exp(np.sin(2 * np.pi * x) + 1.5)
