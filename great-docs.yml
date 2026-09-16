@@ -53,6 +53,9 @@ nav_icons:
     "Programmatic formula construction": code
     "scikit-learn integration": puzzle
     "Built-in datasets": package
+    "Model matrix utilities": grid-3x3
+    "Partial dependence as data": table
+    "Diagnostic data for custom plots": clipboard-list
     "Posterior predictive checks": check-circle
     "Saving and loading models": save
     "Glossary": book-open
@@ -111,7 +114,19 @@ reference:
         members: true
       - name: TermsPredictionResult
         members: true
+      - name: PosteriorPredictResult
+        members: true
+      - name: GoodnessOfFit
+        members: true
       - name: GamCheckResult
+        members: true
+      - name: CheckDataResult
+        members: true
+      - name: SensitivityResult
+        members: true
+      - name: PartialDependenceResult
+        members: true
+      - name: SimultaneousCIResult
         members: true
 
   - title: Formula
@@ -341,6 +356,40 @@ reference:
     contents:
       - load_dataset
       - list_datasets
+
+  - title: Model comparison
+    desc: Compare fitted GAMs by information criteria, LOO-CV, WAIC, and stacking weights.
+    contents:
+      - compare
+      - name: ComparisonResult
+        members: true
+      - name: ComparisonRow
+        members: true
+      - loo_compare
+      - name: LOOResult
+        members: true
+      - name: LOOComparison
+        members: true
+      - waic_compare
+      - name: WAICResult
+        members: true
+      - name: WAICComparison
+        members: true
+      - stacking
+      - name: StackingResult
+        members: true
+
+  - title: Posterior predictive checks
+    desc: Simulate data from the posterior predictive distribution to assess model fit.
+    contents:
+      - name: PPCResult
+        members: true
+
+  - title: Plotting
+    desc: Diagnostic and partial-effect plotting functions.
+    contents:
+      - check
+      - partial_effects
 
   - title: Model matrix
     desc: Low-level model matrix construction from formulas and data.
