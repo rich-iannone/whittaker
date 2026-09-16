@@ -67,6 +67,7 @@ class TestWeightedGaussian:
         y = gaussian_data["y"]
         weighted_resid = w * (y - pred.values) ** 2
         unweighted_resid = (y - pred.values) ** 2
+
         assert (
             np.mean(weighted_resid[idx]) / np.mean(unweighted_resid[idx])
             < np.mean(weighted_resid[~np.isin(np.arange(n), idx)])
@@ -79,6 +80,7 @@ class TestWeightedGaussian:
         w = np.ones(len(gaussian_data["y"])) * 2.0
         gam = GAM("y ~ s(x)", family=Gaussian()).fit(gaussian_data, weights=w)
         result = gam.predict(gaussian_data)
+
         assert result.values.shape == (len(gaussian_data["y"]),)
         assert np.isfinite(result.values).all()
 
@@ -86,6 +88,7 @@ class TestWeightedGaussian:
         w = np.ones(len(gaussian_data["y"])) * 2.0
         gam = GAM("y ~ s(x)", family=Gaussian()).fit(gaussian_data, weights=w)
         result = gam.predict(gaussian_data, se=True)
+
         assert result.se is not None
         assert np.all(result.se >= 0)
         assert np.isfinite(result.se).all()
@@ -94,6 +97,7 @@ class TestWeightedGaussian:
         w = np.ones(len(gaussian_data["y"])) * 2.0
         gam = GAM("y ~ s(x)", family=Gaussian()).fit(gaussian_data, weights=w)
         result = gam.predict(gaussian_data, interval="confidence")
+
         assert result.lower is not None
         assert np.all(result.lower <= result.upper)
 
@@ -101,16 +105,19 @@ class TestWeightedGaussian:
         w = np.ones(len(gaussian_data["y"])) * 2.0
         gam = GAM("y ~ s(x)", family=Gaussian()).fit(gaussian_data, weights=w)
         summary = gam.summary()
+
         assert "GAM fit summary" in summary
 
     def test_deviance_explained_with_weights(self, gaussian_data):
         w = np.ones(len(gaussian_data["y"])) * 2.0
         gam = GAM("y ~ s(x)", family=Gaussian()).fit(gaussian_data, weights=w)
+
         assert 0 < gam.deviance_explained < 1
 
     def test_reml_with_weights(self, gaussian_data):
         w = np.ones(len(gaussian_data["y"])) * 2.0
         gam = GAM("y ~ s(x)", family=Gaussian()).fit(gaussian_data, weights=w, method="REML")
+
         assert gam.is_fitted
         assert np.isfinite(gam.coefficients).all()
 
@@ -120,18 +127,21 @@ class TestWeightedPoisson:
         gam_uw = GAM("y ~ s(x)", family=Poisson()).fit(poisson_data)
         w = np.ones(len(poisson_data["y"]))
         gam_w = GAM("y ~ s(x)", family=Poisson()).fit(poisson_data, weights=w)
+
         np.testing.assert_allclose(gam_w.coefficients, gam_uw.coefficients, atol=1e-8)
 
     def test_fit_with_uniform_weights_same_deviance(self, poisson_data):
         gam_uw = GAM("y ~ s(x)", family=Poisson()).fit(poisson_data)
         w = np.ones(len(poisson_data["y"]))
         gam_w = GAM("y ~ s(x)", family=Poisson()).fit(poisson_data, weights=w)
+
         np.testing.assert_allclose(gam_w.deviance, gam_uw.deviance, rtol=1e-6)
 
     def test_predict_after_weighted_fit(self, poisson_data):
         w = np.ones(len(poisson_data["y"])) * 3.0
         gam = GAM("y ~ s(x)", family=Poisson()).fit(poisson_data, weights=w)
         result = gam.predict(poisson_data)
+
         assert np.all(result.values > 0)
         assert np.isfinite(result.values).all()
 
@@ -139,6 +149,7 @@ class TestWeightedPoisson:
         w = np.ones(len(poisson_data["y"])) * 3.0
         gam = GAM("y ~ s(x)", family=Poisson()).fit(poisson_data, weights=w)
         result = gam.predict(poisson_data, se=True)
+
         assert result.se is not None
         assert np.isfinite(result.se).all()
 
@@ -146,6 +157,7 @@ class TestWeightedPoisson:
         w = np.ones(len(poisson_data["y"])) * 3.0
         gam = GAM("y ~ s(x)", family=Poisson()).fit(poisson_data, weights=w)
         result = gam.predict(poisson_data, interval="confidence")
+
         assert result.lower is not None
         assert np.all(result.lower >= 0)
 
@@ -153,6 +165,7 @@ class TestWeightedPoisson:
         w = np.ones(len(poisson_data["y"])) * 3.0
         gam = GAM("y ~ s(x)", family=Poisson()).fit(poisson_data, weights=w)
         tests = gam.smooth_tests()
+
         assert len(tests) == 1
         assert tests[0].edf > 0
 
@@ -184,6 +197,7 @@ class TestFrequencyWeights:
         grid = {"x": np.linspace(0, 2 * np.pi, 50)}
         pred_dup = gam_dup.predict(grid).values
         pred_w = gam_w.predict(grid).values
+
         np.testing.assert_allclose(pred_w, pred_dup, atol=1e-4)
 
     def test_duplicate_data_matches_weight_2_deviance(self):
@@ -224,6 +238,7 @@ class TestWeightedGamma:
         gam_uw = GAM("y ~ s(x)", family=Gamma()).fit(data)
         w = np.ones(n)
         gam_w = GAM("y ~ s(x)", family=Gamma()).fit(data, weights=w)
+
         np.testing.assert_allclose(gam_w.coefficients, gam_uw.coefficients, atol=1e-8)
 
     def test_gamma_with_varying_weights(self):
@@ -235,6 +250,7 @@ class TestWeightedGamma:
         data = {"x": x, "y": y}
         w = rng.uniform(0.5, 2.0, n)
         gam = GAM("y ~ s(x)", family=Gamma()).fit(data, weights=w)
+
         assert gam.is_fitted
         assert 0 < gam.deviance_explained < 1
 
@@ -255,6 +271,7 @@ class TestWeightedDiagnostics:
         w = rng.uniform(0.5, 2.0, n)
         gam = GAM("y ~ s(x1) + s(x2)", family=Gaussian()).fit(data, weights=w)
         conc = gam.concurvity()
+
         assert conc.worst.shape == (2,)
 
     def test_anova_with_weights(self):
@@ -268,6 +285,7 @@ class TestWeightedDiagnostics:
         gam1 = GAM("y ~ s(x1)", family=Gaussian()).fit(data, weights=w)
         gam2 = GAM("y ~ s(x1) + s(x2)", family=Gaussian()).fit(data, weights=w)
         result = gam1.anova(gam2)
+
         assert len(result.rows) == 2
 
     def test_predict_terms_with_weights(self):
@@ -280,6 +298,7 @@ class TestWeightedDiagnostics:
         w = rng.uniform(0.5, 2.0, n)
         gam = GAM("y ~ s(x1) + s(x2)", family=Gaussian()).fit(data, weights=w)
         result = gam.predict(data, type="terms", se=True)
+
         assert len(result.terms) == 2
         assert result.se is not None
 
@@ -342,6 +361,7 @@ class TestOutlierDownweighting:
 
         rmse_no_w = np.sqrt(np.mean((pred_no_w - true_vals) ** 2))
         rmse_w = np.sqrt(np.mean((pred_w - true_vals) ** 2))
+
         assert rmse_w < rmse_no_w
 
 
@@ -353,11 +373,13 @@ class TestOutlierDownweighting:
 class TestFitResultPriorWeights:
     def test_prior_weights_none_when_no_weights(self, gaussian_data):
         gam = GAM("y ~ s(x)", family=Gaussian()).fit(gaussian_data)
+
         assert gam._fit_result.prior_weights is None
 
     def test_prior_weights_stored(self, gaussian_data):
         n = len(gaussian_data["y"])
         w = np.ones(n) * 2.0
         gam = GAM("y ~ s(x)", family=Gaussian()).fit(gaussian_data, weights=w)
+
         assert gam._fit_result.prior_weights is not None
         np.testing.assert_array_equal(gam._fit_result.prior_weights, w)
