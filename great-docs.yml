@@ -129,6 +129,32 @@ reference:
       - name: SimultaneousCIResult
         members: true
 
+  - title: Inference
+    desc: >
+      Result types from parametric and smooth tests, concurvity, influence diagnostics,
+      derivatives, marginal effects, and contrasts.
+    contents:
+      - name: ParametricTestResult
+        members: true
+      - name: SmoothTestResult
+        members: true
+      - name: ConcurvityResult
+        members: true
+      - name: KCheckResult
+        members: true
+      - name: InfluenceResult
+        members: true
+      - name: DispersionTestResult
+        members: true
+      - name: VIFResult
+        members: true
+      - name: DerivativeResult
+        members: true
+      - name: MarginalEffectResult
+        members: true
+      - name: ContrastResult
+        members: true
+
   - title: Formula
     desc: Formula parsing and term specifications for model construction.
     contents:
