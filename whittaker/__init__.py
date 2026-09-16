@@ -57,6 +57,7 @@ from whittaker.gam import (
     GAM,
     GamCheckResult,
     GoodnessOfFit,
+    PartialDependenceResult,
     PosteriorPredictResult,
     PredictionResult,
     SensitivityResult,
@@ -109,6 +110,7 @@ __all__ = [
     "GamCheckResult",
     "GoodnessOfFit",
     "SensitivityResult",
+    "PartialDependenceResult",
     # Formula
     "Formula",
     "SmoothTerm",
