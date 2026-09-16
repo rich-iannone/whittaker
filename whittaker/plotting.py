@@ -426,8 +426,8 @@ def check(
     y = np.sin(2 * np.pi * x) + rng.normal(scale=0.2, size=n)
 
     model = GAM("y ~ s(x)").fit({"x": x, "y": y})
-    charts = check(model, plots=["qq", "residuals"])
-    print(len(charts))
+    chart = check(model, plots=["qq", "residuals"])
+    print(type(chart).__name__)
     ```
     """
     _check_altair()
