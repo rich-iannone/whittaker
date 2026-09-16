@@ -55,12 +55,14 @@ from whittaker.formula import parse as parse_formula
 from whittaker.functional import CoefficientFunction, FunctionalGAM, FunctionalTerm
 from whittaker.gam import (
     GAM,
+    CheckDataResult,
     GamCheckResult,
     GoodnessOfFit,
     PartialDependenceResult,
     PosteriorPredictResult,
     PredictionResult,
     SensitivityResult,
+    SimultaneousCIResult,
     TermsPredictionResult,
 )
 from whittaker.gamlss import GAMLSS, GAMLSSPrediction
@@ -111,6 +113,8 @@ __all__ = [
     "GoodnessOfFit",
     "SensitivityResult",
     "PartialDependenceResult",
+    "SimultaneousCIResult",
+    "CheckDataResult",
     # Formula
     "Formula",
     "SmoothTerm",
