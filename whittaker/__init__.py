@@ -46,6 +46,18 @@ from whittaker.families import (
     tw,
 )
 from whittaker.fitting.compare import ComparisonResult, ComparisonRow, compare
+from whittaker.fitting.inference import (
+    ConcurvityResult,
+    ContrastResult,
+    DerivativeResult,
+    DispersionTestResult,
+    InfluenceResult,
+    KCheckResult,
+    MarginalEffectResult,
+    ParametricTestResult,
+    SmoothTestResult,
+    VIFResult,
+)
 from whittaker.fitting.loo import LOOComparison, LOOResult, loo_compare
 from whittaker.fitting.ppc import PPCResult
 from whittaker.fitting.stacking import StackingResult, stacking
@@ -234,4 +246,15 @@ __all__ = [
     # Plotting
     "check",
     "partial_effects",
+    # Inference result types
+    "ParametricTestResult",
+    "SmoothTestResult",
+    "ConcurvityResult",
+    "KCheckResult",
+    "InfluenceResult",
+    "DispersionTestResult",
+    "VIFResult",
+    "DerivativeResult",
+    "MarginalEffectResult",
+    "ContrastResult",
 ]
