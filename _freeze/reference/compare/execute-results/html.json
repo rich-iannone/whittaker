@@ -1,0 +1,12 @@
+{
+  "hash": "63ff62c29925c5edf50f56bb22ee91b4",
+  "result": {
+    "engine": "jupyter",
+    "markdown": "---\ntitle: \"[compare()]{.doc-object-name .doc-function .doc-label .doc-label-function}\"\nbody-classes: doc-api-page\npage-navigation: false\nhtml-table-processing: none\n---\n\n::: {.doc-subject}\n\nCompare multiple fitted GAMs in a summary table.\n:::\n\n::: {.doc-usage-source}\nUsage\n\n[Source](https://github.com/rich-iannone/whittaker/blob/main/whittaker/fitting/compare.py#L135-L206){target=\"_blank\" rel=\"noopener\"}\n:::\n\n::: {.doc-signature .doc-Kind.FUNCTION}\n```python\ncompare(*models)\n```\n:::\n\n::: {.doc-text}\n\nCollects AIC, BIC, deviance explained, adjusted R-squared, EDF, GCV (when available), and scale\nfrom each model, sorts by AIC, and computes delta-AIC from the best model.\n:::\n\n## Parameters {.doc-parameters}\n\n::: {.doc-definition-items}\n<code>[*models]{.doc-parameter-name}[:]{.doc-parameter-annotation-sep} [GAM]{.doc-parameter-annotation}</code>\n\n:   Two or more fitted GAM objects.\n:::\n\n## Returns {.doc-returns}\n\n::: {.doc-definition-items}\n<code> [ComparisonResult]{.doc-parameter-annotation}</code>\n\n:   Comparison table sorted by AIC (best first).\n:::\n\n## Raises {.doc-raises}\n\n::: {.doc-definition-items}\n<code> [ValueError]{.doc-parameter-annotation}</code>\n\n:   If fewer than 2 models are provided.\n:::\n\n## Examples {.doc-examples}\n\n::: {#2319826c .cell execution_count=1}\n``` {.python .cell-code}\nimport numpy as np\nimport whittaker as wk\n\nrng = np.random.default_rng(0)\nx = np.linspace(0, 2 * np.pi, 200)\ny = np.sin(x) + rng.normal(0, 0.3, 200)\ndata = {\"x\": x, \"y\": y}\n\nm1 = wk.GAM(\"y ~ x\").fit(data)\nm2 = wk.GAM(\"y ~ s(x, k=5)\").fit(data)\nm3 = wk.GAM(\"y ~ s(x, k=15)\").fit(data)\n\nprint(wk.compare(m1, m2, m3))\n```\n\n::: {.cell-output .cell-output-stdout}\n```\nModel Comparison (3 models, 200 observations)\n\n  # Formula                               AIC     ΔAIC        BIC  Dev.Expl.   Adj.R²     EDF        GCV\n--- ------------------------------ ---------- -------- ---------- ---------- -------- ------- ----------\n  1 y ~ s(x, k=5)                       78.32    +0.00      94.67     86.7%   0.8636     5.0   0.086642\n  2 y ~ s(x, k=15)                      79.21    +0.89     103.14     87.0%   0.8646     7.3   0.087059\n  3 y ~ x                              332.62  +254.30     339.22     51.1%   0.5065     2.0   0.308909\n```\n:::\n:::\n\n\n",
+    "supporting": [
+      "compare_files"
+    ],
+    "filters": [],
+    "includes": {}
+  }
+}
