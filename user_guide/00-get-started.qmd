@@ -63,21 +63,21 @@ The user guide walks through each part of the pipeline in depth:
 
 - **[Installation](01-installation.qmd)**: how to install Whittaker.
 - **[Quick start](02-quick-start.qmd)**: a complete example from raw data to a fitted model.
-- **[Smooth terms](03-smooths.qmd)**: the full catalog of basis types and how to choose among them.
-- **[Response families](04-families.qmd)**: Gaussian, Poisson, Binomial, and more.
-- **[Model fitting](05-fitting.qmd)**: the P-IRLS algorithm, smoothness selection, and convergence.
-- **[Prediction and inference](06-prediction.qmd)**: point estimates, standard errors, and
+- **[Smooth terms](04-smooths.qmd)**: the full catalog of basis types and how to choose among them.
+- **[Response families](05-families.qmd)**: Gaussian, Poisson, Binomial, and more.
+- **[Model fitting](06-fitting.qmd)**: the P-IRLS algorithm, smoothness selection, and convergence.
+- **[Prediction and inference](08-prediction.qmd)**: point estimates, standard errors, and
   confidence bands.
-- **[Model diagnostics](07-diagnostics.qmd)**: how to check that your model is adequate.
-- **[Data input](08-data-input.qmd)**: how Whittaker accepts dict-based data.
-- **[Shape constraints](09-shape-constraints.qmd)**: monotone, convex, and concave smooths.
-- **[Distributional regression](10-gamlss.qmd)**: GAMLSS for location-scale-shape models.
-- **[Quantile regression](11-quantile.qmd)**: quantile GAMs with non-crossing constraints.
-- **[Conformal prediction](12-conformal.qmd)**: distribution-free prediction intervals.
-- **[Causal inference](13-causal.qmd)**: causal GAMs via double machine learning.
-- **[Streaming and online fitting](14-streaming.qmd)**: incremental GAM fitting.
-- **[Multi-response models](15-multi-response.qmd)**: jointly modeling multiple outcomes.
-- **[Functional regression](16-functional.qmd)**: scalar-on-function regression.
-- **[Cross-validation](17-cross-validation.qmd)**: K-fold cross-validation for GAMs.
-- **[Large datasets](18-large-datasets.qmd)**: BigGAM, PolarsGAM, and DuckDBGAM.
-- **[Serialization](19-serialization.qmd)**: saving and loading fitted models.
+- **[Model diagnostics](11-diagnostics.qmd)**: how to check that your model is adequate.
+- **[Data input](07-data-input.qmd)**: how Whittaker accepts dict-based data.
+- **[Shape constraints](17-shape-constraints.qmd)**: monotone, convex, and concave smooths.
+- **[Distributional regression](18-gamlss.qmd)**: GAMLSS for location-scale-shape models.
+- **[Quantile regression](19-quantile.qmd)**: quantile GAMs with non-crossing constraints.
+- **[Conformal prediction](20-conformal.qmd)**: distribution-free prediction intervals.
+- **[Causal inference](21-causal.qmd)**: causal GAMs via double machine learning.
+- **[Streaming and online fitting](22-streaming.qmd)**: incremental GAM fitting.
+- **[Multi-response models](23-multi-response.qmd)**: jointly modeling multiple outcomes.
+- **[Functional regression](24-functional.qmd)**: scalar-on-function regression.
+- **[Cross-validation](14-cross-validation.qmd)**: K-fold cross-validation for GAMs.
+- **[Large datasets](25-large-datasets.qmd)**: BigGAM, PolarsGAM, and DuckDBGAM.
+- **[Serialization](38-serialization.qmd)**: saving and loading fitted models.

@@ -1,0 +1,253 @@
+---
+title: "Partial dependence as data"
+guide-section: "Prediction and inference"
+---
+
+```{python}
+#| echo: false
+#| output: false
+import great_docs as gd
+
+gd.enable_tbl_preview(n_head=8, n_tail=3)
+```
+
+The `partial_effects()` method produces Altair charts that are ready to display, but sometimes you
+need the underlying numbers. You might want to plot with matplotlib, export the curves to a CSV, run
+a custom analysis on the estimated effects, or combine smooth estimates across models. The
+`partial_dependence()` method returns the same data that `partial_effects()` plots, but as
+structured arrays rather than chart objects.
+
+## Why partial dependence as data?
+
+`partial_effects()` is the fast path: one call gives you a polished visualization of every smooth
+term. But Altair charts are not always what you need:
+
+- **Matplotlib or seaborn workflows**: your project already uses matplotlib and you want a
+  consistent style.
+- **Export**: you want to write the estimated curves to a file for a collaborator or a table in a
+  paper.
+- **Custom analysis**: you want to compute the area under a smooth, find the x-value where the
+  effect crosses zero, or compare effects across models numerically.
+- **Fine-grained control**: you need to overlay observed data, add reference lines, or combine
+panels in ways that go beyond what the built-in plots offer.
+
+`partial_dependence()` gives you structured `PartialDependenceResult` objects with arrays you can
+manipulate freely.
+
+## Basic usage
+
+Fit a model on the motorcycle crash dataset and call `partial_dependence()`:
+
+```{python}
+import numpy as np
+import whittaker as wk
+
+data = wk.load_dataset("mcycle")
+
+model = wk.GAM("accel ~ s(times, k=15)")
+model.fit(data, method="REML")
+
+results = model.partial_dependence()
+```
+
+The return value is a list of `PartialDependenceResult` objects, one per smooth term in formula
+order:
+
+```{python}
+print(f"Number of results: {len(results)}")
+print(results[0])
+```
+
+Each result is a dataclass with the following fields:
+
+```{python}
+r = results[0]
+
+print(f"term:   {r.term}")
+print(f"x keys: {list(r.x.keys())}")
+print(f"effect: shape {r.effect.shape}, dtype {r.effect.dtype}")
+print(f"se:     shape {r.se.shape}")
+print(f"lower:  shape {r.lower.shape}")
+print(f"upper:  shape {r.upper.shape}")
+print(f"edf:    {r.edf:.2f}")
+print(f"level:  {r.level}")
+print(f"n_grid: {r.n_grid}")
+```
+
+The `x` dictionary maps covariate names to their evaluation grids. For a 1-D smooth like `s(times)`,
+there is a single key. The `effect`, `se`, `lower`, and `upper` arrays all have the same length as
+the grid.
+
+## Plotting with matplotlib
+
+With the arrays in hand, building a matplotlib plot is straightforward. Plot the estimated effect as
+a line and shade the confidence band:
+
+```{python}
+import matplotlib.pyplot as plt
+
+r = results[0]
+x_vals = r.x["times"]
+
+fig, ax = plt.subplots(figsize=(7, 4))
+
+# Confidence band
+ax.fill_between(x_vals, r.lower, r.upper, alpha=0.25, color="steelblue", label="95% CI")
+
+# Effect line
+ax.plot(x_vals, r.effect, color="steelblue", linewidth=2, label="Partial effect")
+
+# Reference line at zero
+ax.axhline(0, color="gray", linewidth=0.8, linestyle="--")
+
+ax.set_xlabel("times")
+ax.set_ylabel(f"Effect ({r.term})")
+ax.set_title(f"Partial dependence: {r.term} (EDF = {r.edf:.1f})")
+ax.legend()
+
+plt.tight_layout()
+plt.show()
+```
+
+You can overlay the raw data by adding a scatter layer before the effect line (this is something
+that is easy with arrays but would require more work if you only had a chart object).
+
+## Multi-term models
+
+When a model has multiple smooth terms, `partial_dependence()` returns one result per term. You can
+iterate over them to build a panel of plots:
+
+```{python}
+data_wages = wk.load_dataset("wages")
+
+model_wages = wk.GAM("income ~ s(age) + s(experience)")
+model_wages.fit(data_wages, method="REML")
+
+results_wages = model_wages.partial_dependence()
+
+fig, axes = plt.subplots(1, len(results_wages), figsize=(12, 4))
+
+for ax, r in zip(axes, results_wages):
+    var_name = list(r.x.keys())[0]
+    x_vals = r.x[var_name]
+
+    ax.fill_between(x_vals, r.lower, r.upper, alpha=0.25, color="steelblue")
+    ax.plot(x_vals, r.effect, color="steelblue", linewidth=2)
+    ax.axhline(0, color="gray", linewidth=0.8, linestyle="--")
+    ax.set_xlabel(var_name)
+    ax.set_ylabel("Partial effect")
+    ax.set_title(f"{r.term} (EDF = {r.edf:.1f})")
+
+plt.tight_layout()
+plt.show()
+```
+
+## Controlling the grid and confidence level
+
+Two keyword-only parameters let you adjust the evaluation:
+
+- **`n_points`** (default `200`): the number of evenly spaced points along each covariate's range.
+  More points give smoother curves whereas fewer points are faster.
+- **`level`** (default `0.95`): the confidence level for the `lower` and `upper` bounds.
+
+```{python}
+# Coarse grid with 90% confidence bands
+results_coarse = model.partial_dependence(n_points=50, level=0.90)
+r_coarse = results_coarse[0]
+
+print(f"Grid points: {r_coarse.n_grid}")
+print(f"Confidence level: {r_coarse.level}")
+```
+
+Compare two confidence levels side by side:
+
+```{python}
+r_95 = model.partial_dependence(n_points=200, level=0.95)[0]
+r_80 = model.partial_dependence(n_points=200, level=0.80)[0]
+
+fig, ax = plt.subplots(figsize=(7, 4))
+
+x_vals = r_95.x["times"]
+
+ax.fill_between(x_vals, r_95.lower, r_95.upper, alpha=0.15, color="steelblue", label="95% CI")
+ax.fill_between(x_vals, r_80.lower, r_80.upper, alpha=0.25, color="steelblue", label="80% CI")
+ax.plot(x_vals, r_95.effect, color="steelblue", linewidth=2)
+ax.axhline(0, color="gray", linewidth=0.8, linestyle="--")
+ax.set_xlabel("times")
+ax.set_ylabel("Partial effect")
+ax.set_title("Effect of confidence level on band width")
+ax.legend()
+
+plt.tight_layout()
+plt.show()
+```
+
+## 2-D smooths
+
+For a 2-D smooth like `s(x, y)`, the `x` dictionary has two keys corresponding to the two
+covariates. Each value is a 1-D marginal grid of length approximately `sqrt(n_points)`. The
+`effect`, `se`, `lower`, and `upper` arrays are flattened over the full grid (length = `n_side^2`).
+
+To reconstruct the 2-D surface, use `np.meshgrid` on the marginal grids and reshape the effect:
+
+```{python}
+data_meuse = wk.load_dataset("meuse")
+
+model_2d = wk.GAM("zinc ~ s(x, y, k=25)")
+model_2d.fit(data_meuse, method="REML")
+
+results_2d = model_2d.partial_dependence(n_points=225)
+r2 = results_2d[0]
+
+print(f"Term: {r2.term}")
+print(f"x keys: {list(r2.x.keys())}")
+print(f"Marginal grid lengths: {[len(v) for v in r2.x.values()]}")
+print(f"Effect length: {len(r2.effect)}")
+```
+
+Plot the 2-D partial effect as a filled contour:
+
+```{python}
+x_grid = r2.x["x"]
+y_grid = r2.x["y"]
+X_mesh, Y_mesh = np.meshgrid(x_grid, y_grid)
+
+# Reshape the flattened effect to the 2-D grid
+effect_2d = r2.effect.reshape(len(y_grid), len(x_grid))
+
+fig, ax = plt.subplots(figsize=(7, 5))
+contour = ax.contourf(X_mesh, Y_mesh, effect_2d, levels=20, cmap="RdBu_r")
+fig.colorbar(contour, ax=ax, label="Partial effect")
+ax.set_xlabel("x")
+ax.set_ylabel("y")
+ax.set_title(f"2-D partial dependence: {r2.term}")
+
+plt.tight_layout()
+plt.show()
+```
+
+## When to use `partial_dependence()` vs `partial_effects()`
+
+| Scenario | Method |
+|---|---|
+| Quick visualization during exploration | `partial_effects()` |
+| Publication-quality matplotlib figure | `partial_dependence()` |
+| Export smooth curves to CSV or DataFrame | `partial_dependence()` |
+| Overlay observed data on effect plots | `partial_dependence()` |
+| Numerical analysis (zero crossings, AUC) | `partial_dependence()` |
+| Interactive notebook with Altair tooltips | `partial_effects()` |
+| Compare effects across multiple models | `partial_dependence()` |
+
+Both methods compute the same underlying quantities. The difference is purely in what they
+return: chart objects vs. arrays.
+
+## Where to go next
+
+- [Prediction and inference](08-prediction.qmd) covers the `predict()` method for response-scale
+  predictions and confidence intervals.
+- [Derivatives and marginal effects](34-derivatives.qmd) shows how to estimate the rate of change
+  of smooth effects using `derivatives()` and `marginal_effects()`.
+- [Simultaneous confidence bands](09-simultaneous-ci.qmd) explains how to construct bands that
+  cover the entire smooth simultaneously rather than pointwise.
+- [Model diagnostics](11-diagnostics.qmd) covers `gam_check()` for residual diagnostics and basis
+  dimension adequacy checks.

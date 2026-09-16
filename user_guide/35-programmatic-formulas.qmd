@@ -1,0 +1,235 @@
+---
+title: "Programmatic formula construction"
+guide-section: "Advanced features"
+---
+
+```{python}
+#| echo: false
+#| output: false
+import great_docs as gd
+
+gd.enable_tbl_preview(n_head=8, n_tail=3)
+```
+
+Throughout the user guide, formulas are written as strings like `"y ~ s(x1) + s(x2)"`. This is
+convenient for interactive work, but sometimes you need to build formulas programmatically (for
+example, when the set of covariates is determined at runtime, or when you want to manipulate
+individual terms in a loop).
+
+Whittaker's formula system has two layers:
+
+1. **String formulas**: parsed by `parse_formula()` into structured objects.
+2. **Term objects**: `LinearTerm`, `SmoothTerm`, `InteractionTerm`, `OffsetTerm`, and `Formula`
+   (which can be constructed directly and passed to `GAM()`).
+
+## Parsing a string formula
+
+`parse_formula()` turns a formula string into a `Formula` object:
+
+```{python}
+from whittaker import parse_formula
+
+f = parse_formula("y ~ s(x1, k=10) + x2 + x1 * x3")
+
+print(f"Response: {f.response}")
+print(f"Intercept: {f.intercept}")
+print(f"Terms ({len(f.terms)}):")
+for t in f.terms:
+    print(f"  {type(t).__name__}: {t}")
+```
+
+The `Formula` object records the response name, an ordered list of terms, and whether an intercept
+is included. Each term is one of the four term types.
+
+## Building formulas from term objects
+
+Instead of parsing a string, you can construct a `Formula` directly from term objects. This is
+useful when the terms are determined by data or configuration:
+
+```{python}
+from whittaker import Formula, LinearTerm, SmoothTerm
+
+f = Formula(
+    response="y",
+    terms=[
+        SmoothTerm(variables=("x1",), k=10),
+        SmoothTerm(variables=("x2",), bs="cr"),
+        LinearTerm(variable="x3"),
+    ],
+)
+
+print(f)
+```
+
+The resulting `Formula` is identical to what `parse_formula("y ~ s(x1, k=10) + s(x2, bs='cr') + x3")` would produce, and can be passed directly to `GAM()`:
+
+```{python}
+import numpy as np
+import whittaker as wk
+
+rng = np.random.default_rng(0)
+n = 200
+data = {
+    "x1": np.linspace(0, 2 * np.pi, n),
+    "x2": rng.uniform(0, 5, n),
+    "x3": rng.normal(size=n),
+    "y": np.sin(np.linspace(0, 2 * np.pi, n)) + rng.normal(0, 0.3, n),
+}
+
+model = wk.GAM(f).fit(data)
+model.summary()
+```
+
+## Term types
+
+### SmoothTerm
+
+`SmoothTerm` represents `s()`, `te()`, `ti()`, and `t2()` terms:
+
+```{python}
+from whittaker import SmoothTerm
+
+# Equivalent to s(x, k=15, bs='cr')
+s1 = SmoothTerm(variables=("x",), k=15, bs="cr")
+print(s1)
+
+# Equivalent to te(x1, x2)
+te = SmoothTerm(variables=("x1", "x2"), smooth_type="te")
+print(te)
+
+# Equivalent to s(x, by=group)
+s_by = SmoothTerm(variables=("x",), by="group")
+print(s_by)
+
+# Equivalent to ti(x1, x2, k=5)
+ti = SmoothTerm(variables=("x1", "x2"), smooth_type="ti", k=5)
+print(ti)
+```
+
+The `extra` dictionary passes additional keyword arguments to the basis constructor:
+
+```{python}
+# Equivalent to s(x, bs='ps', m=2): P-spline with second-order penalty
+s_ps = SmoothTerm(variables=("x",), bs="ps", extra={"m": 2})
+print(s_ps)
+```
+
+### LinearTerm
+
+`LinearTerm` represents a bare covariate entered linearly (unpenalized):
+
+```{python}
+from whittaker import LinearTerm
+
+lt = LinearTerm(variable="age")
+print(lt)
+```
+
+For categorical columns, `LinearTerm` automatically expands to dummy indicators (one per
+non-reference level) when the model matrix is built.
+
+### InteractionTerm
+
+`InteractionTerm` represents a parametric interaction between two covariates:
+
+```{python}
+from whittaker import InteractionTerm
+
+# Full interaction (x1 * x2): includes both main effects + interaction
+full = InteractionTerm(left="x1", right="x2", full=True)
+print(full)
+
+# Interaction only (x1 : x2): no main effects
+interaction_only = InteractionTerm(left="x1", right="x2", full=False)
+print(interaction_only)
+```
+
+For smooth interactions between continuous variables, use a tensor-product `SmoothTerm` instead.
+
+### OffsetTerm
+
+`OffsetTerm` represents a covariate with a fixed coefficient of 1, commonly used for exposure
+terms in rate models:
+
+```{python}
+from whittaker import OffsetTerm
+
+offset = OffsetTerm(expression="log_exposure")
+print(offset)
+```
+
+## Dynamic formula construction
+
+The main advantage of the object API is building formulas dynamically. Here's an example that
+creates a smooth term for every numeric column in a dataset:
+
+```{python}
+feature_cols = ["x1", "x2", "x3", "x4", "x5"]
+
+terms = [SmoothTerm(variables=(col,)) for col in feature_cols]
+formula = Formula(response="y", terms=terms)
+
+print(formula)
+```
+
+You can also conditionally add terms:
+
+```{python}
+terms = []
+for col in feature_cols:
+    if col in ("x1", "x2"):
+        terms.append(SmoothTerm(variables=(col,), k=20))
+    else:
+        terms.append(LinearTerm(variable=col))
+
+formula = Formula(response="y", terms=terms)
+print(formula)
+```
+
+## Suppressing the intercept
+
+Set `intercept=False` to drop the intercept (equivalent to `y ~ 0 + ...`):
+
+```{python}
+f_no_intercept = Formula(
+    response="y",
+    terms=[SmoothTerm(variables=("x",))],
+    intercept=False,
+)
+
+print(f_no_intercept)
+```
+
+## Inspecting required columns
+
+`Formula.required_columns()` returns every data column the formula needs, in first-seen order:
+
+```{python}
+f = parse_formula("y ~ s(x1, by=group) + x2 + te(x3, x4)")
+print(f.required_columns())
+```
+
+This is useful for validating that a dataset has all the columns a formula expects before fitting.
+
+## Mixing string and object APIs
+
+You can use strings for interactive exploration and switch to the object API when you need
+programmatic control. Both produce the same `Formula` objects and both are accepted by `GAM()`:
+
+```{python}
+# These are equivalent:
+m1 = wk.GAM("y ~ s(x1, k=10) + x2")
+m2 = wk.GAM(Formula(
+    response="y",
+    terms=[SmoothTerm(variables=("x1",), k=10), LinearTerm(variable="x2")],
+))
+
+print(m1.formula)
+print(m2.formula)
+```
+
+## Where to go next
+
+- **[Smooth terms](04-smooths.qmd)**: details on basis types, knot placement, and the `k` parameter.
+- **[Model fitting](06-fitting.qmd)**: fitting methods and smoothing parameter selection.
+- **[Data input](07-data-input.qmd)**: supported data formats and column types.

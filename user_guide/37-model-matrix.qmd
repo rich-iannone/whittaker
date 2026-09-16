@@ -1,0 +1,201 @@
+---
+title: "Model matrix utilities"
+guide-section: "Advanced features"
+---
+
+```{python}
+#| echo: false
+#| output: false
+import great_docs as gd
+
+gd.enable_tbl_preview(n_head=8, n_tail=3)
+```
+
+Most users never need to touch the model matrix directly as `GAM.fit()` and `GAM.predict()` handle
+it internally. But if you want to inspect the basis functions, understand the penalty structure,
+extract term-level columns for custom inference, or build a prediction matrix manually, Whittaker
+exposes the low-level `build_model_matrix()` and `predict_matrix()` functions along with the
+`ModelMatrix` and `SmoothInfo` dataclasses.
+
+## Overview
+
+When a GAM is fitted, the formula is converted into a numeric **design matrix** `X` of shape
+`(n_observations, n_coefficients)` such that the linear predictor is:
+
+$$\eta = X \beta + \text{offset}$$
+
+Each formula term contributes columns to `X`:
+
+- **Intercept**: a single column of ones.
+- **Linear terms** (`x1`): the raw covariate column.
+- **Interactions** (`x1 * x2`): the elementwise product (plus main effects).
+- **Smooth terms** (`s(x)`): several columns, with one per basis function of the fitted spline.
+
+The `build_model_matrix()` function performs this expansion and also constructs the penalty matrices
+that control smoothing.
+
+## Building a model matrix
+
+```{python}
+import numpy as np
+import whittaker as wk
+from whittaker.model_matrix import build_model_matrix, predict_matrix
+
+rng = np.random.default_rng(0)
+n = 100
+data = {
+    "x1": np.linspace(0, 2 * np.pi, n),
+    "x2": rng.uniform(0, 5, n),
+    "y": np.sin(np.linspace(0, 2 * np.pi, n)) + rng.normal(0, 0.3, n),
+}
+
+formula = wk.parse_formula("y ~ s(x1, k=8) + x2")
+mm = build_model_matrix(formula, data)
+
+print(f"Design matrix shape: {mm.X.shape}")
+print(f"Number of coefficients: {mm.n_coefs}")
+print(f"Number of observations: {mm.n_obs}")
+print(f"Has intercept: {mm.has_intercept}")
+print(f"Parametric columns: {mm.n_parametric}")
+print(f"Number of penalties: {len(mm.penalties)}")
+```
+
+## Column names
+
+Every column in `X` has a human-readable label:
+
+```{python}
+for i, name in enumerate(mm.column_names):
+    print(f"  [{i:2d}] {name}")
+```
+
+Column 0 is the intercept, then the parametric terms, then the smooth's basis functions.
+
+## Inspecting smooth terms with SmoothInfo
+
+Each smooth term in the formula produces a `SmoothInfo` object that records where that term's
+columns live in the full design matrix:
+
+```{python}
+for info in mm.smooths:
+    print(f"Term:            {info.term}")
+    print(f"Columns:         {info.col_start}:{info.col_end} "
+          f"({info.col_end - info.col_start} basis functions)")
+    print(f"Null space dim:  {info.null_space_dim}")
+    print(f"Penalty indices: {info.penalty_indices}")
+    print(f"Basis type:      {type(info.basis).__name__}")
+    print()
+```
+
+`SmoothInfo` gives you:
+
+- **`col_start` / `col_end`**: the slice `X[:, col_start:col_end]` for this term's basis columns.
+- **`basis`**: the fitted `SmoothBasis` instance (retaining knots and constraints for prediction).
+- **`null_space_dim`**: how many basis directions are unpenalized (the "linear" part).
+- **`penalty_indices`**: which entries in `mm.penalties` belong to this term.
+
+## Extracting a term's basis columns
+
+Use `col_start` and `col_end` to extract the basis matrix for a specific smooth:
+
+```{python}
+info = mm.smooths[0]
+B = mm.X[:, info.col_start:info.col_end]
+print(f"Basis matrix for {info.term}: shape {B.shape}")
+print(f"First 3 rows:\n{B[:3].round(4)}")
+```
+
+## Penalty matrices
+
+Each smooth term contributes one or more penalty matrices. These are `(n_coefs, n_coefs)` matrices
+embedded in the full model dimension, with nonzero entries only in the block corresponding to that
+term's columns:
+
+```{python}
+S = mm.penalties[0]
+print(f"Penalty shape: {S.shape}")
+
+nonzero_rows = np.any(S != 0, axis=1)
+print(f"Nonzero rows: {np.where(nonzero_rows)[0].tolist()}")
+print(f"Matches smooth columns: {info.col_start}:{info.col_end}")
+```
+
+The combined (unweighted) penalty is available as a convenience property:
+
+```{python}
+S_total = mm.penalty_matrix
+print(f"Combined penalty shape: {S_total.shape}")
+print(f"Nonzero entries: {np.count_nonzero(S_total)}")
+```
+
+## Building a prediction matrix
+
+After fitting, `predict_matrix()` builds a new design matrix for unseen data using the *same*
+knots, constraints, and column layout as the training matrix:
+
+```{python}
+new_data = {
+    "x1": np.linspace(0, 2 * np.pi, 50),
+    "x2": rng.uniform(0, 5, 50),
+}
+
+X_pred = predict_matrix(mm, new_data)
+print(f"Prediction matrix shape: {X_pred.shape}")
+print(f"Same columns as training: {X_pred.shape[1] == mm.n_coefs}")
+```
+
+This is what `GAM.predict()` uses internally. You can use it directly for custom predictions:
+
+```{python}
+model = wk.GAM("y ~ s(x1, k=8) + x2").fit(data)
+beta = model._fit_result.coefficients
+
+eta = X_pred @ beta
+print(f"Manual linear predictor (first 5): {eta[:5].round(4)}")
+
+auto_preds = model.predict(new_data)
+print(f"GAM.predict() values (first 5):    {auto_preds.values[:5].round(4)}")
+```
+
+## The response column
+
+`ModelMatrix` also stores the response variable as extracted from the data:
+
+```{python}
+print(f"Response shape: {mm.response.shape}")
+print(f"Response (first 5): {mm.response[:5].round(4)}")
+```
+
+## Working with offsets
+
+If the formula includes an `offset()` term, the offset vector is stored on the `ModelMatrix` and can
+be reconstructed for new data with `predict_offset()`:
+
+```{python}
+from whittaker.model_matrix import predict_offset
+
+print(f"Offset: {mm.offset}")
+print(f"Offset expressions: {mm.offset_expressions}")
+```
+
+For a model with an offset (e.g., a Poisson rate model with `offset(log_exposure)`),
+`predict_offset()` evaluates the offset expression on new data.
+
+## Use cases
+
+The model matrix utilities are useful for:
+
+- custom inference: extracting term-level basis matrices for manual Bayesian or frequentist
+  calculations beyond what the built-in inference methods provide.
+- debugging: verifying that the basis expansion matches expectations (correct number of basis
+  functions, expected penalty structure).
+- teaching: understanding how a GAM converts a formula into a penalized linear regression.
+- extensions: building custom estimators that use Whittaker's basis machinery but a different
+  fitting algorithm.
+
+## Where to go next
+
+- **[Smooth terms](04-smooths.qmd)**: basis types and the `k` parameter.
+- **[Programmatic formula construction](35-programmatic-formulas.qmd)**: building `Formula` objects
+  from term objects.
+- **[Model fitting](06-fitting.qmd)**: how the design matrix feeds into P-IRLS fitting.

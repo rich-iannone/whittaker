@@ -291,8 +291,8 @@ $\log(\mu) = \beta_0 + f(x)$ and predictions are on the count scale after applyi
 
 ## Where to go next
 
-- **[Smooth terms](03-smooths.qmd)**: TPRS, cubic splines, P-splines, tensor products, and more.
-- **[Response families](04-families.qmd)**: all supported distributions and link functions.
-- **[Model fitting](05-fitting.qmd)**: the P-IRLS algorithm, GCV vs. REML, and convergence.
-- **[Prediction and inference](06-prediction.qmd)**: standard errors, confidence intervals, and
+- **[Smooth terms](04-smooths.qmd)**: TPRS, cubic splines, P-splines, tensor products, and more.
+- **[Response families](05-families.qmd)**: all supported distributions and link functions.
+- **[Model fitting](06-fitting.qmd)**: the P-IRLS algorithm, GCV vs. REML, and convergence.
+- **[Prediction and inference](08-prediction.qmd)**: standard errors, confidence intervals, and
   term-level predictions.

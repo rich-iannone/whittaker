@@ -1,0 +1,222 @@
+---
+title: "Model averaging with stacking"
+guide-section: "Advanced features"
+---
+
+```{python}
+#| echo: false
+#| output: false
+import great_docs as gd
+
+gd.enable_tbl_preview(n_head=8, n_tail=3)
+```
+
+When you have several candidate models and are unsure which one is best, you can combine them rather
+than choosing a single winner. Stacking finds optimal combination weights that maximize the combined
+leave-one-out predictive density of the weighted mixture. The result is a principled way to hedge
+across models: better-predicting models receive higher weights, and models that add nothing to the
+mixture receive weights near zero.
+
+This goes beyond pairwise comparison tools like `loo_compare()` and `waic_compare()`, which only
+tell you which of two models is preferred. Stacking handles any number of models simultaneously and
+produces a single set of weights you can use for prediction averaging or reporting.
+
+## When to use stacking
+
+Use `stacking()` when:
+
+- you have three or more candidate models and want to know how much each one contributes to the
+  best predictive mixture
+- two models perform similarly by ELPD and you want to average their predictions rather than pick
+  one arbitrarily
+- you want to combine structurally different models (e.g., a smooth GAM, a linear model, and a
+  model with interactions) into a single predictive distribution
+
+If you only have two models and want to know which one is better, `loo_compare()` or
+`waic_compare()` may be sufficient. Stacking is most valuable when the number of candidate models is
+larger and the goal is a combined prediction.
+
+## Basic usage
+
+Fit several models, compute LOO or WAIC for each, then pass the results to `stacking()`. The
+function returns a `StackingResult` with the optimal weights and the combined ELPD.
+
+```{python}
+import numpy as np
+import whittaker as wk
+import warnings
+
+rng = np.random.default_rng(23)
+n = 200
+x = np.linspace(0, 2 * np.pi, n)
+y = np.sin(x) + 0.3 * np.cos(3 * x) + rng.normal(0, 0.3, n)
+
+data = {"x": x, "y": y}
+
+# Three candidate models with increasing flexibility
+model_linear = wk.GAM("y ~ x").fit(data, method="VI")
+model_k5 = wk.GAM("y ~ s(x, k=5)").fit(data, method="VI")
+model_k15 = wk.GAM("y ~ s(x, k=15)").fit(data, method="VI")
+```
+
+Each model captures the data differently: the linear model misses the curvature entirely, the
+$k = 5$ smooth captures the main sine wave but may miss the higher-frequency cosine component, and
+the $k = 15$ smooth has enough flexibility for both. Stacking lets the data decide how to weight
+each contribution.
+
+Compute LOO for each model (WAIC would also work) and pass the results to `stacking()`:
+
+```{python}
+with warnings.catch_warnings():
+    warnings.simplefilter("ignore")
+    loo_linear = model_linear.loo(n_draws=500, seed=0)
+    loo_k5 = model_k5.loo(n_draws=500, seed=0)
+    loo_k15 = model_k15.loo(n_draws=500, seed=0)
+
+result = wk.stacking(loo_linear, loo_k5, loo_k15)
+print(result)
+```
+
+The printed summary shows each model's stacking weight alongside a bar chart for quick visual
+comparison. Weights near zero indicate that the model adds little predictive value beyond what the
+other models already provide.
+
+## Interpreting the weights
+
+Stacking weights are not posterior model probabilities. They are the optimal mixture proportions for
+combining the *predictive distributions* of the candidate models. A weight of 0.6 on Model 3 does
+not mean there is a 60% chance that Model 3 is the true data-generating process. It means that 60%
+of the predictive mixture should come from Model 3 in order to maximize out-of-sample predictive
+performance.
+
+This distinction matters in practice: stacking weights can be non-zero for a model that is clearly
+"wrong" if that model contributes complementary predictive information. Conversely, a model that
+is very similar to the best model may receive a weight near zero because it adds nothing new to the
+mixture.
+
+```{python}
+# Access individual weights
+for i, w in enumerate(result.weights):
+    print(f"Model {i + 1}: weight = {w:.3f}")
+```
+
+## Using stacking weights for prediction
+
+Once you have the weights, you can form a weighted average of predictions from each model. This
+gives you a single predictive distribution that combines the strengths of all models.
+
+```{python}
+import altair as alt
+
+x_new = np.linspace(0, 2 * np.pi, 200)
+new_data = {"x": x_new}
+
+# Compute predictions from each model
+pred_linear = model_linear.predict(new_data).values
+pred_k5 = model_k5.predict(new_data).values
+pred_k15 = model_k15.predict(new_data).values
+
+# Weighted average
+pred_stacked = (
+    result.weights[0] * pred_linear
+    + result.weights[1] * pred_k5
+    + result.weights[2] * pred_k15
+)
+
+# True function for comparison
+true_vals = np.sin(x_new) + 0.3 * np.cos(3 * x_new)
+
+plot_data = []
+for i in range(len(x_new)):
+    plot_data.append({"x": float(x_new[i]), "y": float(pred_stacked[i]), "model": "Stacked"})
+    plot_data.append({"x": float(x_new[i]), "y": float(true_vals[i]), "model": "Truth"})
+
+obs_data = [{"x": float(x[i]), "y": float(y[i])} for i in range(n)]
+points = alt.Chart({"values": obs_data}).mark_circle(
+    size=15, opacity=0.3, color="steelblue"
+).encode(x=alt.X("x:Q"), y=alt.Y("y:Q"))
+
+lines = alt.Chart({"values": plot_data}).mark_line().encode(
+    x="x:Q",
+    y="y:Q",
+    color=alt.Color("model:N"),
+    strokeDash=alt.condition(
+        alt.datum.model == "Truth",
+        alt.value([4, 4]),
+        alt.value([0]),
+    ),
+)
+
+(lines + points).properties(
+    title="Stacked prediction vs. truth",
+    width=500,
+    height=300,
+)
+```
+
+The stacked prediction follows the truth closely by combining the flexibility of the $k = 15$ smooth
+with contributions from the other models where they help.
+
+## Stacking with WAIC
+
+Stacking works with either LOO or WAIC results. WAIC is computationally cheaper than LOO, so it can
+be a good choice when the number of candidate models is large.
+
+```{python}
+waic_linear = model_linear.waic(n_draws=500, seed=0)
+waic_k5 = model_k5.waic(n_draws=500, seed=0)
+waic_k15 = model_k15.waic(n_draws=500, seed=0)
+
+result_waic = wk.stacking(waic_linear, waic_k5, waic_k15)
+print(result_waic)
+```
+
+The weights from LOO and WAIC stacking are generally similar for well-behaved models. LOO stacking
+is preferred when some Pareto $k$ diagnostics are marginal (0.5--0.7), since the PSIS smoothing
+provides a more reliable estimate of the pointwise predictive density in those cases.
+
+## Stacking vs. pairwise comparison
+
+The pairwise `loo_compare()` and `waic_compare()` functions compare two models at a time and report
+the ELPD difference with a standard error. This is useful for a simple A/B comparison, but has
+limitations when the model set is larger:
+
+- pairwise comparisons do not account for redundancy among models. Two models that are nearly
+  identical will both compare favorably against a third, but adding both to a mixture is wasteful.
+  Stacking detects this and assigns low weight to the redundant model.
+- with $K$ models, there are $\binom{K}{2}$ pairwise comparisons, and the results can be
+  contradictory or hard to synthesize. Stacking gives a single, coherent answer.
+
+Stacking subsumes pairwise comparison: if you stack two models and one gets all the weight, the
+conclusion is the same as `loo_compare()` would give. But stacking also handles the case where
+both models contribute, which pairwise comparison cannot express.
+
+## Combined ELPD
+
+The `elpd_stacking` field reports the expected log predictive density of the stacking mixture,
+summed over observations. This is always at least as large as the best individual model's ELPD,
+because the optimization is free to put all the weight on a single model if that is optimal.
+
+```{python}
+print(f"ELPD (stacking): {result.elpd_stacking:.2f}")
+print(f"ELPD (linear):   {loo_linear.elpd_loo:.2f}")
+print(f"ELPD (k=5):      {loo_k5.elpd_loo:.2f}")
+print(f"ELPD (k=15):     {loo_k15.elpd_loo:.2f}")
+```
+
+The stacking ELPD is at least as good as the best individual model, and often better when the models
+contribute complementary predictive information. The standard error (`result.se_elpd_stacking`)
+quantifies the uncertainty in this estimate.
+
+## Where to go next
+
+- **[Model comparison with LOO](28-loo.qmd)**: PSIS-LOO cross-validation, whose pointwise ELPD
+  values feed into stacking.
+- **[Model comparison with WAIC](29-waic.qmd)**: an alternative to LOO that can also be used as
+  input to stacking.
+- **[Posterior predictive distributions](31-posterior-predict.qmd)**: the full predictive
+  distribution from each model, which stacking weights can combine.
+- **[Posterior predictive checks](30-ppc.qmd)**: verify that candidate models generate realistic
+  data before averaging them.
+- **[Variational inference](26-variational-inference.qmd)**: fitting the Bayesian models whose LOO
+  or WAIC results are stacked.

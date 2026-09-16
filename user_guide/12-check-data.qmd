@@ -1,0 +1,184 @@
+---
+title: "Diagnostic data for custom plots"
+guide-section: "Model diagnostics"
+---
+
+```{python}
+#| echo: false
+#| output: false
+import great_docs as gd
+
+gd.enable_tbl_preview(n_head=8, n_tail=3)
+```
+
+## Why diagnostic data?
+
+The `check()` function from `whittaker.plotting` produces a set of four Altair diagnostic charts
+(QQ plot, residuals vs. fitted, histogram of deviance residuals, and response vs. fitted) with a
+single call. This is the fastest way to visually assess a model. But sometimes you need the raw
+arrays behind those plots:
+
+- **Matplotlib or seaborn workflows**: your project already uses matplotlib and you want a
+  consistent style across all figures.
+- **Automated checks**: you want to run programmatic tests on the residuals (e.g., normality tests,
+  heteroscedasticity detection) rather than eyeballing charts.
+- **Export**: you need to write the diagnostic values to a CSV or pass them to another tool.
+- **Fine-grained control**: you want to customize axis limits, colors, annotations, or panel layout
+  beyond what the built-in plots offer.
+
+The `check_data()` method on a fitted `GAM` returns a `CheckDataResult` dataclass containing all
+the arrays that `check()` would plot, without producing any charts.
+
+## Basic usage
+
+Fit a model on the motorcycle crash dataset and call `check_data()`:
+
+```{python}
+import numpy as np
+import whittaker as wk
+
+data = wk.load_dataset("mcycle")
+
+model = wk.GAM("accel ~ s(times, k=15)")
+model.fit(data, method="REML")
+
+cd = model.check_data()
+print(cd)
+```
+
+The return value is a `CheckDataResult` dataclass with the following fields:
+
+```{python}
+print(f"n_obs:              {cd.n_obs}")
+print(f"deviance_residuals: shape {cd.deviance_residuals.shape}")
+print(f"pearson_residuals:  shape {cd.pearson_residuals.shape}")
+print(f"fitted_values:      shape {cd.fitted_values.shape}")
+print(f"response:           shape {cd.response.shape}")
+print(f"qq_theoretical:     shape {cd.qq_theoretical.shape}")
+print(f"qq_observed:        shape {cd.qq_observed.shape}")
+```
+
+Every field is a NumPy array of length `n_obs` (except `qq_theoretical` and `qq_observed`, which
+are sorted for direct plotting). The arrays correspond exactly to the data rendered by the four
+panels in `check()`.
+
+## Recreating the four diagnostic plots
+
+With the arrays in hand, you can reproduce all four diagnostic plots in matplotlib. Here they are
+arranged in a 2x2 grid, mirroring the layout of `check()`:
+
+```{python}
+import matplotlib.pyplot as plt
+
+fig, axes = plt.subplots(2, 2, figsize=(9, 7))
+
+# 1. QQ plot of deviance residuals
+ax = axes[0, 0]
+ax.scatter(cd.qq_theoretical, cd.qq_observed, s=10, alpha=0.6, color="steelblue")
+lims = [
+    min(cd.qq_theoretical.min(), cd.qq_observed.min()),
+    max(cd.qq_theoretical.max(), cd.qq_observed.max()),
+]
+ax.plot(lims, lims, color="firebrick", linewidth=1, linestyle="--")
+ax.set_xlabel("Theoretical quantiles")
+ax.set_ylabel("Observed quantiles")
+ax.set_title("QQ plot")
+
+# 2. Residuals vs. fitted values
+ax = axes[0, 1]
+ax.scatter(cd.fitted_values, cd.deviance_residuals, s=10, alpha=0.6, color="steelblue")
+ax.axhline(0, color="firebrick", linewidth=1, linestyle="--")
+ax.set_xlabel("Fitted values")
+ax.set_ylabel("Deviance residuals")
+ax.set_title("Residuals vs. fitted")
+
+# 3. Histogram of deviance residuals
+ax = axes[1, 0]
+ax.hist(cd.deviance_residuals, bins=30, color="steelblue", edgecolor="white", alpha=0.8)
+ax.set_xlabel("Deviance residuals")
+ax.set_ylabel("Frequency")
+ax.set_title("Histogram of residuals")
+
+# 4. Response vs. fitted values
+ax = axes[1, 1]
+ax.scatter(cd.fitted_values, cd.response, s=10, alpha=0.6, color="steelblue")
+mn, mx = cd.fitted_values.min(), cd.fitted_values.max()
+ax.plot([mn, mx], [mn, mx], color="firebrick", linewidth=1, linestyle="--")
+ax.set_xlabel("Fitted values")
+ax.set_ylabel("Response")
+ax.set_title("Response vs. fitted")
+
+plt.tight_layout()
+plt.show()
+```
+
+Because you have full control over the figure, you can adjust colors, add annotations, change bin
+widths, overlay density curves, or export the figure in any format matplotlib supports.
+
+## Automated residual checks
+
+Having the residuals as arrays makes it straightforward to run programmatic diagnostics. For
+example, you can test whether the deviance residuals are approximately normally distributed using
+the Shapiro-Wilk test, and look for heteroscedasticity by checking whether the variance of
+residuals changes across the range of fitted values:
+
+```{python}
+from scipy import stats
+
+# Shapiro-Wilk test for normality of deviance residuals
+stat, p_value = stats.shapiro(cd.deviance_residuals)
+print(f"Shapiro-Wilk statistic: {stat:.4f}")
+print(f"p-value:                {p_value:.4f}")
+
+if p_value < 0.05:
+    print("Evidence against normality of residuals (p < 0.05)")
+else:
+    print("No strong evidence against normality (p >= 0.05)")
+```
+
+To check for heteroscedasticity, split the residuals into groups by fitted value and compare their
+variances:
+
+```{python}
+# Split residuals into lower and upper halves by fitted value
+median_fitted = np.median(cd.fitted_values)
+lower = cd.deviance_residuals[cd.fitted_values <= median_fitted]
+upper = cd.deviance_residuals[cd.fitted_values > median_fitted]
+
+# Levene's test for equal variances
+stat_lev, p_lev = stats.levene(lower, upper)
+print(f"Levene's test statistic: {stat_lev:.4f}")
+print(f"p-value:                 {p_lev:.4f}")
+
+if p_lev < 0.05:
+    print("Evidence of heteroscedasticity (p < 0.05)")
+else:
+    print("No strong evidence of heteroscedasticity (p >= 0.05)")
+```
+
+You can combine these tests into a reusable function that flags potential problems automatically,
+rather than relying on visual inspection every time you fit a model.
+
+## `check_data()` vs `check()`
+
+| Scenario | Method |
+|---|---|
+| Quick visual diagnostic in a notebook | `check()` |
+| Publication-quality matplotlib figure | `check_data()` |
+| Automated test suite or CI pipeline | `check_data()` |
+| Export residuals to CSV or DataFrame | `check_data()` |
+| Statistical tests on residuals | `check_data()` |
+| Interactive exploration with Altair tooltips | `check()` |
+| Custom panel layout or overlays | `check_data()` |
+
+Both methods compute the same underlying quantities. `check()` returns Altair chart objects;
+`check_data()` returns arrays in a `CheckDataResult` dataclass.
+
+## Where to go next
+
+- [Model diagnostics](11-diagnostics.qmd) covers the full diagnostic workflow, including
+  `gam_check()` for basis dimension adequacy checks.
+- [Advanced diagnostics](13-advanced-diagnostics.qmd) dives deeper into residual types and
+  influence measures.
+- [Partial dependence as data](10-partial-dependence.qmd) follows the same pattern: raw arrays
+  for the data behind `partial_effects()` plots.

@@ -1,0 +1,315 @@
+---
+title: "Derivatives and marginal effects"
+guide-section: "Advanced features"
+---
+
+```{python}
+#| echo: false
+#| output: false
+import great_docs as gd
+
+gd.enable_tbl_preview(n_head=8, n_tail=3)
+```
+
+The partial effects plot from `model.partial_effects()` shows the estimated shape of each smooth,
+but it does not directly answer questions like *"where is the effect increasing?"* or *"at what
+rate?"*. For that you need the derivative of the smooth with respect to its covariate. Whittaker
+provides three tools for this kind of inference:
+
+- **`derivatives()`** estimates the first or second derivative of a smooth, with confidence bands
+  that let you identify regions where the rate of change is significantly different from zero.
+- **`marginal_effects()`** evaluates a smooth over a grid while holding other covariates fixed,
+  giving the partial effect on the linear predictor.
+- **`pairwise_comparisons()`** computes the difference between two conditions along a smooth, with
+  pointwise confidence bands (useful for asking *"does the effect of x differ between group A and
+  group B?"*).
+
+All three methods use the Bayesian posterior covariance of the coefficients to compute standard
+errors, so the confidence bands account for smoothing uncertainty. Setting `unconditional=True`
+additionally inflates the bands to account for uncertainty in the smoothing parameters themselves.
+
+## Setup
+
+We will work with a simulated dataset that has a nonlinear effect of `x`, a linear effect of a
+grouping variable `z`, and a smooth interaction between `x` and `z` via a `by=` variable.
+
+```{python}
+import numpy as np
+import whittaker as wk
+
+rng = np.random.default_rng(23)
+n = 400
+x = np.sort(rng.uniform(0, 2 * np.pi, n))
+z = rng.choice([0.0, 1.0], size=n)
+
+# True effect: sin(x) for z=0, sin(x) + 0.5*cos(2x) for z=1
+mu = np.sin(x) + z * 0.5 * np.cos(2 * x)
+y = mu + rng.normal(0, 0.3, n)
+
+data = {"x": x, "y": y, "z": z}
+
+model = wk.GAM("y ~ s(x, by=z)").fit(data, method="REML")
+model.summary()
+```
+
+## First derivatives
+
+The first derivative $\partial f / \partial x$ tells you the instantaneous rate of change of the
+smooth at each point. Where the derivative is positive, the effect is increasing. Where it is
+negative, the effect is decreasing. Where the confidence band excludes zero, that change is
+statistically significant.
+
+`derivatives()` uses central finite differences on the basis matrix with delta-method standard
+errors to estimate the derivative at a fine grid of points along the covariate's range.
+
+```{python}
+deriv = model.derivatives("x")
+```
+
+The result is a list of `DerivativeResult` objects, one per smooth term involving the variable. Each
+contains:
+
+- **`x`**: the evaluation grid
+- **`derivative`**: the estimated derivative values
+- **`se`**: standard errors
+- **`lower`** and **`upper`**: confidence bands at the specified level (default 95%)
+
+```{python}
+d = deriv[0]  # first smooth term
+print(f"Term: {d.term}")
+print(f"Order: {d.order}")
+print(f"Grid points: {len(d.x)}")
+print(f"Confidence level: {d.level}")
+```
+
+### Plotting derivatives
+
+A derivative plot with the confidence band clearly shows where the smooth is significantly
+increasing or decreasing (regions where the band excludes zero).
+
+```{python}
+import altair as alt
+
+d = deriv[0]
+deriv_data = [
+    {"x": float(d.x[i]), "derivative": float(d.derivative[i]),
+     "lower": float(d.lower[i]), "upper": float(d.upper[i])}
+    for i in range(len(d.x))
+]
+
+band = alt.Chart({"values": deriv_data}).mark_area(
+    opacity=0.2, color="steelblue"
+).encode(x=alt.X("x:Q"), y="lower:Q", y2="upper:Q")
+
+line = alt.Chart({"values": deriv_data}).mark_line(
+    color="steelblue"
+).encode(x="x:Q", y=alt.Y("derivative:Q", title="∂f/∂x"))
+
+zero = alt.Chart({"values": [{"y": 0}]}).mark_rule(
+    color="firebrick", strokeDash=[4, 4]
+).encode(y="y:Q")
+
+(band + line + zero).properties(
+    width=500, height=250,
+    title=f"First derivative of {d.term}"
+)
+```
+
+Where the shaded band lies entirely above (or below) the red dashed line at zero, the smooth is
+significantly increasing (or decreasing) at the 95% level.
+
+## Second derivatives
+
+The second derivative $\partial^2 f / \partial x^2$ measures the curvature of the smooth. Where it
+is significantly different from zero, the smooth is concave (negative) or convex (positive). This is
+useful for identifying inflection points and regions of rapid change.
+
+```{python}
+deriv2 = model.derivatives("x", order=2)
+d2 = deriv2[0]
+
+d2_data = [
+    {"x": float(d2.x[i]), "derivative": float(d2.derivative[i]),
+     "lower": float(d2.lower[i]), "upper": float(d2.upper[i])}
+    for i in range(len(d2.x))
+]
+
+band2 = alt.Chart({"values": d2_data}).mark_area(
+    opacity=0.2, color="darkorange"
+).encode(x=alt.X("x:Q"), y="lower:Q", y2="upper:Q")
+
+line2 = alt.Chart({"values": d2_data}).mark_line(
+    color="darkorange"
+).encode(x="x:Q", y=alt.Y("derivative:Q", title="∂²f/∂x²"))
+
+(band2 + line2 + zero).properties(
+    width=500, height=250,
+    title=f"Second derivative of {d2.term}"
+)
+```
+
+## Detecting significant change
+
+A common applied question is: *"over what range of x is the effect significantly changing?"*. The
+answer is wherever the derivative's confidence band excludes zero. You can extract these regions
+programmatically:
+
+```{python}
+d = deriv[0]
+sig_increase = (d.lower > 0)
+sig_decrease = (d.upper < 0)
+
+print(f"Significantly increasing over x in: "
+      f"[{d.x[sig_increase].min():.2f}, {d.x[sig_increase].max():.2f}]")
+print(f"Significantly decreasing over x in: "
+      f"[{d.x[sig_decrease].min():.2f}, {d.x[sig_decrease].max():.2f}]")
+print(f"Not significantly changing:          {(~sig_increase & ~sig_decrease).sum()} "
+      f"of {len(d.x)} grid points")
+```
+
+## Marginal effects
+
+While `derivatives()` tells you the *rate of change*, `marginal_effects()` tells you the *level* of
+the smooth at each point, holding other covariates fixed. This is the GAM equivalent of the
+`marginaleffects` package in R or `gratia::smooth_estimates()`.
+
+```{python}
+me = model.marginal_effects("x")
+```
+
+Each `MarginalEffectResult` contains the smooth's contribution to the linear predictor (not the
+response scale), evaluated over a grid of the focal variable while other covariates are held at
+their means.
+
+```{python}
+m = me[0]
+print(f"Term: {m.term}")
+print(f"Variable: {m.variable}")
+print(f"Grid points: {len(m.x)}")
+print(f"Conditioning values: {m.by_values}")
+```
+
+### Conditioning on specific values
+
+The `at` parameter lets you fix other covariates at specific values instead of their means. This is
+especially useful for `by=` smooths or models with interactions:
+
+```{python}
+me_z0 = model.marginal_effects("x", at={"z": 0.0})
+me_z1 = model.marginal_effects("x", at={"z": 1.0})
+```
+
+```{python}
+plot_data = []
+for label, results in [("z = 0", me_z0), ("z = 1", me_z1)]:
+    m = results[0]
+    for i in range(len(m.x)):
+        plot_data.append({
+            "x": float(m.x[i]), "effect": float(m.effect[i]),
+            "lower": float(m.lower[i]), "upper": float(m.upper[i]),
+            "group": label,
+        })
+
+band_me = alt.Chart({"values": plot_data}).mark_area(opacity=0.15).encode(
+    x=alt.X("x:Q"),
+    y=alt.Y("lower:Q", title="Partial effect on η"),
+    y2="upper:Q",
+    color=alt.Color("group:N", title="Condition"),
+)
+
+line_me = alt.Chart({"values": plot_data}).mark_line().encode(
+    x="x:Q", y="effect:Q",
+    color="group:N",
+)
+
+(band_me + line_me).properties(
+    width=500, height=300,
+    title="Marginal effects of x, conditioned on z"
+)
+```
+
+The two curves show how the smooth effect of `x` differs between the two groups. The confidence
+bands overlap in some regions (suggesting no significant difference there) and separate in others
+(suggesting the group effect is real).
+
+## Pairwise comparisons
+
+`pairwise_comparisons()` directly estimates the difference between two conditions with pointwise
+confidence bands. This is more formal than eyeballing the overlap of marginal-effect bands, because
+it accounts for the covariance between the two estimates.
+
+```{python}
+contrasts = model.pairwise_comparisons(
+    "x",
+    pairs=[({"z": 1.0}, {"z": 0.0})],
+)
+
+c = contrasts[0]
+print(f"Term: {c.term}")
+print(f"Comparison: {c.label}")
+```
+
+The `ContrastResult` contains the estimated difference `f(x | z=1) - f(x | z=0)` with standard
+errors and confidence bands. Where the band excludes zero, the two conditions are significantly
+different at that value of `x`.
+
+```{python}
+contrast_data = [
+    {"x": float(c.x[i]), "difference": float(c.difference[i]),
+     "lower": float(c.lower[i]), "upper": float(c.upper[i])}
+    for i in range(len(c.x))
+]
+
+band_c = alt.Chart({"values": contrast_data}).mark_area(
+    opacity=0.2, color="steelblue"
+).encode(x=alt.X("x:Q"), y="lower:Q", y2="upper:Q")
+
+line_c = alt.Chart({"values": contrast_data}).mark_line(
+    color="steelblue"
+).encode(x="x:Q", y=alt.Y("difference:Q", title="f(z=1) − f(z=0)"))
+
+zero_c = alt.Chart({"values": [{"y": 0}]}).mark_rule(
+    color="firebrick", strokeDash=[4, 4]
+).encode(y="y:Q")
+
+(band_c + line_c + zero_c).properties(
+    width=500, height=250,
+    title="Pairwise comparison: z=1 vs. z=0"
+)
+```
+
+Where the band is entirely above zero, the `z=1` group has a significantly higher effect. Where it
+crosses zero, the difference is not significant. This is the GAM analogue of `emmeans` or
+`marginaleffects::comparisons()` from R.
+
+## Unconditional intervals
+
+By default, all three methods use the Bayesian posterior covariance *conditional on* the estimated
+smoothing parameters. Setting `unconditional=True` adds the extra uncertainty from estimating
+$\lambda$ itself (Marra & Wood, 2012), producing wider and more conservative bands:
+
+```{python}
+deriv_cond = model.derivatives("x")
+deriv_uncond = model.derivatives("x", unconditional=True)
+
+d_c, d_u = deriv_cond[0], deriv_uncond[0]
+print(f"Mean SE (conditional):    {d_c.se.mean():.4f}")
+print(f"Mean SE (unconditional):  {d_u.se.mean():.4f}")
+print(f"Ratio:                    {d_u.se.mean() / d_c.se.mean():.2f}x")
+```
+
+The unconditional intervals are always at least as wide. Use them when the smoothing-parameter
+uncertainty is an important part of the inference. For example, when the GCV or REML criterion
+surface is flat (as shown by `smoothing_sensitivity()`).
+
+## Where to go next
+
+- **[Model diagnostics](11-diagnostics.qmd)**: residual analysis and basis dimension checks before
+  interpreting smooth effects.
+- **[Advanced diagnostics](13-advanced-diagnostics.qmd)**: influence, concurvity, dispersion tests,
+  and other model-checking tools.
+- **[Prediction and inference](08-prediction.qmd)**: confidence and prediction intervals for the
+  overall response.
+- **[Smoothing parameter sensitivity](33-sensitivity.qmd)**: check whether derivative-based
+  conclusions are robust to the choice of smoothing parameters.
+- **[ANOVA for GAMs](16-anova.qmd)**: formal deviance-difference tests for nested model comparison.

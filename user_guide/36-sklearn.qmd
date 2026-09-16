@@ -1,0 +1,225 @@
+---
+title: "scikit-learn integration"
+guide-section: "Advanced features"
+---
+
+```{python}
+#| echo: false
+#| output: false
+import great_docs as gd
+
+gd.enable_tbl_preview(n_head=8, n_tail=3)
+```
+
+Whittaker's core `GAM` class uses a formula-and-dictionary interface: you write `"y ~ s(x1) + x2"`
+and pass a column-oriented dict. This is expressive for GAM-specific work, but it does not plug
+directly into scikit-learn's `fit(X, y)` / `predict(X)` ecosystem. The `GAMRegressor` and
+`GAMClassifier` wrappers bridge that gap. They accept plain numpy arrays, auto-name the columns
+(`x0`, `x1`, ...), and delegate to a `GAM` internally (so a GAM can participate in `Pipeline`,
+`GridSearchCV`, `cross_val_score`, and any other scikit-learn tooling).
+
+## GAMRegressor
+
+`GAMRegressor` is a `RegressorMixin` for continuous responses. By default it fits a Gaussian family
+with one `s(xi)` smooth per feature column:
+
+```{python}
+import numpy as np
+from whittaker.sklearn import GAMRegressor
+
+rng = np.random.default_rng(0)
+X = rng.uniform(-2, 2, size=(200, 2))
+y = np.sin(X[:, 0]) + 0.5 * X[:, 1] ** 2 + rng.normal(scale=0.2, size=200)
+
+reg = GAMRegressor()
+reg.fit(X, y)
+
+print(f"Features:  {reg.feature_names_}")
+print(f"R² score:  {reg.score(X, y):.4f}")
+```
+
+### Custom formulas
+
+Pass `formula` to override the default additive formula. Use `x0`, `x1`, ... to refer to columns
+by position. A bare right-hand side (no `~`) gets `"y ~ "` prepended automatically:
+
+```{python}
+reg_custom = GAMRegressor(formula="s(x0, k=20) + x1")
+reg_custom.fit(X, y)
+print(f"R²: {reg_custom.score(X, y):.4f}")
+```
+
+You can also write a full formula with `~`:
+
+```{python}
+reg_full = GAMRegressor(formula="y ~ s(x0) + s(x1, bs='cr', k=8)")
+reg_full.fit(X, y)
+print(f"R²: {reg_full.score(X, y):.4f}")
+```
+
+### Choosing the fitting method
+
+The `method` parameter controls smoothing parameter selection, and `select` enables double-penalty
+term selection:
+
+```{python}
+reg_reml = GAMRegressor(method="REML", select=True)
+reg_reml.fit(X, y)
+print(f"R² (REML + select): {reg_reml.score(X, y):.4f}")
+```
+
+### Non-Gaussian families
+
+Pass a `family` to fit non-Gaussian responses:
+
+```{python}
+from whittaker.families.poisson import Poisson
+
+X_p = rng.uniform(0, 3, size=(200, 1))
+y_p = rng.poisson(np.exp(0.5 * np.sin(X_p[:, 0]))).astype(float)
+
+reg_pois = GAMRegressor(family=Poisson())
+reg_pois.fit(X_p, y_p)
+print(f"Predictions (first 5): {reg_pois.predict(X_p[:5]).round(3)}")
+```
+
+## GAMClassifier
+
+`GAMClassifier` is a `ClassifierMixin` for binary classification. It always uses a Binomial family
+with a logit link internally:
+
+```{python}
+from whittaker.sklearn import GAMClassifier
+
+X_c = rng.uniform(-2, 2, size=(300, 2))
+logit = 1.5 * np.sin(X_c[:, 0]) - X_c[:, 1]
+p = 1 / (1 + np.exp(-logit))
+y_c = rng.binomial(1, p).astype(float)
+
+clf = GAMClassifier()
+clf.fit(X_c, y_c)
+
+print(f"Classes:   {clf.classes_}")
+print(f"Accuracy:  {clf.score(X_c, y_c):.4f}")
+```
+
+### Predicted probabilities
+
+`predict_proba()` returns a `(n_samples, 2)` array where column 0 is `P(y = 0)` and column 1 is
+`P(y = 1)`:
+
+```{python}
+proba = clf.predict_proba(X_c[:5])
+print(proba.round(3))
+```
+
+## Cross-validation
+
+Both wrappers work with `cross_val_score` and `cross_validate`:
+
+```{python}
+from sklearn.model_selection import cross_val_score
+
+scores = cross_val_score(GAMRegressor(), X, y, cv=5, scoring="r2")
+print(f"5-fold R²: {scores.round(3)}")
+print(f"Mean:      {scores.mean():.3f}")
+```
+
+```{python}
+scores_clf = cross_val_score(
+    GAMClassifier(), X_c, y_c, cv=5, scoring="accuracy"
+)
+print(f"5-fold accuracy: {scores_clf.round(3)}")
+print(f"Mean:            {scores_clf.mean():.3f}")
+```
+
+## Pipelines
+
+GAM wrappers work as any estimator in a scikit-learn `Pipeline`:
+
+```{python}
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import StandardScaler
+
+pipe = Pipeline([
+    ("scaler", StandardScaler()),
+    ("gam", GAMRegressor(formula="s(x0) + s(x1)")),
+])
+
+pipe.fit(X, y)
+print(f"Pipeline R²: {pipe.score(X, y):.4f}")
+```
+
+The scaler standardizes features before they reach the GAM. Since the GAM learns its own smooth
+functions, scaling is rarely necessary but it can help when features have very different ranges and
+you are combining the GAM with other estimators.
+
+## Hyperparameter search
+
+`GridSearchCV` can search over `formula`, `method`, and `select`:
+
+```{python}
+from sklearn.model_selection import GridSearchCV
+
+param_grid = {
+    "method": ["GCV", "REML"],
+    "select": [False, True],
+}
+
+search = GridSearchCV(GAMRegressor(), param_grid, cv=3, scoring="r2")
+search.fit(X, y)
+
+print(f"Best params: {search.best_params_}")
+print(f"Best R²:     {search.best_score_:.4f}")
+```
+
+## Accessing the underlying GAM
+
+After fitting, the underlying `GAM` object is available as `reg.gam_`. This gives you access to the
+full Whittaker API (summaries, partial effects, diagnostics):
+
+```{python}
+reg = GAMRegressor(formula="s(x0) + s(x1)", method="REML")
+reg.fit(X, y)
+
+reg.gam_.summary()
+```
+
+```{python}
+gof = reg.gam_.goodness_of_fit()
+print(f"AIC: {gof.aic:.2f}")
+print(f"Dev. explained: {gof.deviance_explained:.1%}")
+```
+
+## When to use GAM vs. GAMRegressor
+
+| | `GAM` | `GAMRegressor` / `GAMClassifier` |
+|---|---|---|
+| **Input format** | Named dict `{"x": array}` | Numpy array `X` |
+| **Formula** | Required | Auto-generated or optional |
+| **scikit-learn compatible** | No | Yes |
+| **Full inference API** | Direct | Via `.gam_` |
+| **Best for** | GAM-specific work, inference, diagnostics | ML pipelines, cross-validation, grid search |
+
+Use `GAM` directly when you are doing GAM-specific work: interpreting smooth effects, computing
+derivatives, running diagnostics, or comparing models. Use the sklearn wrappers when you need a
+GAM to participate in a scikit-learn workflow (pipelines, cross-validation, or hyperparameter
+search).
+
+## Limitations
+
+- **Feature names are positional**: columns are named `x0`, `x1`, ... by position. If you
+  reorder features between `fit` and `predict`, the formula terms will apply to the wrong columns.
+- **Binary classification only**: `GAMClassifier` supports exactly two classes. For multi-class
+  problems, use `GAM` with the `Multinomial` family directly.
+- **No `transform` method**: GAM wrappers are estimators, not transformers. They cannot be used as
+  intermediate steps in a pipeline (only as the final estimator).
+- **Smoothing parameters are not hyperparameters**: `GridSearchCV` can tune `method` and `select`,
+  but the smoothing parameters themselves are always selected internally during `fit()`.
+
+## Where to go next
+
+- **[Model fitting](06-fitting.qmd)**: details on `method` and `select` options.
+- **[Model diagnostics](11-diagnostics.qmd)**: checking the fit via `reg.gam_`.
+- **[Cross-validation](14-cross-validation.qmd)**: Whittaker's own cross-validation for GAM-specific
+  metrics (deviance, term-level EDF).

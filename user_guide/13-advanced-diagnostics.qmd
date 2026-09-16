@@ -1,0 +1,264 @@
+---
+title: "Advanced diagnostics"
+guide-section: "Model diagnostics"
+---
+
+```{python}
+#| echo: false
+#| output: false
+import great_docs as gd
+
+gd.enable_tbl_preview(n_head=8, n_tail=3)
+```
+
+The [Model diagnostics](11-diagnostics.qmd) page covers the essentials: `summary()`, `check()`,
+residual plots, and `goodness_of_fit()`. This page goes deeper with tools for detecting influential
+observations, diagnosing collinearity among smooth terms, testing for overdispersion, and computing
+improved residuals for non-Gaussian families.
+
+## Setup
+
+We use a Poisson dataset with a nonlinear effect and an outlier, so the diagnostics have something
+to find.
+
+```{python}
+import numpy as np
+import whittaker as wk
+from whittaker.families.poisson import Poisson
+
+rng = np.random.default_rng(23)
+n = 200
+x1 = np.sort(rng.uniform(0, 2 * np.pi, n))
+x2 = rng.normal(0, 1, n)
+
+lam = np.exp(1.0 * np.sin(x1) + 0.3 * x2)
+y = rng.poisson(lam).astype(float)
+
+# Plant an outlier
+y[100] = 150.0
+
+data = {"x1": x1, "x2": x2, "y": y}
+model = wk.GAM("y ~ s(x1) + s(x2)", family=Poisson()).fit(data)
+```
+
+## Influence diagnostics
+
+`model.influence()` computes two observation-level measures:
+
+- **Hat values** (leverage): the diagonal of the smoothing matrix $\mathbf{H}$. Observations with
+  high leverage have outsized influence on the fitted curve because they sit in sparse regions of the
+  covariate space or near the boundaries.
+- **Cook's distance**: a combined measure of leverage and residual size. A large Cook's distance
+  means that removing the observation would substantially change the fitted model.
+
+```{python}
+infl = model.influence()
+print(f"Hat values shape: {infl.hat_values.shape}")
+print(f"Cook's distance shape: {infl.cooks_distance.shape}")
+```
+
+### Identifying influential observations
+
+A common rule of thumb is to flag observations with Cook's distance greater than $4/n$. Let's see
+which observations stand out:
+
+```{python}
+threshold = 4.0 / n
+flagged = np.where(infl.cooks_distance > threshold)[0]
+print(f"Flagged {len(flagged)} observations (Cook's D > {threshold:.4f})")
+print(f"Top 5 by Cook's distance:")
+top5 = np.argsort(infl.cooks_distance)[-5:][::-1]
+for idx in top5:
+    print(f"  obs {idx}: Cook's D = {infl.cooks_distance[idx]:.4f}, "
+          f"hat = {infl.hat_values[idx]:.4f}, y = {y[idx]:.0f}")
+```
+
+The planted outlier at observation 100 should appear prominently. In practice, you would investigate
+flagged observations to decide whether they are genuine data points or errors.
+
+### Visualizing influence
+
+```{python}
+import altair as alt
+
+infl_data = [
+    {"index": int(i), "cooks_d": float(infl.cooks_distance[i]),
+     "hat": float(infl.hat_values[i]),
+     "flagged": bool(infl.cooks_distance[i] > threshold)}
+    for i in range(n)
+]
+
+alt.Chart({"values": infl_data}).mark_circle(size=30).encode(
+    x=alt.X("hat:Q", title="Hat value (leverage)"),
+    y=alt.Y("cooks_d:Q", title="Cook's distance"),
+    color=alt.condition(
+        alt.datum.flagged,
+        alt.value("firebrick"),
+        alt.value("steelblue"),
+    ),
+    opacity=alt.condition(alt.datum.flagged, alt.value(1.0), alt.value(0.4)),
+).properties(
+    width=500, height=300,
+    title="Influence diagnostics: leverage vs. Cook's distance"
+)
+```
+
+Points in the upper-right corner have both high leverage and a large residual (these are the most
+influential observations). Red points exceed the $4/n$ threshold.
+
+## Concurvity
+
+Concurvity is the GAM analogue of collinearity. It measures how well each smooth term can be
+approximated by the other terms in the model. If two smooths are near-confounded (concurvity close
+to 1), their individual estimates are unreliable, even though the overall model fit may be fine.
+
+```{python}
+conc = model.concurvity()
+print(f"Smooth terms: {conc.labels}")
+print(f"Worst-case concurvity: {conc.worst}")
+print(f"Observed concurvity:   {conc.observed}")
+print(f"Estimated concurvity:  {conc.estimate}")
+```
+
+Three measures are reported:
+
+- **`worst`**: the upper bound on concurvity, based on the basis function spaces. This asks: *"in
+  the worst case, how much of this smooth's flexibility could be absorbed by the rest of the
+  model?"*
+- **`observed`**: concurvity of the actual fitted smooth. This is usually lower than the worst case
+  because the data do not fully exploit the overlapping basis functions.
+- **`estimate`**: an $R^2$-style measure of how well the fitted smooth can be predicted from the
+  other terms.
+
+Values above 0.8 are a concern. Values above 0.9 are a strong warning that the smooth estimates may
+be unstable.
+
+### Pairwise concurvity
+
+Pass `full=False` to see which specific pairs of smooths are confounded:
+
+```{python}
+conc_pair = model.concurvity(full=False)
+print(f"Pairwise worst-case concurvity:")
+for i, label_i in enumerate(conc_pair.labels):
+    for j, label_j in enumerate(conc_pair.labels):
+        if i < j:
+            print(f"  {label_i} vs {label_j}: {conc_pair.worst[i, j]:.3f}")
+```
+
+When pairwise concurvity is high between two specific smooths, consider whether one of them is
+redundant, or whether a shared tensor product `te(x1, x2)` would be a better model structure.
+
+## Dispersion test
+
+For Poisson and Binomial models, the scale parameter is fixed at 1. If the data exhibit more
+variability than the model assumes (overdispersion), standard errors and p-values will be too small.
+The dispersion test checks this by comparing the Pearson chi-squared statistic to its expected value
+under the null of no overdispersion.
+
+```{python}
+disp = model.dispersion_test()
+print(f"Estimated dispersion: {disp.dispersion:.2f}")
+print(f"Chi-squared stat:     {disp.chi2_stat:.1f}")
+print(f"p-value:              {disp.p_value:.4g}")
+```
+
+A dispersion ratio substantially above 1 indicates overdispersion. If the p-value is significant,
+consider switching to a `NegativeBinomial` family (for count data) or using quasi-likelihood
+adjustments.
+
+::: {.callout-tip}
+## What to do about overdispersion
+
+Our test data includes a planted outlier, which inflates the dispersion estimate. In practice, you
+should first investigate influential observations (see above). If overdispersion persists after
+removing genuine outliers, switch to a family that handles it: `NegativeBinomial()` for counts, or
+`Gamma()` for positive continuous data with increasing variance.
+:::
+
+## Quantile residuals
+
+For non-Gaussian families, deviance residuals may not be approximately normal even when the model is
+correct. Randomized quantile residuals transform the residuals so that, under the correct model,
+they *are* standard normal (regardless of the family).
+
+```{python}
+qr = model.quantile_residuals(seed=23)
+print(f"Mean:   {qr.mean():.4f}")
+print(f"Std:    {qr.std():.4f}")
+print(f"Shape:  {qr.shape}")
+```
+
+For a correctly specified Poisson model, the quantile residuals should look like a sample from
+$N(0, 1)$. Large departures (especially in the tails) point to misspecification. Quantile residuals
+are more reliable than deviance residuals for discrete families, where the discrete probability mass
+creates artifacts in the QQ plot.
+
+```{python}
+sorted_qr = np.sort(qr)
+n_qr = len(sorted_qr)
+theoretical = np.quantile(
+    rng.normal(0, 1, 10000),
+    np.linspace(0.5 / n_qr, 1 - 0.5 / n_qr, n_qr),
+)
+
+qq_data = [
+    {"theoretical": float(theoretical[i]), "sample": float(sorted_qr[i])}
+    for i in range(n_qr)
+]
+
+ref_min = min(theoretical.min(), sorted_qr.min())
+ref_max = max(theoretical.max(), sorted_qr.max())
+ref_data = [{"x": float(ref_min), "y": float(ref_min)},
+            {"x": float(ref_max), "y": float(ref_max)}]
+
+qq_points = alt.Chart({"values": qq_data}).mark_circle(
+    size=15, opacity=0.4, color="steelblue"
+).encode(x=alt.X("theoretical:Q", title="Theoretical quantiles"),
+         y=alt.Y("sample:Q", title="Quantile residuals"))
+
+ref_line = alt.Chart({"values": ref_data}).mark_line(
+    color="firebrick", strokeDash=[4, 4]
+).encode(x="x:Q", y="y:Q")
+
+(qq_points + ref_line).properties(
+    width=400, height=400,
+    title="QQ plot of quantile residuals"
+)
+```
+
+## Variance inflation factors
+
+For models with multiple parametric (linear) terms, `model.vif()` computes variance inflation
+factors to check for collinearity among the parametric predictors. VIF values above 5--10 indicate
+problematic collinearity.
+
+```{python}
+model_vif = wk.GAM("y ~ x1 + x2 + s(x1)", family=Poisson()).fit(data)
+vif_results = model_vif.vif()
+for v in vif_results:
+    print(f"  {v.term}: VIF = {v.vif:.2f}")
+```
+
+VIF only applies to the parametric (linear) terms, not to the smooths. For smooth-smooth
+confounding, use `concurvity()` instead.
+
+## Diagnostic summary
+
+| Tool | What it checks | When to use |
+|------|---------------|-------------|
+| `influence()` | Observations driving the fit | After fitting, before interpreting |
+| `concurvity()` | Smooth-smooth confounding | Models with 2+ smooth terms |
+| `dispersion_test()` | Overdispersion | Poisson / Binomial families |
+| `quantile_residuals()` | Distributional assumptions | Non-Gaussian families |
+| `vif()` | Parametric collinearity | Models with 2+ linear terms |
+
+## Where to go next
+
+- **[Model diagnostics](11-diagnostics.qmd)**: the essential diagnostic workflow (summary, check,
+  residual plots).
+- **[Derivatives and marginal effects](34-derivatives.qmd)**: interpret smooth shapes after
+  diagnosing the model.
+- **[ANOVA for GAMs](16-anova.qmd)**: formal deviance-difference tests for nested models.
+- **[Response families](05-families.qmd)**: choosing a family that matches the data-generating
+  process when diagnostics reveal distributional problems.
