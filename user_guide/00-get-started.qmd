@@ -59,17 +59,45 @@ Beyond the core GAM, Whittaker includes a broad set of tools for modern statisti
 
 ## How this guide is organized
 
-The user guide walks through each part of the pipeline in depth:
+The user guide is grouped into sections that follow the modeling workflow.
+
+**Getting started**
 
 - **[Installation](01-installation.qmd)**: how to install Whittaker.
 - **[Quick start](02-quick-start.qmd)**: a complete example from raw data to a fitted model.
+- **[Built-in datasets](03-datasets.qmd)**: ready-made datasets for learning and testing.
+
+**Fitting models**
+
 - **[Smooth terms](04-smooths.qmd)**: the full catalog of basis types and how to choose among them.
 - **[Response families](05-families.qmd)**: Gaussian, Poisson, Binomial, and more.
 - **[Model fitting](06-fitting.qmd)**: the P-IRLS algorithm, smoothness selection, and convergence.
-- **[Prediction and inference](08-prediction.qmd)**: point estimates, standard errors, and
-  confidence bands.
-- **[Model diagnostics](11-diagnostics.qmd)**: how to check that your model is adequate.
 - **[Data input](07-data-input.qmd)**: how Whittaker accepts dict-based data.
+
+**Prediction and inference**
+
+- **[Prediction](08-prediction.qmd)**: point estimates, standard errors, and confidence bands.
+- **[Simultaneous confidence bands](09-simultaneous-ci.qmd)**: curve-wide intervals that cover the
+  entire smooth at once.
+- **[Partial dependence as data](10-partial-dependence.qmd)**: structured arrays for custom plotting
+  or downstream analysis.
+
+**Model diagnostics**
+
+- **[Diagnostics](11-diagnostics.qmd)**: basis adequacy, residuals, and QQ plots.
+- **[Diagnostic data for custom plots](12-check-data.qmd)**: raw diagnostic arrays for matplotlib
+  or other plotting libraries.
+- **[Advanced diagnostics](13-advanced-diagnostics.qmd)**: influence, concurvity, dispersion tests,
+  and quantile residuals.
+
+**Model selection**
+
+- **[Cross-validation](14-cross-validation.qmd)**: K-fold cross-validation for GAMs.
+- **[Model comparison](15-compare.qmd)**: comparing models with AIC, BIC, and deviance tests.
+- **[ANOVA for GAMs](16-anova.qmd)**: analysis of deviance for nested model comparisons.
+
+**Extended features**
+
 - **[Shape constraints](17-shape-constraints.qmd)**: monotone, convex, and concave smooths.
 - **[Distributional regression](18-gamlss.qmd)**: GAMLSS for location-scale-shape models.
 - **[Quantile regression](19-quantile.qmd)**: quantile GAMs with non-crossing constraints.
@@ -78,6 +106,35 @@ The user guide walks through each part of the pipeline in depth:
 - **[Streaming and online fitting](22-streaming.qmd)**: incremental GAM fitting.
 - **[Multi-response models](23-multi-response.qmd)**: jointly modeling multiple outcomes.
 - **[Functional regression](24-functional.qmd)**: scalar-on-function regression.
-- **[Cross-validation](14-cross-validation.qmd)**: K-fold cross-validation for GAMs.
+
+**Large datasets**
+
 - **[Large datasets](25-large-datasets.qmd)**: BigGAM, PolarsGAM, and DuckDBGAM.
+
+**Bayesian inference**
+
+- **[Variational inference](26-variational-inference.qmd)**: fast approximate Bayesian fitting.
+- **[MCMC sampling](27-mcmc.qmd)**: full posterior sampling with NUTS and HMC.
+- **[LOO comparison](28-loo.qmd)**: leave-one-out cross-validation for Bayesian models.
+- **[WAIC comparison](29-waic.qmd)**: information-criterion-based model comparison.
+- **[Posterior predictive checks](30-ppc.qmd)**: testing whether the model generates realistic data.
+- **[Posterior predictive distributions](31-posterior-predict.qmd)**: drawing from the predictive
+  distribution.
+- **[Model averaging with stacking](32-stacking.qmd)**: combining Bayesian models by stacking
+  weights.
+
+**Advanced inference**
+
+- **[Smoothing parameter sensitivity](33-sensitivity.qmd)**: how robust are conclusions to smoothing
+  choices.
+- **[Derivatives and marginal effects](34-derivatives.qmd)**: rates of change and their uncertainty.
+
+**Tooling**
+
+- **[Programmatic formulas](35-programmatic-formulas.qmd)**: building formulas in code.
+- **[scikit-learn integration](36-sklearn.qmd)**: using Whittaker in ML pipelines.
+- **[Model matrix utilities](37-model-matrix.qmd)**: inspecting and manipulating design matrices.
+
+**Deployment**
+
 - **[Serialization](38-serialization.qmd)**: saving and loading fitted models.
