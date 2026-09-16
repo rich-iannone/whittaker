@@ -112,6 +112,7 @@ Conformal prediction
   guarantees. Whittaker implements three conformal methods: **split conformal** (`"split"`),
   **CV+** (`"cv+"`), and **jackknife+** (`"jackknife+"`). The intervals adapt to local
   variance without distributional assumptions. Available via `ConformalPredictor`.
+
 Conformity score
 : A measure of how unusual a calibration observation is relative to the fitted model, used in
   **conformal prediction**. The simplest conformity score is the absolute residual
@@ -119,10 +120,27 @@ Conformity score
   half-width of prediction intervals for new observations: a larger score means the model
   predicted that point poorly and the resulting interval will be wider. See also **conformal
   prediction**, **marginal coverage**.
+
+Contrast
+: The difference between a smooth term's predicted values at two specific covariate
+  configurations. Contrasts answer questions like "how does the effect at $x = 5$ differ from
+  the effect at $x = 2$?" with a point estimate, standard error, and confidence interval.
+  Computed by `model.contrasts()`, which returns a `ContrastResult`. See also **marginal
+  effect**.
+
 Convexity constraint
 : A shape constraint that forces a smooth to curve upward (i.e., $f''(x) \ge 0$). Useful for
   modeling U-shaped cost curves or economies of scale. Specified with `bs="cx"` in the formula.
   See also **shape constraint**, **concavity constraint**.
+
+Cook's distance
+: A leave-one-out influence diagnostic that measures how much the fitted values change when
+  observation $i$ is removed: $D_i = \frac{(\hat{\boldsymbol\mu} -
+  \hat{\boldsymbol\mu}_{(i)})^\top (\hat{\boldsymbol\mu} -
+  \hat{\boldsymbol\mu}_{(i)})}{p\,\hat\phi}$. In practice it is approximated from the
+  **hat matrix** diagonals and residuals without refitting. Large values flag observations
+  that disproportionately drive the model fit. Returned by `model.influence()` in
+  `InfluenceResult.cooks_distance`. See also **hat matrix**.
 
 Cox proportional hazards (`CoxPH`)
 : A semiparametric model for time-to-event (survival) data that models the hazard as
@@ -216,6 +234,7 @@ Double penalty (smooth selection)
   allowing the entire term to be shrunk to zero (effectively removed from the model). Activated
   with `select=True` in `model.fit()`. Terms that do not contribute receive near-zero
   **effective degrees of freedom**.
+
 Duchon spline (`bs="ds"`)
 : A generalization of the **thin plate regression spline** that provides explicit control over
   both the polynomial null-space order $m$ and the radial exponent $s$ of the kernel (the
@@ -224,6 +243,7 @@ Duchon spline (`bs="ds"`)
   TPRS penalty becomes numerically awkward in higher dimensions or when the analyst wants direct
   control over the smoothness-exponent trade-off. Specified with `bs="ds"` and optional
   `m=[s, m_order]` in the formula. Available via `DuchonSpline`.
+
 DuckDBGAM
 : A scalable GAM backend that streams data from DuckDB tables or SQL queries via Arrow. Ideal
   when the data lives in a database or when SQL-based filtering and transformation are needed
@@ -439,6 +459,7 @@ Marginal effect
 : The change in the predicted response for a unit change in one covariate, holding all others
   fixed. For a smooth term $f(x)$, the marginal effect at a point is the derivative
   $f'(x)$. Computed by `model.derivatives()`.
+
 Markov random field (MRF) smooth (`bs="mrf"`)
 : A smooth for discrete areal data (counties, districts, grid cells) that uses one indicator
   basis function per region and penalizes differences between neighboring regions via the graph
@@ -448,6 +469,7 @@ Markov random field (MRF) smooth (`bs="mrf"`)
   continuous 2-D smooth whenever the covariate domain is a set of discrete areas linked by
   shared borders rather than Euclidean coordinates. Specified with `bs="mrf"` in the formula.
   Available via `MRFBasis`. See also **graph Laplacian**.
+
 Mediation analysis
 : A causal analysis that decomposes the total effect of a treatment on an outcome into a
   **direct effect** (not through the mediator) and an **indirect effect** (through the
@@ -506,6 +528,7 @@ Negative Binomial family
   parameterization with variance function $V(\mu) = \mu + \mu^2/\theta$, where $\theta$
   controls overdispersion. As $\theta \to \infty$, the distribution converges to Poisson.
   Available via `NegativeBinomial()`.
+
 Neyman orthogonality
 : A property of the moment condition used in **double machine learning** that makes the
   treatment effect estimate insensitive to first-order errors in the **nuisance functions**.
@@ -514,6 +537,7 @@ Neyman orthogonality
   only second-order bias to the treatment effect estimate. Combined with **cross-fitting**,
   Neyman orthogonality ensures `CausalGAM` produces a root-$n$ consistent, asymptotically
   normal treatment effect estimate despite using regularized GAMs for the nuisance fits.
+
 Non-crossing constraint
 : A constraint in **quantile regression** that ensures fitted quantile curves do not cross:
   $\hat{Q}_{\tau_1}(x) \le \hat{Q}_{\tau_2}(x)$ whenever $\tau_1 < \tau_2$. Enforced by
@@ -586,6 +610,14 @@ Partially linear model
   confounders, and $T$ is the treatment indicator. After partialling out $g(X)$ from both $Y$
   and $T$ via **cross-fitting**, $\theta$ is estimated by regressing the outcome residuals on
   the treatment residuals. See also **CausalGAM**, **double machine learning**.
+
+Partial dependence
+: The isolated effect of one smooth term on the predicted response, computed by varying that
+  term's covariates over a grid while holding all other terms at their model-matrix values and
+  applying the identifiability constraint. Unlike `partial_effects()` (which returns Altair
+  charts), `model.partial_dependence()` returns structured `PartialDependenceResult` objects
+  with arrays for the grid values, effects, standard errors, and confidence bounds — suitable
+  for custom plotting or downstream analysis. See also **smooth term**, **confidence band**.
 
 PAVA (Pool Adjacent Violators Algorithm)
 : An algorithm for isotonic regression that enforces monotonicity by iteratively merging
@@ -691,6 +723,16 @@ Sigma calibration
   regression**. Smaller $\sigma$ gives a tighter approximation to the true quantile but makes
   optimization harder. `calibrate_sigma()` evaluates candidate values via cross-validation
   and returns the one that minimizes the out-of-sample pinball loss.
+
+Simultaneous confidence band
+: A confidence region that covers the entire true curve $f(x)$ with the stated probability,
+  not just each individual point. Constructed by simulating from the posterior covariance of
+  the coefficients to estimate a critical value $c_\alpha$ such that
+  $P(\sup_x |f(x) - \hat f(x)| / \text{se}(x) \le c_\alpha) = 1 - \alpha$. The resulting
+  band $\hat f(x) \pm c_\alpha \cdot \text{se}(x)$ is wider than the **pointwise** interval
+  because it corrects for the multiplicity of evaluating the curve at many points.
+  Produced by `model.simultaneous_ci()`, which returns a `SimultaneousCIResult`.
+  See also **confidence band**.
 
 Smooth selection
 : The process of deciding which smooth terms to include in the model. Whittaker supports two
