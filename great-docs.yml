@@ -20,7 +20,7 @@ hero:
 nav_icons:
   sidebar:
     "Get started": compass
-    "Installation": download
+    "Understanding GAMs": lightbulb
     "Quick start": rocket
     "Smooth terms": chart-spline
     "Response families": layers
