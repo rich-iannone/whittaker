@@ -64,56 +64,81 @@ panels in `check()`.
 
 ## Recreating the four diagnostic plots
 
-With the arrays in hand, you can reproduce all four diagnostic plots in matplotlib. Here they are
-arranged in a 2x2 grid, mirroring the layout of `check()`:
+With the arrays in hand, you can reproduce all four diagnostic plots. Here they are arranged in a
+2x2 grid using Altair, mirroring the layout of `check()`:
 
 ```{python}
-import matplotlib.pyplot as plt
-
-fig, axes = plt.subplots(2, 2, figsize=(9, 7))
+import altair as alt
 
 # 1. QQ plot of deviance residuals
-ax = axes[0, 0]
-ax.scatter(cd.qq_theoretical, cd.qq_observed, s=10, alpha=0.6, color="steelblue")
-lims = [
-    min(cd.qq_theoretical.min(), cd.qq_observed.min()),
-    max(cd.qq_theoretical.max(), cd.qq_observed.max()),
+qq_data = [
+    {"theoretical": float(cd.qq_theoretical[i]), "observed": float(cd.qq_observed[i])}
+    for i in range(len(cd.qq_theoretical))
 ]
-ax.plot(lims, lims, color="firebrick", linewidth=1, linestyle="--")
-ax.set_xlabel("Theoretical quantiles")
-ax.set_ylabel("Observed quantiles")
-ax.set_title("QQ plot")
+qq_min = min(cd.qq_theoretical.min(), cd.qq_observed.min())
+qq_max = max(cd.qq_theoretical.max(), cd.qq_observed.max())
+qq_ref = [{"x": float(qq_min), "y": float(qq_min)}, {"x": float(qq_max), "y": float(qq_max)}]
+
+qq_plot = (
+    alt.Chart({"values": qq_data}).mark_circle(size=15, opacity=0.6, color="steelblue").encode(
+        x=alt.X("theoretical:Q", title="Theoretical quantiles"),
+        y=alt.Y("observed:Q", title="Observed quantiles"),
+    )
+    + alt.Chart({"values": qq_ref}).mark_line(color="firebrick", strokeDash=[4, 4]).encode(
+        x="x:Q", y="y:Q"
+    )
+).properties(width=300, height=250, title="QQ plot")
 
 # 2. Residuals vs. fitted values
-ax = axes[0, 1]
-ax.scatter(cd.fitted_values, cd.deviance_residuals, s=10, alpha=0.6, color="steelblue")
-ax.axhline(0, color="firebrick", linewidth=1, linestyle="--")
-ax.set_xlabel("Fitted values")
-ax.set_ylabel("Deviance residuals")
-ax.set_title("Residuals vs. fitted")
+resid_data = [
+    {"fitted": float(cd.fitted_values[i]), "residual": float(cd.deviance_residuals[i])}
+    for i in range(cd.n_obs)
+]
+
+resid_plot = (
+    alt.Chart({"values": resid_data}).mark_circle(size=15, opacity=0.6, color="steelblue").encode(
+        x=alt.X("fitted:Q", title="Fitted values"),
+        y=alt.Y("residual:Q", title="Deviance residuals"),
+    )
+    + alt.Chart({"values": [{"y": 0}]}).mark_rule(color="firebrick", strokeDash=[4, 4]).encode(
+        y="y:Q"
+    )
+).properties(width=300, height=250, title="Residuals vs. fitted")
 
 # 3. Histogram of deviance residuals
-ax = axes[1, 0]
-ax.hist(cd.deviance_residuals, bins=30, color="steelblue", edgecolor="white", alpha=0.8)
-ax.set_xlabel("Deviance residuals")
-ax.set_ylabel("Frequency")
-ax.set_title("Histogram of residuals")
+hist_data = [{"residual": float(r)} for r in cd.deviance_residuals]
+
+hist_plot = alt.Chart({"values": hist_data}).mark_bar(
+    opacity=0.8, color="steelblue"
+).encode(
+    x=alt.X("residual:Q", bin=alt.Bin(maxbins=30), title="Deviance residuals"),
+    y=alt.Y("count():Q", title="Frequency"),
+).properties(width=300, height=250, title="Histogram of residuals")
 
 # 4. Response vs. fitted values
-ax = axes[1, 1]
-ax.scatter(cd.fitted_values, cd.response, s=10, alpha=0.6, color="steelblue")
-mn, mx = cd.fitted_values.min(), cd.fitted_values.max()
-ax.plot([mn, mx], [mn, mx], color="firebrick", linewidth=1, linestyle="--")
-ax.set_xlabel("Fitted values")
-ax.set_ylabel("Response")
-ax.set_title("Response vs. fitted")
+resp_data = [
+    {"fitted": float(cd.fitted_values[i]), "response": float(cd.response[i])}
+    for i in range(cd.n_obs)
+]
+mn, mx = float(cd.fitted_values.min()), float(cd.fitted_values.max())
+resp_ref = [{"x": mn, "y": mn}, {"x": mx, "y": mx}]
 
-plt.tight_layout()
-plt.show()
+resp_plot = (
+    alt.Chart({"values": resp_data}).mark_circle(size=15, opacity=0.6, color="steelblue").encode(
+        x=alt.X("fitted:Q", title="Fitted values"),
+        y=alt.Y("response:Q", title="Response"),
+    )
+    + alt.Chart({"values": resp_ref}).mark_line(color="firebrick", strokeDash=[4, 4]).encode(
+        x="x:Q", y="y:Q"
+    )
+).properties(width=300, height=250, title="Response vs. fitted")
+
+# 2x2 grid
+(qq_plot | resid_plot) & (hist_plot | resp_plot)
 ```
 
-Because you have full control over the figure, you can adjust colors, add annotations, change bin
-widths, overlay density curves, or export the figure in any format matplotlib supports.
+Because you have full control over the chart specifications, you can adjust colors, add annotations,
+change bin widths, or rearrange the panel layout to suit your needs.
 
 ## Automated residual checks
 
