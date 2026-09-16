@@ -42,6 +42,12 @@ class ParametricTestResult:
     stat: float
     p_value: float
 
+    def __repr__(self) -> str:
+        return (
+            f"ParametricTestResult(term={self.term_label!r}, estimate={self.estimate:.4g}, "
+            f"se={self.se:.4g}, stat={self.stat:.4g}, p={self.p_value:.4g})"
+        )
+
 
 @dataclass
 class SmoothTestResult:
@@ -66,6 +72,12 @@ class SmoothTestResult:
     edf: float
     ref_df: float
     p_value: float
+
+    def __repr__(self) -> str:
+        return (
+            f"SmoothTestResult(term={self.term_label!r}, edf={self.edf:.2f}, "
+            f"ref_df={self.ref_df:.2f}, stat={self.stat:.4g}, p={self.p_value:.4g})"
+        )
 
 
 def _bayesian_covariance(
@@ -485,6 +497,12 @@ class ConcurvityResult:
     labels: list[str] = field(default_factory=list)
     full: bool = True
 
+    def __repr__(self) -> str:
+        n = len(self.labels)
+        mode = "full" if self.full else "pairwise"
+        worst_max = float(np.max(self.worst)) if self.worst.size else 0.0
+        return f"ConcurvityResult({n} terms, mode={mode!r}, worst_max={worst_max:.3f})"
+
 
 def _qr_q(M: NDArray) -> NDArray:
     """Thin QR: return only Q with orthonormal columns spanning col(M)."""
@@ -827,6 +845,13 @@ class KCheckResult:
     k_index: float
     p_value: float
 
+    def __repr__(self) -> str:
+        star = " *" if self.p_value < 0.05 else ""
+        return (
+            f"KCheckResult(term={self.term_label!r}, edf={self.edf:.1f}/{self.k_prime}, "
+            f"k_index={self.k_index:.3f}, p={self.p_value:.3f}{star})"
+        )
+
 
 def _k_index_1d(residuals: NDArray, covariate: NDArray) -> float:
     """Compute the k-index for a single smooth by neighbor-differencing."""
@@ -951,6 +976,14 @@ class InfluenceResult:
 
     hat_values: NDArray
     cooks_distance: NDArray
+
+    def __repr__(self) -> str:
+        n = len(self.hat_values)
+        max_cook = float(np.max(self.cooks_distance))
+        mean_lev = float(np.mean(self.hat_values))
+        return (
+            f"InfluenceResult(n_obs={n}, mean_leverage={mean_lev:.4f}, max_cooks_d={max_cook:.4g})"
+        )
 
 
 def influence(fit: FitResult, mm: ModelMatrix) -> InfluenceResult:
@@ -1079,6 +1112,12 @@ class DispersionTestResult:
     chi2_stat: float
     p_value: float
 
+    def __repr__(self) -> str:
+        return (
+            f"DispersionTestResult(dispersion={self.dispersion:.4g}, "
+            f"chi2={self.chi2_stat:.4g}, p={self.p_value:.4g})"
+        )
+
 
 def dispersion_test(fit: FitResult, mm: ModelMatrix, family: Family) -> DispersionTestResult:
     """Test for overdispersion in Poisson or Binomial models."""
@@ -1114,6 +1153,9 @@ class VIFResult:
 
     term: str
     vif: float
+
+    def __repr__(self) -> str:
+        return f"VIFResult(term={self.term!r}, vif={self.vif:.3f})"
 
 
 def vif(mm: ModelMatrix) -> list[VIFResult]:
@@ -1186,6 +1228,12 @@ class DerivativeResult:
     upper: NDArray
     level: float
     order: int
+
+    def __repr__(self) -> str:
+        return (
+            f"DerivativeResult(term={self.term!r}, order={self.order}, "
+            f"n_points={len(self.x)}, level={self.level})"
+        )
 
 
 def smooth_derivatives(
@@ -1335,6 +1383,13 @@ class MarginalEffectResult:
     level: float
     by_values: dict[str, float] | None = None
 
+    def __repr__(self) -> str:
+        by = f", by={self.by_values}" if self.by_values else ""
+        return (
+            f"MarginalEffectResult(term={self.term!r}, variable={self.variable!r}, "
+            f"n_points={len(self.x)}, level={self.level}{by})"
+        )
+
 
 def marginal_effects(
     fit: FitResult,
@@ -1478,6 +1533,12 @@ class ContrastResult:
     level: float
     label: str
 
+    def __repr__(self) -> str:
+        return (
+            f"ContrastResult(term={self.term!r}, label={self.label!r}, "
+            f"n_points={len(self.x)}, level={self.level})"
+        )
+
 
 def pairwise_comparisons(
     fit: FitResult,
@@ -1496,8 +1557,6 @@ def pairwise_comparisons(
     Each pair is `(condition1, condition2)` where each condition is a dict of covariate values. The
     contrast is `f(x | condition1) - f(x | condition2)` evaluated over a grid of the focal
     *variable*.
-
-    This is the `emmeans`/`marginaleffects::comparisons()` equivalent for smooth terms.
     """
     from whittaker.model_matrix import predict_matrix
 
