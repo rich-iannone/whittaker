@@ -55,6 +55,15 @@ class PredictionResult:
     lower: NDArray | None = None
     upper: NDArray | None = None
 
+    def __repr__(self) -> str:
+        n = len(self.values)
+        parts = [f"n={n}"]
+        if self.se is not None:
+            parts.append("se=True")
+        if self.lower is not None:
+            parts.append("interval=True")
+        return f"PredictionResult({', '.join(parts)})"
+
 
 @dataclass
 class TermsPredictionResult:
@@ -88,6 +97,12 @@ class TermsPredictionResult:
         """Sum of all term contributions (overall linear predictor)."""
         arrays = list(self.terms.values())
         return np.sum(arrays, axis=0)  # type: ignore[return-value]
+
+    def __repr__(self) -> str:
+        n = len(next(iter(self.terms.values()))) if self.terms else 0
+        has_se = self.se is not None
+        terms_str = ", ".join(self.labels) if self.labels else ", ".join(self.terms.keys())
+        return f"TermsPredictionResult(n={n}, terms=[{terms_str}], se={has_se})"
 
 
 @dataclass
