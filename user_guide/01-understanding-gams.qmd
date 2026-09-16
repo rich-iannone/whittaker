@@ -1,0 +1,130 @@
+---
+title: Understanding GAMs
+guide-section: "Getting started"
+---
+
+If you have used linear regression before, you already understand the core idea behind a Generalized
+Additive Model (GAM). This page explains what GAMs are, when they are useful, and how they connect
+to the linear models you may already know.
+
+## Starting from linear regression
+
+A linear regression model says that the expected value of a response $y$ depends on predictors
+through a straight-line relationship:
+
+$$y = \beta_0 + \beta_1 x_1 + \beta_2 x_2 + \varepsilon$$
+
+Each coefficient $\beta_j$ tells you how much $y$ changes for a one-unit increase in $x_j$. This is
+simple and interpretable, but it forces every relationship to be a straight line. Real data often
+curve.
+
+## What a GAM changes
+
+A GAM replaces each linear term $\beta_j x_j$ with a smooth function $f_j(x_j)$ whose shape is
+learned from the data:
+
+$$y = \beta_0 + f_1(x_1) + f_2(x_2) + \varepsilon$$
+
+The function $f_j$ can be wiggly, flat, or anything in between (whatever the data support really).
+You do not need to guess the right polynomial degree or manually specify breakpoints. The model
+figures out the shape on its own.
+
+The word **additive** means the effect of each predictor is modeled separately and the contributions
+are summed. This keeps the model interpretable: you can plot $f_1(x_1)$ and $f_2(x_2)$ individually
+to see how each predictor influences the response.
+
+## When might you use a GAM?
+
+GAMs are a good fit when:
+
+- **Relationships are nonlinear** and you do not know the functional form in advance. Rather than
+  trying polynomials, log transforms, or binning, a GAM learns the shape directly.
+- **You want interpretability**. Unlike black-box models, a GAM gives you a smooth curve for each
+  predictor that you can inspect, plot, and reason about.
+- **You need uncertainty estimates**. GAMs provide standard errors and confidence bands for every
+  smooth, so you know where the model is confident and where it is uncertain.
+- **You have moderate to large sample sizes**. GAMs need enough data to estimate smooth shapes
+  reliably (as a rough guide, at least 50--100 observations per smooth term).
+
+GAMs may not be the best choice when:
+
+- **Relationships are truly linear**. A GAM will recover a straight line when the data are linear,
+  but a plain linear model is simpler and faster.
+- **You need high-dimensional feature interactions**. GAMs model each predictor separately by
+  default. Interactions between two or three predictors are possible (via tensor products), but
+  GAMs are not designed for the kind of high-dimensional interaction learning that tree ensembles
+  or neural networks handle.
+- **Prediction speed is critical**. For latency-sensitive applications with very large feature sets,
+  simpler models or pre-compiled predictions may be faster.
+
+## How smoothness is controlled
+
+The key question is: how does a GAM decide how wiggly each smooth should be?
+
+Each smooth function is built from a set of **basis functions**, which are simple building blocks
+(like splines) that are combined to approximate any smooth shape. The number of basis functions
+(called $k$) sets the maximum possible complexity.
+
+A **smoothing parameter** $\lambda$ penalizes wiggliness. A large $\lambda$ produces a nearly
+straight line whereas a small $\lambda$ allows the curve to follow the data closely. The right
+$\lambda$ is selected automatically by a statistical criterion. The most common is **REML**
+(Restricted Maximum Likelihood), which balances fit against complexity.
+
+This means you do not have to hand-tune the smoothness. You set $k$ large enough (the default of 10
+is usually fine), and the model finds the right amount of flexibility.
+
+## Generalized: beyond Gaussian data
+
+The "Generalized" in GAM means the framework extends beyond continuous, normally distributed
+responses. Just as a generalized linear model (GLM) handles counts, binary outcomes, and
+proportions through a **link function** and an appropriate distribution, a GAM does the same with
+smooth terms.
+
+For example:
+
+- **Count data** (e.g., number of events): use a Poisson family with a log link. The model becomes
+  $\log(\mu) = \beta_0 + f(x)$, and predictions are on the count scale.
+- **Binary outcomes** (e.g., yes/no): use a Binomial family with a logit link. The model estimates
+  the probability of success as a smooth function of the predictors.
+- **Strictly positive data** (e.g., costs, durations): use a Gamma family.
+
+The choice of family tells the model how the variance relates to the mean and what scale the
+relationship operates on. This is the same idea as in GLMs but GAMs simply add the ability to make
+each predictor's effect nonlinear.
+
+## The GAM workflow
+
+A typical analysis with a GAM follows these steps:
+
+1. **Specify** the model with a formula: which variables are smooth, which are linear, what family
+   to use.
+2. **Fit** the model. Smoothing parameters are estimated automatically.
+3. **Check** the fit: are the basis dimensions large enough? Do the residuals look reasonable?
+4. **Interpret** the results: look at the summary, plot the smooth terms, compute predictions with
+   confidence intervals.
+5. **Refine** if needed: increase basis dimensions, change the family, add or remove terms.
+
+This iterative workflow is central to GAM modeling. Unlike machine learning pipelines where you
+optimize a single metric, GAM analysis involves inspecting diagnostics and understanding what the
+model has learned.
+
+## GAMs compared to other approaches
+
+| Approach | Strengths | Limitations |
+|---|---|---|
+| Linear regression | Simple, fast, highly interpretable | Cannot capture nonlinear effects |
+| Polynomial regression | Can model curves | Must choose degree and unstable at boundaries |
+| GAMs | Flexible curves, automatic smoothness, interpretable | Additive structure limits interactions |
+| Random forests / boosting | Handle interactions and high dimensions | Less interpretable, no smooth uncertainty |
+| Neural networks | Arbitrary function approximation | Require large data, opaque |
+
+GAMs occupy a sweet spot: they're more flexible than linear models, and they're more interpretable
+than black-box methods. They are especially strong when you care about *understanding* the
+relationship between each predictor and the response, not just making predictions.
+
+## Where to go next
+
+- **[Quick start](02-quick-start.qmd)**: see a complete GAM analysis in code, from raw data to
+  predictions and plots.
+- **[Smooth terms](04-smooths.qmd)**: the full catalog of basis types available in Whittaker.
+- **[Response families](05-families.qmd)**: all supported distributions and link functions.
