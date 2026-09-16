@@ -7,6 +7,7 @@ maximize the combined leave-one-out predictive density of the weighted mixture.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 
 import numpy as np
@@ -61,7 +62,7 @@ class StackingResult:
 
 
 def _validate_pointwise(
-    results: list[LOOResult] | list[WAICResult],
+    results: Sequence[LOOResult | WAICResult],
 ) -> tuple[NDArray, str]:
     """Extract and validate the pointwise ELPD matrix from a list of results.
 
@@ -183,8 +184,7 @@ def stacking(
     print(result.weights)  # e.g., array([0.62, 0.35, 0.03])
     ```
     """
-    results_list = list(results)
-    lpd_matrix, method = _validate_pointwise(results_list)
+    lpd_matrix, method = _validate_pointwise(results)
     n, K = lpd_matrix.shape
 
     weights = _stacking_weights(lpd_matrix)
