@@ -347,6 +347,59 @@ class PartialDependenceResult:
 
 
 @dataclass
+class SimultaneousCIResult:
+    """Simultaneous confidence band for a smooth term.
+
+    Attributes
+    ----------
+    estimate : NDArray
+        Estimated smooth effect at each evaluation point.
+    se : NDArray
+        Pointwise standard errors.
+    lower : NDArray
+        Lower simultaneous band.
+    upper : NDArray
+        Upper simultaneous band.
+    term_label : str
+        Label of the smooth term.
+    crit_value : float
+        Critical value from posterior simulation.
+    """
+
+    estimate: NDArray
+    se: NDArray
+    lower: NDArray
+    upper: NDArray
+    term_label: str
+    crit_value: float
+
+    _KEYS = ("estimate", "se", "lower", "upper", "term_label", "crit_value")
+
+    def __getitem__(self, key: str) -> Any:
+        if key not in self._KEYS:
+            raise KeyError(key)
+        return getattr(self, key)
+
+    def __contains__(self, key: object) -> bool:
+        return key in self._KEYS
+
+    def keys(self) -> tuple[str, ...]:
+        """Dict-like keys for backward compatibility."""
+        return self._KEYS
+
+    @property
+    def n_points(self) -> int:
+        """Number of evaluation points."""
+        return len(self.estimate)
+
+    def __repr__(self) -> str:
+        return (
+            f"SimultaneousCIResult(term={self.term_label!r}, n_points={self.n_points}, "
+            f"crit_value={self.crit_value:.3f})"
+        )
+
+
+@dataclass
 class GamCheckResult:
     """Container returned by `GAM.gam_check()`, bundling residual diagnostics with fit summary
     statistics and basis-dimension adequacy checks.
@@ -405,6 +458,45 @@ class GamCheckResult:
                 f"edf={kc.edf:.1f}/{kc.k_prime}, p={kc.p_value:.3f}{star}"
             )
         return "\n".join(lines)
+
+
+@dataclass
+class CheckDataResult:
+    """Structured diagnostic data underlying `check()` plots.
+
+    Provides the same four diagnostic datasets that `check()` renders as Altair charts, but as raw
+    arrays for custom plotting with matplotlib or other libraries.
+
+    Attributes
+    ----------
+    deviance_residuals : NDArray
+        Deviance residuals, shape `(n,)`.
+    pearson_residuals : NDArray
+        Pearson residuals, shape `(n,)`.
+    fitted_values : NDArray
+        Fitted values on the response scale, shape `(n,)`.
+    response : NDArray
+        Observed response values, shape `(n,)`.
+    qq_theoretical : NDArray
+        Theoretical normal quantiles for the QQ plot, shape `(n,)`.
+    qq_observed : NDArray
+        Sorted deviance residuals for the QQ plot, shape `(n,)`.
+    """
+
+    deviance_residuals: NDArray
+    pearson_residuals: NDArray
+    fitted_values: NDArray
+    response: NDArray
+    qq_theoretical: NDArray
+    qq_observed: NDArray
+
+    @property
+    def n_obs(self) -> int:
+        """Number of observations."""
+        return len(self.deviance_residuals)
+
+    def __repr__(self) -> str:
+        return f"CheckDataResult(n_obs={self.n_obs})"
 
 
 class ModelSummary:
@@ -1137,7 +1229,7 @@ class GAM:
         n_sim: int = 10_000,
         unconditional: bool = False,
         seed: int = 0,
-    ) -> dict:
+    ) -> SimultaneousCIResult:
         """Compute simultaneous confidence bands for smooth terms.
 
         Unlike pointwise intervals, these bands have (approximate) `level=` coverage probability for
@@ -1151,18 +1243,18 @@ class GAM:
             Which smooth term to compute bands for. An integer index (0-based) or the term label
             string. If `None` and the model has exactly one smooth, that term is used.
         level:
-            Nominal simultaneous coverage probability (default `0.95`).
+            Nominal simultaneous coverage probability (the default is `0.95`).
         n_sim:
-            Number of posterior simulations for the critical value (default `10_000`).
+            Number of posterior simulations for the critical value (the default is `10_000`).
         unconditional:
-            If `True`, include smoothing parameter uncertainty.
+            If `True`, include smoothing parameter uncertainty (the default is `False`).
         seed:
-            Random seed for reproducibility.
+            Random seed for reproducibility (the default is `0`).
 
         Returns
         -------
-        dict
-            Keys: `"estimate"`, `"se"`, `"lower"`, `"upper"`, `"term_label"`, `"crit_value"`.
+        SimultaneousCIResult
+            Contains `estimate`, `se`, `lower`, `upper`, `term_label`, `crit_value`.
         """
         self._check_fitted()
         new_data = prepare_data(new_data)
@@ -1210,14 +1302,14 @@ class GAM:
         if info.by_level is not None:
             label = f"{label}:{info.by_level}"
 
-        return {
-            "estimate": estimate,
-            "se": se_values,
-            "lower": estimate - crit * se_values,
-            "upper": estimate + crit * se_values,
-            "term_label": label,
-            "crit_value": crit,
-        }
+        return SimultaneousCIResult(
+            estimate=estimate,
+            se=se_values,
+            lower=estimate - crit * se_values,
+            upper=estimate + crit * se_values,
+            term_label=label,
+            crit_value=crit,
+        )
 
     def partial_dependence(
         self,
@@ -1415,14 +1507,45 @@ class GAM:
             "Choose from 'response', 'pearson', 'deviance', or 'working'."
         )
 
+    def check_data(self) -> CheckDataResult:
+        """Return diagnostic data for custom plotting.
+
+        Provides the same data that `check()` renders as Altair charts (deviance and pearson
+        residuals, fitted values, response, and QQ coordinates) as structured arrays.
+
+        Returns
+        -------
+        CheckDataResult
+        """
+        from scipy.stats import norm as _norm
+
+        self._check_fitted()
+        dev_resid = self.get_residuals("deviance")
+        pearson_resid = self.get_residuals("pearson")
+        fitted = self.fitted_values
+        response = self._model_matrix.response
+
+        sorted_resid = np.sort(dev_resid)
+        n = len(sorted_resid)
+        qq_theoretical = _norm.ppf((np.arange(1, n + 1) - 0.5) / n)
+
+        return CheckDataResult(
+            deviance_residuals=dev_resid,
+            pearson_residuals=pearson_resid,
+            fitted_values=fitted,
+            response=response,
+            qq_theoretical=qq_theoretical,
+            qq_observed=sorted_resid,
+        )
+
     @property
     def smoothing_params(self) -> list[float]:
         r"""Selected or fixed smoothing parameters $\lambda_j$, one per penalty.
 
         If `fit()` was called with `smoothing_params=None` (the default), these are the values
         chosen automatically via GCV, REML, or ML; otherwise they are the fixed values that were
-        passed in. A `te()`/`t2()` term contributes more than one entry (one per marginal
-        penalty), so this list is generally longer than the number of smooth terms.
+        passed in. A `te()`/`t2()` term contributes more than one entry (one per marginal penalty),
+        so this list is generally longer than the number of smooth terms.
 
         Returns
         -------
@@ -1437,9 +1560,8 @@ class GAM:
         """Effective degrees of freedom (EDF) for each smooth term.
 
         Each value is the trace of the portion of the hat matrix attributable to that term,
-        reflecting how much shrinkage its smoothing parameter applied: values near the term's
-        basis dimension indicate little penalization, values near 1 indicate near-linear
-        shrinkage.
+        reflecting how much shrinkage its smoothing parameter applied: values near the term's basis
+        dimension indicate little penalization, values near 1 indicate near-linear shrinkage.
 
         Returns
         -------
@@ -1453,7 +1575,7 @@ class GAM:
     def edf_total(self) -> float:
         """Total effective degrees of freedom across all model terms.
 
-        The sum of the per-term EDF values (plus the intercept and parametric terms), i.e. the
+        The sum of the per-term EDF values (plus the intercept and parametric terms), i.e., the
         trace of the full hat (influence) matrix. Used in `summary()`, `gam_check()`, and in
         computing residual degrees of freedom for interval and test calculations.
 
@@ -1470,8 +1592,8 @@ class GAM:
         r"""Estimated scale (dispersion) parameter $\phi$.
 
         For families with a known scale (Binomial, Poisson) this is fixed at `1.0`. For families
-        with unknown scale (Gaussian, Gamma, Tweedie) it is estimated from the Pearson residuals
-        and is used to scale coefficient standard errors and prediction intervals.
+        with unknown scale (Gaussian, Gamma, Tweedie) it is estimated from the Pearson residuals and
+        is used to scale coefficient standard errors and prediction intervals.
 
         Returns
         -------
