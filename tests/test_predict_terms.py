@@ -218,7 +218,7 @@ class TestTermsPredictionResultValues:
 
     @pytest.fixture()
     def two_smooth_data(self):
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(23)
         n = 200
         x1 = np.linspace(0, 2 * np.pi, n)
         x2 = rng.uniform(0, 1, n)
