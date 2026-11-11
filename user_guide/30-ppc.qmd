@@ -185,7 +185,7 @@ Binomial model may not capture.
   draws used in PPC.
 - **[Variational inference](26-variational-inference.qmd)**: a faster Bayesian alternative whose
   posterior draws feed into PPC.
-- **[Model diagnostics](11-diagnostics.qmd)**: residual plots and `model.check()` for
+- **[Model diagnostics](11-diagnostics.qmd)**: residual plots and `model.gam_check()` for
   complementary diagnostic perspectives.
 - **[Response families](05-families.qmd)**: choosing the right family avoids the distributional
   misspecification that PPC is designed to detect.

@@ -321,6 +321,6 @@ assessment, and posterior predictive checks (via `simulate()`) for model compari
   non-Gaussian families that gives better-calibrated intervals than the Laplace approximation.
 - **[Prediction and inference](08-prediction.qmd)**: confidence intervals, simultaneous bands,
   and term-level predictions from any fitted model.
-- **[Model diagnostics](11-diagnostics.qmd)**: residual plots and `model.check()`.
+- **[Model diagnostics](11-diagnostics.qmd)**: residual plots and `model.gam_check()`.
 - **[Response families](05-families.qmd)**: how the family affects posterior shape and MCMC
   efficiency.

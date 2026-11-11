@@ -73,7 +73,7 @@ for nd in [50, 200]:
 
 For most datasets, the default of 200 is a good balance. You rarely need more than 500. If the true
 function is very smooth, even 50 can work well. Increase `n_discrete` if the model diagnostics
-suggest the discretisation is too coarse, but check `model.check()` first since basis dimension
+suggest the discretisation is too coarse, but check `model.gam_check()` first since basis dimension
 inadequacy is more common than discretisation error.
 :::
 

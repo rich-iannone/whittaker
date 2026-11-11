@@ -172,7 +172,7 @@ alt.Chart({"values": comp_data}).mark_line(strokeWidth=2).encode(
 ```
 
 With `k=10`, the smooth cannot fully capture the higher-frequency component, but `k=25` captures
-both harmonics. Use `model.check()` (see [Diagnostics](11-diagnostics.qmd)) to decide if `k` is
+both harmonics. Use `model.gam_check()` (see [Diagnostics](11-diagnostics.qmd)) to decide if `k` is
 large enough.
 
 ## Cubic regression splines: `bs="cr"` {#crs}
@@ -697,7 +697,7 @@ of freedom is consumed by the identifiability constraint).
 ### Rules of thumb
 
 1. **Start with the default** (`k=10`). This is enough for most smooth relationships.
-2. **Run `model.check()`** after fitting. If the residual pattern for a smooth shows structure, or
+2. **Run `model.gam_check()`** after fitting. If the residual pattern for a smooth shows structure, or
 the k-index is below 1 with a significant p-value, increase `k`.
 3. **`k` cannot exceed the number of unique covariate values**. For a predictor with only 8 unique
 values, `k` is capped at 8.
@@ -724,7 +724,7 @@ wk.check(model_check)
 ::: {.callout-warning}
 ## Do not set `k` too low
 
-If `model.check()` reports a k-index below 1 with a significant p-value, the basis is too
+If `model.gam_check()` reports a k-index below 1 with a significant p-value, the basis is too
 restrictive. The smooth cannot capture the true complexity of the relationship, and the fit will
 be biased. Increase `k` until the k-index is no longer significant.
 :::
@@ -820,4 +820,4 @@ many groups.
   convergence diagnostics.
 - **[Prediction and inference](08-prediction.qmd)**: standard errors, confidence intervals, and
   partial effect plots.
-- **[Diagnostics](11-diagnostics.qmd)**: residual checks, `model.check()`, and concurvity.
+- **[Diagnostics](11-diagnostics.qmd)**: residual checks, `model.gam_check()`, and concurvity.

@@ -194,4 +194,4 @@ MCMC fits with more draws produce more stable LOO estimates and better Pareto $k
 - **[Variational inference](26-variational-inference.qmd)**: a faster Bayesian alternative that
   also supports LOO.
 - **[Cross-validation](14-cross-validation.qmd)**: K-fold cross-validation for frequentist fits.
-- **[Model diagnostics](11-diagnostics.qmd)**: residual plots and `model.check()`.
+- **[Model diagnostics](11-diagnostics.qmd)**: residual plots and `model.gam_check()`.

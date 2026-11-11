@@ -499,7 +499,7 @@ non-Gaussian models, convergence typically occurs within 5--15 iterations.
    regression), extreme outliers, or a poor choice of family.
 2. **Reduce `k`**: an overly flexible model can be unstable. Reducing the basis dimension can help.
 3. **Try a different method**: GCV and REML can behave differently on ill-conditioned problems.
-4. **Run `model.check()`**: the basis dimension adequacy test can reveal underfitting (see
+4. **Run `model.gam_check()`**: the basis dimension adequacy test can reveal underfitting (see
    [Diagnostics](11-diagnostics.qmd)).
 :::
 
@@ -579,11 +579,11 @@ proportional to $\sqrt{\hat\phi}$, so an overestimated scale produces wider conf
 ### When to increase `k`
 
 The basis dimension `k` should be large enough that the smooth can capture the true function shape.
-After fitting, run `model.check()` (see [Model diagnostics](11-diagnostics.qmd)) to test whether
+After fitting, run `model.gam_check()` (see [Model diagnostics](11-diagnostics.qmd)) to test whether
 `k` is adequate:
 
 ```python
-model.check()
+model.gam_check()
 ```
 
 If the k-index is below 1 with a significant p-value, double `k` and re-fit:
@@ -591,14 +591,14 @@ If the k-index is below 1 with a significant p-value, double `k` and re-fit:
 ```python
 model = wk.GAM("y ~ s(x, k=20)")
 model.fit(data, method="REML")
-model.check()
+model.gam_check()
 ```
 
 ::: {.callout-tip}
 ## A safe workflow for production models
 
 1. Start with the defaults: `method="REML"`, `k=10`.
-2. Fit the model and run `model.check()`.
+2. Fit the model and run `model.gam_check()`.
 3. If any smooth fails the k-index test, increase `k` for that term and re-fit.
 4. Review the summary: are the EDF values plausible for the data?
 6. If you suspect irrelevant predictors, re-fit with `select=True`.
@@ -622,7 +622,7 @@ After calling `model.fit()`, the following attributes are available:
 - **[Prediction and inference](08-prediction.qmd)**: standard errors, confidence intervals,
   and term-level predictions from a fitted model.
 - **[Model diagnostics](11-diagnostics.qmd)**: residual plots, k-index tests, and
-  `model.check()`.
+  `model.gam_check()`.
 - **[Smoothing parameter sensitivity](33-sensitivity.qmd)**: verify that predictions are robust to
   the specific smoothing parameters chosen by REML, GCV, or ML.
 - **[Variational inference](26-variational-inference.qmd)**: a principled Bayesian posterior

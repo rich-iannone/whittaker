@@ -554,5 +554,5 @@ model formula.
   variants that shape-constrained smooths build upon.
 - **[Model fitting](06-fitting.qmd)**: details on the PIRLS algorithm and how the projection step
   integrates with it.
-- **[Diagnostics](11-diagnostics.qmd)**: residual checks and `model.check()` to verify that the
+- **[Diagnostics](11-diagnostics.qmd)**: residual checks and `model.gam_check()` to verify that the
   constraint is appropriate for your data.

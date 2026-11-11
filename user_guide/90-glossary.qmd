@@ -28,7 +28,7 @@ Basis dimension (`k`)
   an upper bound on the flexibility of the smooth: higher `k` allows more complex shapes, but
   the **smoothing parameter** $\lambda$ prevents overfitting by penalizing excess curvature.
   In practice, `k` should be set large enough that the data do not need more flexibility than
-  it allows. The **k-index test** (`model.check()`) flags terms where `k` may be too small.
+  it allows. The **k-index test** (`model.gam_check()`) flags terms where `k` may be too small.
   The default in Whittaker is `k=10` for most basis types.
 
 Basis function
@@ -412,7 +412,7 @@ k-index test
 : A diagnostic test for whether the **basis dimension** `k` is large enough for a smooth
   term. It compares the estimated residual variance near neighbouring covariate values to the
   overall residual variance. A significant result (p-value below 0.05) suggests that `k`
-  should be increased. Produced by `model.check()` and reported as a `GamCheckResult`.
+  should be increased. Produced by `model.gam_check()` and reported as a `GamCheckResult`.
 
 Knot
 : A fixed point along the covariate axis where basis function pieces join. In **CRS**, knots

@@ -284,5 +284,5 @@ and use posterior predictive checks (via `simulate()`) for model comparison.
   VI's Gaussian approximation is insufficient.
 - **[Prediction and inference](08-prediction.qmd)**: confidence intervals, simultaneous bands, and
   term-level predictions from any fitted model.
-- **[Model diagnostics](11-diagnostics.qmd)**: residual plots and `model.check()`.
+- **[Model diagnostics](11-diagnostics.qmd)**: residual plots and `model.gam_check()`.
 - **[Response families](05-families.qmd)**: how the family affects VI convergence and calibration.
