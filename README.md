@@ -50,12 +50,13 @@ Core GAM fitting:
 Prediction and inference:
 
 - **Prediction**: point estimates, standard errors, confidence intervals (pointwise and simultaneous), prediction intervals, and term-level contributions. All on response or link scale
-- **Diagnostics**: `model.summary()` for EDF and significance tests, `model.check()` for basis dimension adequacy (k-index test), concurvity analysis, and residual plots
+- **Diagnostics**: `model.summary()` for EDF and significance tests, `model.gam_check()` for basis dimension adequacy (k-index test), concurvity analysis, goodness-of-fit summaries, and residual plots via `wk.check(model)`
 - **Cross-validation**: k-fold CV with deviance, MSE, or MAE scoring via `cross_validate()`
+- **Model comparison**: side-by-side comparison of fitted models with `compare()`, plus ANOVA tests for nested models
 
 Advanced models:
 
-- **Bayesian inference**: variational inference (`method="VI"`) for fast approximate posteriors, and NUTS MCMC (`method="MCMC"`) for exact posterior sampling (both with R-hat, ESS, and divergence diagnostics)
+- **Bayesian inference**: variational inference (`method="VI"`) for fast approximate posteriors, and NUTS MCMC (`method="MCMC"`) for exact posterior sampling (both with R-hat, ESS, and divergence diagnostics). Bayesian fits support posterior predictive checks, PSIS-LOO and WAIC model comparison, and stacking weights for model averaging
 - **Distributional regression** (`GAMLSS`): model location, scale, and shape simultaneously (Gaussian, Gamma, and Beta location-scale families, plus zero-inflated Poisson and Negative Binomial)
 - **Quantile regression** (`QuantileGAM`): fit conditional quantiles with ELF loss, optional non-crossing constraints, and sigma calibration
 - **Conformal prediction** (`ConformalPredictor`): distribution-free prediction intervals via split, CV+, and jackknife+ methods
@@ -100,7 +101,7 @@ preds = model.predict({"x": np.linspace(0, 2 * np.pi, 50)}, se=True)
 
 ```python
 # Check model adequacy
-model.check()
+wk.check(model)
 ```
 
 <p align="center">
@@ -135,6 +136,11 @@ model.summary()
 # Cross-validate to check out-of-sample performance
 cv = wk.cross_validate("y ~ s(x1) + s(x2)", data, family=wk.Poisson(), n_folds=5)
 print(f"CV score: {cv.cv_score:.4f} (SE: {cv.cv_se:.4f})")
+
+# Compare against a simpler model with a linear effect for x1
+simpler = wk.GAM("y ~ x1 + s(x2)", family=wk.Poisson())
+simpler.fit(data, method="REML")
+print(wk.compare(model, simpler))
 
 # Predict on new data with confidence intervals
 preds = model.predict(
