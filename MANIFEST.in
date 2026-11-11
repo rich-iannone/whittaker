@@ -1,0 +1,11 @@
+# setuptools_scm adds every git-tracked file to the sdist; keep it to the package, tests, and
+# packaging metadata by leaving out the docs site sources and repo tooling.
+prune _freeze
+prune assets
+prune benchmarks
+prune cookbook
+prune user_guide
+prune .github
+prune .vscode
+exclude great-docs.yml index.qmd Makefile pyrightconfig.json
+exclude .gitignore .pre-commit-config.yaml .python-version
