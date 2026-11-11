@@ -49,7 +49,7 @@ JUPYTER_PATH := $(CURDIR)/.venv/share/jupyter
 
 .PHONY: docs
 docs: ## Build the documentation site
-	@JUPYTER_PATH="$(JUPYTER_PATH)" .venv/bin/great-docs build
+	@JUPYTER_PATH="$(JUPYTER_PATH)" .venv/bin/great-docs build --jobs auto
 
 .PHONY: docs-preview
 docs-preview: ## Preview the documentation site locally
