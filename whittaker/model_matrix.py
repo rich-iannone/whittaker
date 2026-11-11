@@ -951,7 +951,9 @@ def predict_matrix(
         if info.by_level is not None:
             assert info.by_var is not None
             by_col = _extract_by_column(new_data, info.by_var)
-            indicator = (by_col == info.by_level).astype(float)
+            # `by_level` is stored as `str(level)`, so compare string forms: an object column of
+            # numeric labels would otherwise never match
+            indicator = (by_col.astype(str) == info.by_level).astype(float)
             basis_mat = basis_mat * indicator[:, np.newaxis]
         elif info.by_var is not None:
             by_vals = _extract_column(new_data, info.by_var)
