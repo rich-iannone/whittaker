@@ -70,7 +70,7 @@ tags:
     Smooths: chart-spline
     Diagnostics: stethoscope
     Families: layers
-    Gaussian: wave
+    Gaussian: waves
     Poisson: hash
     Binomial: toggle-left
     Gamma: triangle-right
