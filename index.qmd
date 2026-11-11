@@ -191,10 +191,10 @@ search.
 
 ## Next steps
 
-- **Installation**: get started with `pip install whittaker` or see [Installation](user-guide/installation.qmd).
+- **Installation**: get started with `pip install whittaker` or see [Installation](user-guide/get-started.qmd).
 - **Quick tour**: new to Whittaker? Start with the [Quick start](user-guide/quick-start.qmd) for a fast hands-on tour (5 min read).
-- **Learn the smooth catalog**: see [Smooth terms](user-guide/smooth-terms.qmd) for a detailed look at every basis type.
-- **Beyond the mean**: explore [Distributional regression (GAMLSS)](user-guide/distributional-regression-gamlss.qmd), [Quantile regression](user-guide/quantile-regression.qmd), and [Conformal prediction](user-guide/conformal-prediction.qmd).
+- **Learn the smooth catalog**: see [Smooth terms](user-guide/smooths.qmd) for a detailed look at every basis type.
+- **Beyond the mean**: explore [Distributional regression (GAMLSS)](user-guide/gamlss.qmd), [Quantile regression](user-guide/quantile.qmd), and [Conformal prediction](user-guide/conformal.qmd).
 - **Scale up**: learn about [Large datasets](user-guide/large-datasets.qmd) for fitting on data that exceeds memory.
 - **Explore everything**: see the full [User Guide](user-guide/get-started.qmd) for comprehensive coverage of all features.
 - **API reference**: browse the [Python API reference](reference/) for function signatures and detailed documentation.
