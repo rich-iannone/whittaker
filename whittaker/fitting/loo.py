@@ -205,7 +205,9 @@ def compute_loo(
     lw_smooth, pareto_k = _psis_smooth(log_lik)
 
     # elpd_i = logsumexp(lw_i + ll_i) - logsumexp(lw_i)
-    elpd_pointwise = logsumexp(lw_smooth + log_lik, axis=1) - logsumexp(lw_smooth, axis=1)
+    log_num = np.asarray(logsumexp(lw_smooth + log_lik, axis=1))
+    log_den = np.asarray(logsumexp(lw_smooth, axis=1))
+    elpd_pointwise = log_num - log_den
 
     n = len(elpd_pointwise)
     elpd_loo = float(np.sum(elpd_pointwise))

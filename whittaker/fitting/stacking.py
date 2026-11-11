@@ -128,7 +128,7 @@ def _stacking_weights(lpd_matrix: NDArray) -> NDArray:
     def neg_elpd_grad(log_w: NDArray) -> NDArray:
         log_w_norm = log_w - logsumexp(log_w)
         w = np.exp(log_w_norm)
-        combined = logsumexp(lpd_matrix + log_w_norm[np.newaxis, :], axis=1)
+        combined = np.asarray(logsumexp(lpd_matrix + log_w_norm[np.newaxis, :], axis=1))
         # d/d(log_w_k) = sum_i [ w_k * exp(lpd[i,k]) / sum_j w_j * exp(lpd[i,j]) ] - w_k
         #              = sum_i softmax_k(lpd[i,:] + log_w) - w_k
         log_softmax = (lpd_matrix + log_w_norm[np.newaxis, :]) - combined[:, np.newaxis]
