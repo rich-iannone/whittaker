@@ -108,6 +108,19 @@ class TestFactorBy:
         assert pred_A.se is not None
         assert pred_B.se is not None
 
+    def test_factor_by_predict_numeric_object_levels(self) -> None:
+        # Object columns of numeric labels are factors; prediction must match their levels
+        rng = np.random.default_rng(23)
+        n = 300
+        x = np.linspace(0, 2 * np.pi, n)
+        group = np.array([0] * 150 + [1] * 150, dtype=object)
+        y = np.where(group == 0, np.sin(x), -np.sin(x)) + rng.normal(0, 0.2, n)
+
+        data = {"y": y, "x": x, "group": group}
+        model = GAM("y ~ s(x, k=8, by='group')").fit(data)
+        pred = model.predict(data)
+        assert_allclose(pred.values, model.fitted_values, atol=1e-10)
+
     def test_factor_by_three_levels(self) -> None:
         rng = np.random.default_rng(23)
         n = 300
