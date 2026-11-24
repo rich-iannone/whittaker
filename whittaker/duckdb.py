@@ -47,7 +47,8 @@ def _normalize_source(source: str) -> str:
 
 
 def _count_rows(conn, source_query: str) -> int:
-    result = conn.sql(f"SELECT COUNT(*) FROM ({source_query})").fetchone()
+    # (`fetchall()`, since DuckDB 2 relations have no `fetchone()`)
+    (result,) = conn.sql(f"SELECT COUNT(*) FROM ({source_query})").fetchall()
     return int(result[0])
 
 
