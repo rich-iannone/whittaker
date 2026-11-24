@@ -305,6 +305,80 @@ def _penalty_ranks(penalties: list[NDArray]) -> list[int]:
     return ranks
 
 
+def _log_det_penalty(
+    log_sp: NDArray, penalties: list[NDArray], penalty_ranks: list[int]
+) -> tuple[float, NDArray]:
+    """log|S_λ|⁺ (up to a constant, so that it's zero at λ = 1) and its gradient w.r.t. ρ = log(λ).
+
+    Penalties on disjoint coefficients, or with orthogonal ranges (a smooth's penalty and its
+    null-space penalty with `select=True`), each contribute `m_j ρ_j`. Those that overlap otherwise,
+    as the marginal penalties of a tensor product do, don't: their ranks add up to more than the
+    rank of their sum, so that sum would reward large λ without bound. For each group of these, the
+    pseudo-determinant over the range of the group's penalties is computed exactly.
+    """
+    n_sp = len(penalties)
+    val = 0.0
+    grad = np.zeros(n_sp)
+    if n_sp == 0:
+        return val, grad
+
+    supports = [np.flatnonzero(np.any(pen != 0, axis=0)) for pen in penalties]
+    norms = [max(float(np.linalg.norm(pen)), 1e-300) for pen in penalties]
+    group = list(range(n_sp))
+
+    def find(i: int) -> int:
+        while group[i] != i:
+            group[i] = group[group[i]]
+            i = group[i]
+        return i
+
+    for i in range(n_sp):
+        for j in range(i + 1, n_sp):
+            shared = np.intersect1d(supports[i], supports[j])
+            if shared.size == 0:
+                continue
+            overlap = np.linalg.norm(penalties[i] @ penalties[j]) / (norms[i] * norms[j])
+            if overlap > 1e-8:
+                group[find(i)] = find(j)
+
+    members: dict[int, list[int]] = {}
+    for j in range(n_sp):
+        members.setdefault(find(j), []).append(j)
+
+    for idx in members.values():
+        if len(idx) == 1:
+            j = idx[0]
+            val += penalty_ranks[j] * float(log_sp[j])
+            grad[j] = penalty_ranks[j]
+            continue
+
+        cols = np.unique(np.concatenate([supports[j] for j in idx]))
+        blocks = [penalties[j][np.ix_(cols, cols)] / norms[j] for j in idx]
+        # The range of the group's penalties (the same for any positive λ)
+        evals, evecs = np.linalg.eigh(sum(blocks))
+        U = evecs[:, evals > np.max(evals) * len(cols) * np.finfo(float).eps]
+        reduced = [U.T @ b @ U for b in blocks]
+
+        def log_det(log_w: NDArray, reduced: list[NDArray] = reduced) -> tuple[float, NDArray]:
+            # log|Σ_j exp(log_w_j) B_j| and the inverse of the sum, scaled by the largest weight
+            # so that the sum stays in range
+            top = float(np.max(log_w))
+            S_r = sum(np.exp(lw - top) * b for lw, b in zip(log_w, reduced, strict=True))
+            e, V = np.linalg.eigh(0.5 * (S_r + S_r.T))
+            e = np.maximum(e, np.max(e) * np.finfo(float).eps)
+            return len(e) * top + float(np.sum(np.log(e))), np.exp(-top) * ((V / e) @ V.T)
+
+        # (S_λ = Σ_j λ_j ‖S_j‖ B_j on the range, with B_j the normalized penalties)
+        log_norms = np.log([norms[j] for j in idx])
+        log_w = np.array([float(log_sp[j]) for j in idx]) + log_norms
+        value, S_r_inv = log_det(log_w)
+        val += value - log_det(log_norms)[0]
+        for lw, b, j in zip(log_w, reduced, idx, strict=True):
+            grad[j] = np.exp(lw) * float(np.sum(S_r_inv * b))
+
+    return val, grad
+
+
 def _reml_objective(
     log_sp: NDArray,
     X: NDArray,
@@ -378,7 +452,8 @@ def _reml_objective(
     log_det_A = 2.0 * float(np.sum(np.log(np.diag(cho))))
 
     # log|S_λ|⁺ = Σ m_j · log(λ_j)  (block-diagonal penalties)
-    log_det_S = sum(m * rho for m, rho in zip(penalty_ranks, log_sp, strict=False))
+    # log|S_λ|⁺ (and its gradient), exact where penalties overlap, as a tensor product's do
+    log_det_S, d_log_det_S = _log_det_penalty(log_sp, penalties, penalty_ranks)
 
     M = n_unpenalized
     if scale_known:
@@ -400,17 +475,21 @@ def _reml_objective(
 
     # Gradient w.r.t. ρ_j
     grad = np.zeros_like(log_sp)
-    for j, (lam_j, pen_j, m_j) in enumerate(zip(sp, penalties, penalty_ranks, strict=False)):
+    for j, (lam_j, pen_j) in enumerate(zip(sp, penalties, strict=False)):
         beta_Sj_beta = float(beta @ pen_j @ beta)
         tr_Ainv_Sj = float(np.trace(cho_solve((cho, lower), pen_j)))
 
         if scale_known:
-            grad[j] = lam_j * beta_Sj_beta / (2.0 * scale) + lam_j * 0.5 * tr_Ainv_Sj - 0.5 * m_j
+            grad[j] = (
+                lam_j * beta_Sj_beta / (2.0 * scale)
+                + lam_j * 0.5 * tr_Ainv_Sj
+                - 0.5 * d_log_det_S[j]
+            )
         else:
             grad[j] = (
                 (n - M) * lam_j * beta_Sj_beta / (2.0 * d_pen)
                 + lam_j * 0.5 * tr_Ainv_Sj
-                - 0.5 * m_j
+                - 0.5 * d_log_det_S[j]
             )
 
     return float(val), grad
