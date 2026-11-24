@@ -96,6 +96,26 @@ class FitResult:
     pseudo_data: NDArray | None = None
 
 
+def _ridged_cho_factor(A: NDArray) -> tuple[NDArray, bool]:
+    """Cholesky-factor a symmetrized `A`, with a small ridge for numerical stability.
+
+    An unidentifiable unpenalized direction (such as numeric `by` smooths whose by-variables sum
+    to the intercept) leaves `A` singular, and whether it factors at all is then down to rounding.
+    So if it doesn't, it's retried with larger ridges, which pin that direction down without
+    changing the fitted values.
+    """
+    p = A.shape[0]
+    A = (A + A.T) * 0.5
+    scale = max(np.trace(A) / p, 1.0)
+    eye = np.eye(p)
+    for k in (np.finfo(float).eps, 1e-10, 1e-8):
+        try:
+            return cho_factor(A + k * scale * eye)
+        except np.linalg.LinAlgError:
+            continue
+    return cho_factor(A + 1e-6 * scale * eye)
+
+
 def _penalized_solve(
     X: NDArray,
     y: NDArray,
@@ -132,13 +152,7 @@ def _penalized_solve(
     for lam, pen in zip(sp, penalties, strict=False):
         S_total += lam * pen
 
-    A = XtX + S_total
-    A = (A + A.T) * 0.5
-    # Small ridge for numerical stability when penalty leaves unpenalized columns
-    ridge = np.finfo(float).eps * max(np.trace(A) / p, 1.0)
-    A[np.diag_indices_from(A)] += ridge
-
-    cho, lower = cho_factor(A)
+    cho, lower = _ridged_cho_factor(XtX + S_total)
     beta = cho_solve((cho, lower), Xtz)
 
     # Hat matrix: H = X (X'WX + S)⁻¹ X'W
@@ -193,12 +207,7 @@ def _edf_per_smooth(
     for lam, pen in zip(sp, penalties, strict=False):
         S_total += lam * pen
 
-    A = XtWX + S_total
-    A = (A + A.T) * 0.5
-    ridge = np.finfo(float).eps * max(np.trace(A) / p, 1.0)
-    A[np.diag_indices_from(A)] += ridge
-
-    cho, lower = cho_factor(A)
+    cho, lower = _ridged_cho_factor(XtWX + S_total)
     F = cho_solve((cho, lower), XtWX)  # (p, p)
 
     edfs = []
