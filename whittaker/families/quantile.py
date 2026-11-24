@@ -248,12 +248,15 @@ class QuantileFamily(Family):
 
         $$
         u = \tau - 1 + \operatorname{expit}(r/\sigma), \qquad
-        W = \max\!\left(\frac{1}{\sigma}\, s(1-s),\ \epsilon\right), \quad
+        W = \max\!\left(\frac{1}{\sigma}\, s(1-s),\ \frac{u}{r - r^*},\ \epsilon\right), \quad
         s = \operatorname{expit}(r/\sigma),
         $$
 
-        where `epsilon` is a small floor that prevents zero weights, and forms
-        the working response `z = eta + u / W`.
+        where $r^* = \sigma \log((1-\tau)/\tau)$ is the root of the score, and
+        `epsilon` is a small floor that prevents zero weights, and forms the
+        working response `z = eta + u / W`. The secant term keeps the step
+        bounded (at most `r - r_star`) where the curvature vanishes, i.e. for
+        residuals many `sigma` wide.
 
         Parameters
         ----------
@@ -272,7 +275,15 @@ class QuantileFamily(Family):
         """
         r = y - mu
         score = _elf_d1(r, self._tau, self._sigma)
-        W = np.maximum(_elf_d2(r, self._sigma), _W_FLOOR)
+        # The curvature vanishes for residuals many `sigma` wide (as with a response on a scale much
+        # larger than `sigma`), and a Newton step there would be enormous. So the weight is at least
+        # the secant slope of the score from its root `r_star`, which bounds the step at
+        # `r - r_star` (the IRLS weight for M-estimation) and leaves the fixed point unchanged
+        r_star = self._sigma * np.log((1.0 - self._tau) / self._tau)
+        dr = r - r_star
+        near = np.abs(dr) < 1e-8 * self._sigma
+        secant = np.where(near, 0.0, score / np.where(near, 1.0, dr))
+        W = np.maximum(np.maximum(_elf_d2(r, self._sigma), secant), _W_FLOOR)
         z = eta + score / W
         return z, W
 
