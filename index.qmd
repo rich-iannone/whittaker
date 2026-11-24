@@ -1,200 +1,580 @@
 ---
 title: ""
-toc: false
+jupyter: python3
 ---
 
-## Next-generation GAMs for Python
+Whittaker fits generalized additive models in Python: regressions where each effect is a smooth
+curve shaped by the data, with **how smooth chosen for you**. It brings the depth of R's mgcv to
+Pandas, Polars, and any [Narwhals](https://narwhals-dev.github.io/narwhals/) frame, with an
+interactive chart for every fit.
 
-Whittaker is a modern Generalized Additive Model (GAM) library for Python. It aims to hold a candle
-to R's `mgcv` in functionality, performance, and usability. It's built on a modern data stack with
-[Narwhals](https://narwhals-dev.github.io/narwhals/) for backend-agnostic compute,
-[NumPy](https://numpy.org/) and [SciPy](https://scipy.org/) for numerical work, and
-[Altair](https://altair-viz.github.io/) for publication-quality visualization.
-
-Named after the Whittaker smoother (one of the earliest penalized smoothing methods and a direct
-mathematical ancestor of P-splines) the library honors that lineage while delivering a modern
-implementation.
-
-## Why Whittaker?
-
-- **Works with your dataframe library**: Pandas, Polars, PyArrow, or any
-  [Narwhals](https://narwhals-dev.github.io/narwhals/)-compatible frame.
-- **Full smooth catalog**: thin plate regression splines, cubic splines, P-splines, tensor products,
-  cyclic splines, random effects, factor smooths, and more.
-- **Principled smoothness selection**: REML by default, with GCV, ML, and fREML as alternatives.
-- **Beautiful diagnostics**: `wk.check(model)` and `model.plot()` produce interactive Altair charts
-  right in your notebook.
-- **Goes beyond the mean**: distributional regression (GAMLSS), quantile regression, conformal
-  prediction, causal inference, streaming GAMs, and functional regression are all built in.
-- **Principled Bayesian inference**: variational inference for fast approximate posteriors, and NUTS
-  MCMC for exact posterior sampling with R-hat, ESS, and divergence diagnostics.
-- **Type-safe**: full annotations, strict Pyright-clean codebase.
-
-## The analytical pipeline
-
-1. **Specify** your model with a formula string or programmatic term list.
-2. **Fit** with `model.fit(data)`: automatic smoothness selection via REML.
-3. **Inspect** with `model.summary()`: EDF, p-values, and smoothing parameters for every term.
-4. **Check** with `wk.check(model)`: basis dimension adequacy, residual plots, convergence info.
-5. **Predict** with `model.predict(new_data)`: point estimates, standard errors, or term
-contributions.
-6. **Visualize** with `model.plot()`: partial-effect plots with confidence bands for every smooth.
-
-## A first look
-
-Here's a complete example: generate data with a smooth pattern, fit a GAM, inspect the results, and
-predict on new observations.
-
-**Step 1: Fit a GAM to noisy sinusoidal data**
-
-```{python}
-import numpy as np
-import whittaker as wk
-
-rng = np.random.default_rng(23)
-x = np.linspace(0, 2 * np.pi, 200)
-y = np.sin(x) + rng.normal(0, 0.3, 200)
-
-model = wk.GAM("y ~ s(x)")
-model.fit({"x": x, "y": y}, method="REML")
-model.summary()
+```{=html}
+<link rel="stylesheet" href="assets/homepage.css">
+<script src="assets/homepage.js" defer></script>
+<script src="assets/backdrop.js" defer></script>
 ```
 
-**Step 2: Check basis dimension adequacy**
+::: {.wkh-cta}
+[Get started](user-guide/quick-start.qmd){.wkh-btn .wkh-btn-primary}
+[Read the User Guide](user-guide/get-started.qmd){.wkh-btn}
+[Browse the reference](reference/index.qmd){.wkh-btn}
 
-```{python}
-wk.check(model)
+```{=html}
+<button type="button" class="wkh-install" data-copy="pip install whittaker" aria-label="Copy the install command">
+  <code><span class="wkh-prompt">$</span> pip install whittaker</code>
+  <i class="bi bi-clipboard" aria-hidden="true"></i>
+</button>
+```
+:::
+
+```{=html}
+<div class="wkh-stats" role="list">
+  <div class="wkh-stat" role="listitem"><span class="wkh-stat-num" data-count="18">18</span><span class="wkh-stat-label">smooth bases</span></div>
+  <div class="wkh-stat" role="listitem"><span class="wkh-stat-num" data-count="18">18</span><span class="wkh-stat-label">response families</span></div>
+  <div class="wkh-stat" role="listitem"><span class="wkh-stat-num" data-count="39">39</span><span class="wkh-stat-label">User Guide chapters</span></div>
+  <div class="wkh-stat" role="listitem"><span class="wkh-stat-num" data-count="51">51</span><span class="wkh-stat-label">cookbook recipes</span></div>
+  <div class="wkh-stat" role="listitem"><span class="wkh-stat-num" data-count="2800" data-suffix="+">2,800+</span><span class="wkh-stat-label">tests</span></div>
+</div>
 ```
 
-**Step 3: Predict with standard errors and visualize the fit**
+## A model, one term at a time {.wkh-heading}
+
+A GAM is a formula of smooth terms, fitted in one call. Step through this one, on four decades of
+CO₂ readings from Mauna Loa, to see what each term adds, with the new lines of code highlighted.
+
+::::: {.wkh-stepper #wkh-stepper}
+
+:::: {.wkh-step}
+[Data]{.wkh-step-name}
+
+Start with a data frame. This one, one of Whittaker's built-in datasets, has a reading for every
+month from 1958 to 1997: a rising trend with a yearly cycle on top.
 
 ```{python}
 import altair as alt
+import whittaker as wk
 
-x_grid = np.linspace(0, 2 * np.pi, 200)
-preds = model.predict({"x": x_grid}, se=True)
+co2 = wk.load_dataset("co2", as_frame=True)
 
-plot_data = [
-    {"x": float(x_grid[i]), "fit": float(preds.values[i]),
-     "lower": float(preds.values[i] - 1.96 * preds.se[i]),
-     "upper": float(preds.values[i] + 1.96 * preds.se[i])}
-    for i in range(len(x_grid))
+chart = alt.Chart(co2).encode(x=alt.X("t:Q", title=None, axis=alt.Axis(format="d")))
+data = chart.mark_line(color="#c4bccb").encode(
+    y=alt.Y("co2:Q", title="CO₂ (ppm)", scale=alt.Scale(zero=False))
+)
+
+data.properties(width="container", height=280)
+```
+::::
+
+:::: {.wkh-step}
+[Trend]{.wkh-step-name}
+
+`s(t)` is a smooth function of time, with no shape assumed. Its wiggliness is penalized, and the
+penalty's weight is chosen from the data, so the curve follows the trend and not the noise.
+
+```{python}
+import altair as alt
+import whittaker as wk
+
+co2 = wk.load_dataset("co2", as_frame=True)
+
+model = wk.GAM("co2 ~ s(t)").fit(co2)
+co2["fit"] = model.predict(co2).values
+
+chart = alt.Chart(co2).encode(x=alt.X("t:Q", title=None, axis=alt.Axis(format="d")))
+data = chart.mark_line(color="#c4bccb").encode(
+    y=alt.Y("co2:Q", title="CO₂ (ppm)", scale=alt.Scale(zero=False))
+)
+fit = chart.mark_line(color="#b8405f", strokeWidth=1.5).encode(y="fit:Q")
+
+(data + fit).properties(width="container", height=280)
+```
+::::
+
+:::: {.wkh-step}
+[Season]{.wkh-step-name}
+
+Add a second smooth, of the month. A cyclic basis (`bs="cc"`) makes December meet January, and the
+two terms are fitted together: now the curve tracks every season.
+
+```{python}
+import altair as alt
+import whittaker as wk
+
+co2 = wk.load_dataset("co2", as_frame=True)
+
+model = wk.GAM("co2 ~ s(t) + s(month, bs='cc', k=12)").fit(co2)
+co2["fit"] = model.predict(co2).values
+
+chart = alt.Chart(co2).encode(x=alt.X("t:Q", title=None, axis=alt.Axis(format="d")))
+data = chart.mark_line(color="#c4bccb").encode(
+    y=alt.Y("co2:Q", title="CO₂ (ppm)", scale=alt.Scale(zero=False))
+)
+fit = chart.mark_line(color="#b8405f", strokeWidth=1.5).encode(y="fit:Q")
+
+(data + fit).properties(width="container", height=280)
+```
+::::
+
+:::: {.wkh-step}
+[Effects]{.wkh-step-name}
+
+Each term can be seen on its own. [`model.plot()`](reference/GAM.qmd) draws every smooth's
+partial effect, with its confidence band and its effective degrees of freedom.
+
+```{python}
+import whittaker as wk
+
+co2 = wk.load_dataset("co2", as_frame=True)
+
+model = wk.GAM("co2 ~ s(t) + s(month, bs='cc', k=12)").fit(co2)
+
+model.plot()
+```
+::::
+
+:::: {.wkh-step}
+[Summary]{.wkh-step-name}
+
+[`model.summary()`](reference/GAM.qmd) gives the model's numbers: each smooth's effective degrees of
+freedom and significance test, the deviance explained, and the AIC.
+
+```{python}
+import whittaker as wk
+
+co2 = wk.load_dataset("co2", as_frame=True)
+
+model = wk.GAM("co2 ~ s(t) + s(month, bs='cc', k=12)").fit(co2)
+
+model.summary()
+```
+::::
+
+:::: {.wkh-step}
+[Check]{.wkh-step-name}
+
+[`wk.check()`](reference/check.qmd) asks whether the model can be trusted: the residuals against
+the fit, their quantiles and histogram, and the observed values against the fitted ones.
+
+```{python}
+import whittaker as wk
+
+co2 = wk.load_dataset("co2", as_frame=True)
+
+model = wk.GAM("co2 ~ s(t) + s(month, bs='cc', k=12)").fit(co2)
+
+wk.check(model)
+```
+::::
+
+:::::
+
+[Quick start](user-guide/quick-start.qmd){.wkh-more}
+[Smooth terms](user-guide/smooths.qmd){.wkh-more}
+[Model diagnostics](user-guide/diagnostics.qmd){.wkh-more}
+
+## Every kind of smooth {.wkh-heading}
+
+Thin plate and cubic splines, P-splines, cyclic and adaptive smooths, Gaussian processes, random
+effects, tensor products for surfaces, and smooths held to a shape (increasing, decreasing, convex,
+or concave). Each tile here is a real fit; select one to read about it.
+
+```{python}
+#| echo: false
+import numpy as np
+from IPython.display import HTML
+
+_W, _H, _PAD = 230, 112, 8
+_rng = np.random.default_rng(7)
+_x = np.sort(_rng.uniform(0, 1, 120))
+_noise = _rng.normal(0, 1, 120)
+_grid = np.linspace(0, 1, 90)
+_shapes = {
+    "wave": lambda x: np.sin(2 * np.pi * x) + 0.5 * np.sin(5 * np.pi * x),
+    "cycle": lambda x: np.sin(2 * np.pi * x) + 0.4 * np.cos(4 * np.pi * x),
+    "doppler": lambda x: np.sin(1.5 / (x + 0.12)) * np.sqrt(x + 0.05),
+    "rise": lambda x: 2 / (1 + np.exp(-12 * (x - 0.5))),
+    "fall": lambda x: -2 / (1 + np.exp(-12 * (x - 0.5))),
+    "convex": lambda x: 3 * (x - 0.4) ** 2,
+    "concave": lambda x: -3 * (x - 0.6) ** 2,
+}
+
+
+def _scale(values, lo, hi, a, b):
+    return a + (np.asarray(values) - lo) / (hi - lo) * (b - a)
+
+
+def _svg(body):
+    return f'<svg viewBox="0 0 {_W} {_H}" role="img" aria-hidden="true">{body}</svg>'
+
+
+# A smooth of one variable: the data, the fit, and its band (two standard errors either side)
+def _curve_tile(bs, shape, k=""):
+    y = _shapes[shape](_x) + 0.25 * _noise
+    fitted = wk.GAM(f"y ~ s(x, bs='{bs}'{k})").fit({"x": _x, "y": y}, method="REML")
+    pred = fitted.predict({"x": _grid}, se=True)
+    fit, se = np.asarray(pred.values), np.asarray(pred.se)
+    lo, hi = min(y.min(), (fit - 2 * se).min()), max(y.max(), (fit + 2 * se).max())
+    sx = lambda v: _scale(v, 0, 1, _PAD, _W - _PAD)
+    sy = lambda v: _scale(v, lo, hi, _H - _PAD, _PAD)
+    gx = sx(_grid)
+    upper = " ".join(f"{a:.1f},{b:.1f}" for a, b in zip(gx, sy(fit + 2 * se)))
+    lower = " ".join(f"{a:.1f},{b:.1f}" for a, b in zip(gx[::-1], sy((fit - 2 * se)[::-1])))
+    points = "".join(f'<circle cx="{a:.1f}" cy="{b:.1f}" r="1.8"/>' for a, b in zip(sx(_x), sy(y)))
+    curve = " ".join(f"{a:.1f},{b:.1f}" for a, b in zip(gx, sy(fit)))
+    return _svg(
+        f'<polygon class="wkh-band" points="{upper} {lower}"/>'
+        f'<g class="wkh-pts">{points}</g>'
+        f'<polyline class="wkh-curve" points="{curve}"/>'
+    )
+
+
+# A smooth of two variables: the fitted surface, as a grid of cells
+def _surface_tile(term):
+    rng = np.random.default_rng(3)
+    x1, x2 = rng.uniform(0, 1, 400), rng.uniform(0, 1, 400)
+    y = np.sin(2.4 * np.pi * x1) * np.cos(1.6 * np.pi * x2) + 0.6 * (x1 - x2)
+    y = y + rng.normal(0, 0.2, 400)
+    fitted = wk.GAM(f"y ~ {term}").fit({"x1": x1, "x2": x2, "y": y}, method="REML")
+    nx, ny = 26, 13
+    g1, g2 = np.meshgrid((np.arange(nx) + 0.5) / nx, (np.arange(ny) + 0.5) / ny)
+    fit = np.asarray(fitted.predict({"x1": g1.ravel(), "x2": g2.ravel()}).values)
+    top = np.abs(fit).max()
+    cw, ch = _W / nx, _H / ny
+    cells = "".join(
+        f'<rect class="{"wkh-pos" if v > 0 else "wkh-neg"}" x="{a * _W - cw / 2:.1f}" '
+        f'y="{_H - b * _H - ch / 2:.1f}" width="{cw + 0.3:.1f}" height="{ch + 0.3:.1f}" '
+        f'fill-opacity="{abs(v) / top:.2f}"/>'
+        for a, b, v in zip(g1.ravel(), g2.ravel(), fit)
+    )
+    return _svg(cells)
+
+
+# A factor smooth: a curve for each of four groups
+def _factor_tile():
+    xx = np.tile(np.linspace(0, 1, 30), 4)
+    g = np.repeat(np.array(["a", "b", "c", "d"]), 30)
+    y = np.sin(2 * np.pi * xx + np.repeat([0.0, 0.8, 1.6, 2.4], 30)) + _rng.normal(0, 0.2, 120)
+    fitted = wk.GAM("y ~ s(x, g, bs='fs')").fit({"x": xx, "g": g, "y": y})
+    sx = lambda v: _scale(v, 0, 1, _PAD, _W - _PAD)
+    sy = lambda v: _scale(v, -1.8, 1.8, _H - _PAD, _PAD)
+    body = ""
+    for k, level in enumerate("abcd"):
+        fit = np.asarray(fitted.predict({"x": _grid, "g": np.full(_grid.size, level)}).values)
+        line = " ".join(f"{a:.1f},{b:.1f}" for a, b in zip(sx(_grid), sy(fit)))
+        body += f'<polyline class="wkh-curve" style="opacity:{1 - 0.2 * k}" points="{line}"/>'
+    return _svg(body)
+
+
+# A random effect: each group's observations, and its estimate (shrunk toward the overall mean)
+def _random_tile():
+    levels = np.array(list("abcdefghij"))
+    g = np.repeat(levels, 6)
+    y = np.repeat(np.random.default_rng(5).normal(0, 1, 10), 6)
+    y = y + np.random.default_rng(6).normal(0, 0.8, 60)
+    fitted = wk.GAM("y ~ s(g, bs='re')").fit({"g": g, "y": y}, method="REML")
+    fit = np.asarray(fitted.predict({"g": levels}).values)
+    lo, hi = y.min() - 0.2, y.max() + 0.2
+    sx = lambda i: _PAD + 12 + i * (_W - 2 * _PAD - 24) / 9
+    sy = lambda v: _scale(v, lo, hi, _H - _PAD, _PAD)
+    points = "".join(
+        f'<circle cx="{sx(i // 6) + (i % 6 - 2.5) * 1.6:.1f}" cy="{sy(v):.1f}" r="1.8"/>'
+        for i, v in enumerate(y)
+    )
+    bars = "".join(
+        f'<line class="wkh-curve" x1="{sx(i) - 8:.1f}" x2="{sx(i) + 8:.1f}" '
+        f'y1="{sy(v):.1f}" y2="{sy(v):.1f}"/>'
+        for i, v in enumerate(fit)
+    )
+    return _svg(f'<g class="wkh-pts">{points}</g>{bars}')
+
+
+# The tiles (each: its page in the User Guide, its term, its name, and how it's drawn), in two rows
+_rows = [
+    [
+        ("smooths.html#tprs", "s(x)", "Thin plate", lambda: _curve_tile("tp", "wave")),
+        ("smooths.html#crs", 's(x, bs="cr")', "Cubic", lambda: _curve_tile("cr", "wave")),
+        ("smooths.html#psplines", 's(x, bs="ps")', "P-spline", lambda: _curve_tile("ps", "wave")),
+        ("smooths.html#cyclic", 's(x, bs="cc")', "Cyclic", lambda: _curve_tile("cc", "cycle")),
+        ("smooths.html#shrinkage", 's(x, bs="ts")', "Shrinkage", lambda: _curve_tile("ts", "wave")),
+        (
+            "smooths.html#adaptive",
+            's(x, bs="ad")',
+            "Adaptive",
+            lambda: _curve_tile("ad", "doppler", ", k=40"),
+        ),
+        ("smooths.html#gp", 's(x, bs="gp")', "Gaussian process", lambda: _curve_tile("gp", "wave")),
+        ("smooths.html#random-effects", 's(g, bs="re")', "Random effect", _random_tile),
+        ("smooths.html#fs", 's(x, g, bs="fs")', "Factor smooth", _factor_tile),
+    ],
+    [
+        ("smooths.html#tensor", "te(x1, x2)", "Tensor product", lambda: _surface_tile("te(x1, x2)")),
+        (
+            "shape-constraints.html#monotone-increasing",
+            's(x, bs="mpi")',
+            "Increasing",
+            lambda: _curve_tile("mpi", "rise"),
+        ),
+        (
+            "shape-constraints.html#monotone-decreasing",
+            's(x, bs="mpd")',
+            "Decreasing",
+            lambda: _curve_tile("mpd", "fall"),
+        ),
+        ("smooths.html#tprs", "s(x1, x2)", "Thin plate, 2-D", lambda: _surface_tile("s(x1, x2)")),
+        ("shape-constraints.html#convex", 's(x, bs="cx")', "Convex", lambda: _curve_tile("cx", "convex")),
+        (
+            "shape-constraints.html#concave",
+            's(x, bs="cv")',
+            "Concave",
+            lambda: _curve_tile("cv", "concave"),
+        ),
+        ("smooths.html#tensor", "t2(x1, x2)", "Tensor (t2)", lambda: _surface_tile("t2(x1, x2)")),
+        ("smooths.html#cyclic", 's(x, bs="cp")', "Cyclic P-spline", lambda: _curve_tile("cp", "cycle")),
+        ("smooths.html", 's(x1, x2, bs="ds")', "Duchon", lambda: _surface_tile("s(x1, x2, bs='ds')")),
+    ],
 ]
 
-obs_data = [{"x": float(x[i]), "y": float(y[i])} for i in range(len(x))]
 
-band = alt.Chart({"values": plot_data}).mark_area(
-    opacity=0.2, color="darkorange"
-).encode(x=alt.X("x:Q", title="x"), y=alt.Y("lower:Q", title="y"), y2="upper:Q")
+def _tile(page, term, name, draw):
+    return (
+        f'<a class="wkh-tile" href="user-guide/{page}">{draw()}'
+        f'<span class="wkh-tile-name"><code>{term}</code><span>{name}</span></span></a>'
+    )
 
-line = alt.Chart({"values": plot_data}).mark_line(
-    color="darkorange", strokeWidth=2
-).encode(x="x:Q", y="fit:Q")
 
-pts = alt.Chart({"values": obs_data}).mark_circle(
-    size=15, opacity=0.3, color="steelblue"
-).encode(x="x:Q", y="y:Q")
-
-(band + pts + line).properties(width="container", height=300, title="Fitted GAM with 95% confidence band")
-```
-
-**Step 4: Try a non-Gaussian family with multiple predictors**
-
-```{python}
-n = 500
-x1 = rng.uniform(0, 2 * np.pi, n)
-x2 = rng.uniform(0, 1, n)
-mu = np.exp(0.5 + 0.8 * np.sin(x1) + 2 * x2)
-counts = rng.poisson(mu).astype(float)
-
-model_pois = wk.GAM("y ~ s(x1) + s(x2)", family=wk.Poisson())
-model_pois.fit({"x1": x1, "x2": x2, "y": counts}, method="REML")
-model_pois.summary()
-```
-
-**Step 5: Cross-validate and save the model**
-
-```{python}
-cv = wk.cross_validate(
-    "y ~ s(x1) + s(x2)",
-    {"x1": x1, "x2": x2, "y": counts},
-    family=wk.Poisson(),
-    n_folds=5,
+HTML(
+    '<div class="wkh-marquee" role="region" aria-label="Smooths from the User Guide">'
+    + "".join(
+        f'<div class="wkh-marquee-row{" wkh-reverse" if k else ""}">'
+        f'<div class="wkh-marquee-track">{"".join(_tile(*spec) for spec in row)}</div></div>'
+        for k, row in enumerate(_rows)
+    )
+    + "</div>"
 )
-print(f"CV deviance: {cv.cv_score:.4f} (SE: {cv.cv_se:.4f})")
-
-wk.save_gam(model_pois, "/tmp/poisson_model.npz")
-loaded = wk.load_gam("/tmp/poisson_model.npz")
-print(f"Loaded model EDF: {loaded.edf_total:.1f}")
 ```
 
-## What's inside
+[Smooth terms](user-guide/smooths.qmd){.wkh-more}
+[Shape constraints](user-guide/shape-constraints.qmd){.wkh-more}
 
-**Core GAM fitting**: fit penalized regression splines with automatic smoothness selection (REML,
-GCV, ML, fREML). R-style formula syntax with smooth terms, tensor products, linear terms,
-interactions, offsets, and by-variable smooths. Full summary with EDF and significance tests.
+## More than the mean {.wkh-heading}
 
-**Smooth basis types**: thin plate regression splines (TPRS), cubic regression splines, P-splines,
-cyclic variants, shrinkage smooths, Duchon splines, Gaussian processes, soap film smooths, Markov
-random fields, adaptive TPRS, random effects, factor smooths, and tensor products.
+A smooth of the mean is only the start. Here the head's acceleration in a simulated motorcycle crash
+spreads out after the impact, and each of these models puts a 90% band around it in its own way.
 
-**Response families**: Gaussian, Poisson, Binomial, Gamma, Negative Binomial, Beta, Tweedie,
-Inverse Gaussian, Cox PH, Ordered Categorical, and Multinomial. Each with appropriate link functions
-and variance structure.
+```{python}
+#| code-fold: true
+#| code-summary: "How the charts are drawn"
+import numpy as np
+import pandas as pd
 
-**Shape constraints**: monotone increasing/decreasing, convex, and concave smooths via constrained
-P-splines with PAVA projection.
+mcycle = wk.load_dataset("mcycle", as_frame=True)
+grid = pd.DataFrame({"times": np.linspace(0, 57, 200)})
 
-**Prediction and inference**: point estimates, standard errors, confidence intervals (pointwise and
-simultaneous), prediction intervals, and term-level contributions. All on response or link scale.
 
-**Model diagnostics**: `model.summary()` for EDF and significance tests, `wk.check(model)` for basis
-dimension adequacy (k-index test), concurvity analysis, and residual plots.
+# The data, and a curve with a band around it
+def show(middle, lower, upper):
+    band = grid.assign(middle=middle, lower=lower, upper=upper)
+    x = alt.X("times:Q", title="Time after impact (ms)")
+    return (
+        alt.Chart(band).mark_area(color="#d36983", opacity=0.18).encode(x=x, y="lower:Q", y2="upper:Q")
+        + alt.Chart(mcycle).mark_circle(color="#9a8aa8", size=22).encode(
+            x=x, y=alt.Y("accel:Q", title="Acceleration (g)")
+        )
+        + alt.Chart(band).mark_line(color="#b8405f", strokeWidth=2).encode(x=x, y="middle:Q")
+    ).properties(width="container", height=300)
+```
 
-**Bayesian inference**: variational inference (`method="VI"`) produces a fast Gaussian approximation
-to the posterior with richer uncertainty than the Laplace approximation. MCMC (`method="MCMC"`) uses
-the No-U-Turn Sampler (NUTS) to draw exact posterior samples (no trajectory-length tuning
-required!). Both methods report R-hat convergence statistics, effective sample sizes, and (for MCMC)
-divergent transition counts.
+::::: {.wkh-switch #wkh-switch}
 
-**Distributional regression (GAMLSS)**: model location, scale, and shape simultaneously with
-Gaussian, Gamma, Beta, zero-inflated Poisson, and zero-inflated Negative Binomial families.
+:::: {.wkh-option}
+[Mean]{.wkh-option-name}
 
-**Quantile regression**: fit conditional quantiles with ELF loss, optional non-crossing constraints,
-and sigma calibration.
+A GAM's prediction interval has one width everywhere, so it is too wide before the impact and too
+narrow after it.
 
-**Conformal prediction**: distribution-free prediction intervals via split, CV+, and jackknife+
-methods.
+```{python}
+model = wk.GAM("accel ~ s(times, k=20)").fit(mcycle, method="REML")
+pred = model.predict(grid, interval="prediction", level=0.9)
 
-**Causal inference**: double/debiased machine learning for ATE and CATE estimation, with mediation
-analysis.
+show(pred.values, pred.lower, pred.upper)
+```
+::::
 
-**Streaming and online GAMs**: incremental fitting via sufficient statistics with exponential decay
-for tracking distribution shift.
+:::: {.wkh-option}
+[Location and scale]{.wkh-option-name}
 
-**Multi-response models**: joint fitting of multiple responses with optional residual correlation
-modeling.
+A GAMLSS model gives the spread its own smooth, alongside the mean's, and the band follows the
+spread as it changes.
 
-**Functional regression**: scalar-on-function regression with B-spline or Fourier bases for
-functional covariates.
+```{python}
+model = wk.GAMLSS(
+    formulas={"mu": "accel ~ s(times, k=20)", "sigma": "accel ~ s(times)"},
+    family=wk.GaussianLS(),
+).fit(mcycle)
+pred = model.predict(grid).values
 
-**Large datasets**: `BigGAM` (discretized P-IRLS), `PolarsGAM` (streaming from Polars/files), and
-`DuckDBGAM` (SQL-native streaming) for datasets that exceed memory.
+show(pred["mu"], pred["mu"] - 1.645 * pred["sigma"], pred["mu"] + 1.645 * pred["sigma"])
+```
+::::
 
-**Cross-validation**: k-fold CV with deviance, MSE, or MAE scoring.
+:::: {.wkh-option}
+[Quantiles]{.wkh-option-name}
 
-**Serialization**: save and load fitted models as compact `.npz` archives, and convert to/from
-mgcv-compatible dictionaries for R interoperability.
+Quantile regression fits the 5th, 50th and 95th percentiles directly, with no distribution assumed
+for the noise.
 
-**scikit-learn integration**: `GAMRegressor` and `GAMClassifier` for use in pipelines and grid
-search.
+```{python}
+model = wk.QuantileGAM("accel ~ s(times, k=15)", quantiles=[0.05, 0.5, 0.95]).fit(mcycle)
+pred = model.predict(grid)
 
-## Next steps
+show(pred[0.5].values, pred[0.05].values, pred[0.95].values)
+```
+::::
 
-- **Installation**: get started with `pip install whittaker` or see [Installation](user-guide/get-started.qmd).
-- **Quick tour**: new to Whittaker? Start with the [Quick start](user-guide/quick-start.qmd) for a fast hands-on tour (5 min read).
-- **Learn the smooth catalog**: see [Smooth terms](user-guide/smooths.qmd) for a detailed look at every basis type.
-- **Beyond the mean**: explore [Distributional regression (GAMLSS)](user-guide/gamlss.qmd), [Quantile regression](user-guide/quantile.qmd), and [Conformal prediction](user-guide/conformal.qmd).
-- **Scale up**: learn about [Large datasets](user-guide/large-datasets.qmd) for fitting on data that exceeds memory.
-- **Explore everything**: see the full [User Guide](user-guide/get-started.qmd) for comprehensive coverage of all features.
-- **API reference**: browse the [Python API reference](reference/) for function signatures and detailed documentation.
+:::: {.wkh-option}
+[Conformal]{.wkh-option-name}
+
+Conformal prediction wraps any model in an interval with guaranteed coverage, from the model's
+errors on data it wasn't fitted to.
+
+```{python}
+model = wk.conformal_fit("accel ~ s(times, k=20)", mcycle, method="cv+", level=0.9, seed=1)
+pred = model.predict(grid)
+
+show(pred.values, pred.lower, pred.upper)
+```
+::::
+
+:::::
+
+[Distributional regression](user-guide/gamlss.qmd){.wkh-more}
+[Quantile regression](user-guide/quantile.qmd){.wkh-more}
+[Conformal prediction](user-guide/conformal.qmd){.wkh-more}
+
+## And when you need more {.wkh-heading}
+
+:::: {.wkh-cards}
+
+::: {.wkh-card}
+[<i class="bi bi-diagram-3"></i>]{.wkh-card-icon}
+
+#### Families for any response
+
+Counts, proportions, positive and skewed values, survival times, ordered and unordered categories,
+and zero-inflated data, each with its own links.
+
+[Response families →](user-guide/families.qmd)
+:::
+
+::: {.wkh-card}
+[<i class="bi bi-shuffle"></i>]{.wkh-card-icon}
+
+#### Bayesian inference
+
+Variational inference for a fast posterior, or NUTS sampling with R-hat, effective sample sizes,
+and divergences, then LOO, WAIC, and stacking.
+
+[MCMC sampling →](user-guide/mcmc.qmd)
+:::
+
+::: {.wkh-card}
+[<i class="bi bi-database"></i>]{.wkh-card-icon}
+
+#### Large datasets
+
+`BigGAM` fits millions of rows by discretizing them, and `PolarsGAM` and `DuckDBGAM` stream data
+that doesn't fit in memory.
+
+[Large datasets →](user-guide/large-datasets.qmd)
+:::
+
+::: {.wkh-card}
+[<i class="bi bi-bezier2"></i>]{.wkh-card-icon}
+
+#### Causal inference
+
+Average and conditional treatment effects by double machine learning, with smooths for the
+nuisance models, and mediation analysis.
+
+[Causal inference →](user-guide/causal.qmd)
+:::
+
+::: {.wkh-card}
+[<i class="bi bi-activity"></i>]{.wkh-card-icon}
+
+#### Streaming and functional data
+
+Update a model as data arrives, tracking drift with decay, or regress a scalar on a whole curve.
+
+[Streaming and online fitting →](user-guide/streaming.qmd)
+:::
+
+::: {.wkh-card}
+[<i class="bi bi-graph-up-arrow"></i>]{.wkh-card-icon}
+
+#### Derivatives and comparisons
+
+Derivatives and marginal effects with simultaneous bands, ANOVA, and side-by-side comparisons of
+models.
+
+[Derivatives and marginal effects →](user-guide/derivatives.qmd)
+:::
+
+::: {.wkh-card}
+[<i class="bi bi-puzzle"></i>]{.wkh-card-icon}
+
+#### scikit-learn
+
+`GAMRegressor` and `GAMClassifier` go into pipelines, grid searches, and cross-validation like any
+other estimator.
+
+[scikit-learn integration →](user-guide/sklearn.qmd)
+:::
+
+::: {.wkh-card}
+[<i class="bi bi-save"></i>]{.wkh-card-icon}
+
+#### Save, load, and share with R
+
+Save a fitted model to a compact file, and convert it to and from mgcv's form for R.
+
+[Saving and loading models →](user-guide/serialization.qmd)
+:::
+
+::: {.wkh-card}
+[<i class="bi bi-code-slash"></i>]{.wkh-card-icon}
+
+#### Formulas in code
+
+Build models from terms in code as well as from formula strings, and get their model matrices for
+your own work.
+
+[Programmatic formulas →](user-guide/programmatic-formulas.qmd)
+:::
+
+::::
+
+## Get started {.wkh-heading}
+
+:::: {.wkh-start}
+
+::: {.wkh-start-text}
+Install Whittaker from PyPI:
+
+```bash
+pip install whittaker
+```
+
+Then fit your first models in the [Quick start](user-guide/quick-start.qmd), learn how GAMs work in
+[Understanding GAMs](user-guide/understanding-gams.qmd), or find a recipe for a task in the
+[Cookbook](cookbook/fit-your-first-smooth.qmd).
+:::
+
+::: {.wkh-start-links}
+[<i class="bi bi-rocket-takeoff"></i> Quick start](user-guide/quick-start.qmd)
+[<i class="bi bi-book"></i> User Guide](user-guide/get-started.qmd)
+[<i class="bi bi-journal-code"></i> Cookbook](cookbook/fit-your-first-smooth.qmd)
+[<i class="bi bi-code-square"></i> API Reference](reference/index.qmd)
+:::
+
+::::
