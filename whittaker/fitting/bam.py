@@ -18,7 +18,13 @@ from scipy.optimize import minimize, minimize_scalar
 from whittaker.families.base import Family
 from whittaker.families.gaussian import Gaussian
 from whittaker.families.negative_binomial import NegativeBinomial
-from whittaker.fitting.pirls import FitResult, _estimate_nb_theta, _gcv_score, _penalty_ranks
+from whittaker.fitting.pirls import (
+    FitResult,
+    _estimate_nb_theta,
+    _gcv_score,
+    _log_det_penalty,
+    _penalty_ranks,
+)
 from whittaker.model_matrix import SmoothInfo
 
 
@@ -337,7 +343,8 @@ def _reml_objective_disc(
     d_pen = yWy - float(np.dot(beta, Xty))
 
     log_det_A = 2.0 * float(np.sum(np.log(np.diag(cho))))
-    log_det_S = sum(m * rho for m, rho in zip(penalty_ranks, log_sp, strict=False))
+    # log|S_λ|⁺ (and its gradient), exact where penalties overlap, as a tensor product's do
+    log_det_S, d_log_det_S = _log_det_penalty(log_sp, dm.penalties, penalty_ranks)
 
     M = n_unpenalized
     if scale_known:
@@ -358,16 +365,20 @@ def _reml_objective_disc(
         val -= 0.5 * log_det_XtX
 
     grad = np.zeros_like(log_sp)
-    for j, (lam_j, pen_j, m_j) in enumerate(zip(sp, dm.penalties, penalty_ranks, strict=False)):
+    for j, (lam_j, pen_j) in enumerate(zip(sp, dm.penalties, strict=False)):
         beta_Sj_beta = float(beta @ pen_j @ beta)
         tr_Ainv_Sj = float(np.trace(cho_solve((cho, lower), pen_j)))
         if scale_known:
-            grad[j] = lam_j * beta_Sj_beta / (2.0 * scale) + lam_j * 0.5 * tr_Ainv_Sj - 0.5 * m_j
+            grad[j] = (
+                lam_j * beta_Sj_beta / (2.0 * scale)
+                + lam_j * 0.5 * tr_Ainv_Sj
+                - 0.5 * d_log_det_S[j]
+            )
         else:
             grad[j] = (
                 (n - M) * lam_j * beta_Sj_beta / (2.0 * d_pen)
                 + lam_j * 0.5 * tr_Ainv_Sj
-                - 0.5 * m_j
+                - 0.5 * d_log_det_S[j]
             )
 
     return float(val), grad
