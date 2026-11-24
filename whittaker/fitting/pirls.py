@@ -355,7 +355,7 @@ def _log_det_penalty(
         cols = np.unique(np.concatenate([supports[j] for j in idx]))
         blocks = [penalties[j][np.ix_(cols, cols)] / norms[j] for j in idx]
         # The range of the group's penalties (the same for any positive λ)
-        evals, evecs = np.linalg.eigh(sum(blocks))
+        evals, evecs = np.linalg.eigh(np.sum(blocks, axis=0))
         U = evecs[:, evals > np.max(evals) * len(cols) * np.finfo(float).eps]
         reduced = [U.T @ b @ U for b in blocks]
 
@@ -363,7 +363,8 @@ def _log_det_penalty(
             # log|Σ_j exp(log_w_j) B_j| and the inverse of the sum, scaled by the largest weight
             # so that the sum stays in range
             top = float(np.max(log_w))
-            S_r = sum(np.exp(lw - top) * b for lw, b in zip(log_w, reduced, strict=True))
+            terms = [np.exp(lw - top) * b for lw, b in zip(log_w, reduced, strict=True)]
+            S_r = np.sum(terms, axis=0)
             e, V = np.linalg.eigh(0.5 * (S_r + S_r.T))
             e = np.maximum(e, np.max(e) * np.finfo(float).eps)
             return len(e) * top + float(np.sum(np.log(e))), np.exp(-top) * ((V / e) @ V.T)
