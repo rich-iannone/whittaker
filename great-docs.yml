@@ -13,6 +13,7 @@ logo:
 
 hero:
   name: false
+  tagline: "Next-Generation GAMs for Python"
   logo_height: 120px
   badges: false
 
