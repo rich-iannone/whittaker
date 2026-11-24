@@ -1,0 +1,817 @@
+/* The homepage's showcase (with assets/homepage.js) */
+
+.gd-homepage {
+  --wkh-accent: #b8405f;
+  --wkh-accent-hover: #963049;
+  --wkh-accent-text: #a8375a;
+  --wkh-accent-soft: rgba(184, 64, 95, 0.08);
+  --wkh-lavender: #b9a0cc;
+  --wkh-purple: #7d5b9c;
+  --wkh-accent-line: rgba(184, 64, 95, 0.4);
+  --wkh-surface: var(--gd-bg-secondary, #f7f7f9);
+  --wkh-border: var(--gd-border-color, #e3e3e8);
+  --wkh-muted: var(--gd-text-muted, #6c6c78);
+  --wkh-radius: 12px;
+}
+
+/* The hero's animated backdrop (assets/backdrop.js): across the page, from under the navbar to
+   below the hero (fading out there), behind the page's content */
+
+.gd-homepage .gd-hero > #wkh-backdrop {
+  position: absolute;
+  z-index: -1;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.8s ease;
+  -webkit-mask-image: linear-gradient(to bottom, #000 55%, transparent);
+  mask-image: linear-gradient(to bottom, #000 55%, transparent);
+}
+
+.gd-homepage .gd-hero > #wkh-backdrop.wkh-on {
+  opacity: 1;
+}
+
+/* (In dark mode, the page's background is <html>'s alone, so that the backdrop shows over it) */
+body.quarto-dark.gd-homepage,
+body.quarto-dark.gd-homepage :is(#quarto-content, main.content, #quarto-document-content) {
+  background-color: transparent;
+}
+
+@media print {
+  .gd-homepage .gd-hero > #wkh-backdrop {
+    display: none;
+  }
+}
+
+.gd-homepage .gd-hero-tagline {
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+
+/* The lead and the calls to action (the links' rules start with `.gd-homepage a`, to win over the
+   dark theme's color for links in paragraphs) */
+
+.gd-homepage #quarto-document-content > p:first-of-type {
+  font-size: 1.15rem;
+  line-height: 1.6;
+}
+
+.wkh-cta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+  margin: 1.4rem 0 2.6rem;
+}
+
+.wkh-cta > p {
+  display: contents;
+}
+
+.gd-homepage a.wkh-btn {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.5rem 1.05rem;
+  border: 1px solid var(--wkh-border);
+  border-radius: 999px;
+  color: inherit;
+  font-weight: 600;
+  font-size: 0.95rem;
+  text-decoration: none;
+  transition: border-color 0.15s, background-color 0.15s, transform 0.15s;
+}
+
+.gd-homepage a.wkh-btn:hover {
+  border-color: var(--wkh-accent);
+  color: inherit;
+  transform: translateY(-1px);
+}
+
+.gd-homepage a.wkh-btn-primary {
+  background: var(--wkh-accent);
+  border-color: var(--wkh-accent);
+  color: #fff;
+}
+
+.gd-homepage a.wkh-btn-primary:hover {
+  background: var(--wkh-accent-hover);
+  border-color: var(--wkh-accent-hover);
+  color: #fff;
+}
+
+.wkh-install {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.45rem 0.85rem;
+  border: 1px dashed var(--wkh-border);
+  border-radius: 999px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+
+.gd-homepage .wkh-install code {
+  background: none;
+  color: inherit;
+  padding: 0;
+  font-size: 0.9em;
+}
+
+.wkh-install:hover,
+.wkh-install.wkh-copied {
+  border-color: var(--wkh-accent);
+}
+
+.wkh-install .bi,
+.wkh-prompt {
+  color: var(--wkh-muted);
+}
+
+.wkh-copied .bi {
+  color: var(--wkh-accent);
+}
+
+/* The section headings */
+
+.gd-homepage h2.wkh-heading {
+  margin-top: 3.2rem;
+  border-bottom: none;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.gd-homepage h2.wkh-heading::after {
+  content: "";
+  display: block;
+  width: 2.4rem;
+  height: 3px;
+  margin-top: 0.45rem;
+  border-radius: 3px;
+  background: var(--wkh-accent);
+}
+
+.wkh-more {
+  display: inline-block;
+  margin-right: 1.2rem;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+/* The stepper, and the switch between views of what failed: tabs (or chips) over panels */
+
+.wkh-stepper,
+.wkh-switch {
+  margin: 1.2rem 0 1rem;
+}
+
+.wkh-tabs {
+  display: flex;
+  gap: 0.35rem;
+  margin-bottom: 1rem;
+  padding: 0.3rem;
+  border: 1px solid var(--wkh-border);
+  border-radius: 999px;
+  background: var(--wkh-surface);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.wkh-tab {
+  position: relative;
+  flex: 1 1 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  min-width: max-content;
+  padding: 0.45rem 0.8rem;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--wkh-muted);
+  font-weight: 600;
+  font-size: 0.92rem;
+  cursor: pointer;
+  overflow: hidden;
+  transition: background-color 0.2s, color 0.2s, box-shadow 0.2s;
+}
+
+.wkh-tab:hover {
+  color: var(--gd-text-primary, #222);
+}
+
+.wkh-tab:focus-visible,
+.wkh-chip:focus-visible {
+  outline: 2px solid var(--wkh-accent);
+  outline-offset: 1px;
+}
+
+.wkh-tab-num {
+  display: inline-grid;
+  place-items: center;
+  width: 1.45rem;
+  height: 1.45rem;
+  border: 1.5px solid currentColor;
+  border-radius: 50%;
+  font-size: 0.75rem;
+  line-height: 1;
+}
+
+.wkh-tab.wkh-done .wkh-tab-num {
+  border-color: var(--wkh-accent-line);
+  color: var(--wkh-accent);
+}
+
+.wkh-tab[aria-selected="true"] {
+  background: var(--gd-bg-primary, #fff);
+  color: var(--gd-text-primary, #222);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+}
+
+.wkh-tab[aria-selected="true"] .wkh-tab-num {
+  border-color: var(--wkh-accent);
+  background: var(--wkh-accent);
+  color: #fff;
+}
+
+.wkh-tab-progress {
+  position: absolute;
+  left: 18%;
+  right: 18%;
+  bottom: 3px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--wkh-accent);
+  transform: scaleX(0);
+  transform-origin: left;
+  opacity: 0;
+}
+
+.wkh-playing .wkh-tab[aria-selected="true"] .wkh-tab-progress {
+  opacity: 0.7;
+  animation: wkh-progress var(--wkh-dwell, 5s) linear forwards;
+}
+
+@keyframes wkh-progress {
+  to {
+    transform: scaleX(1);
+  }
+}
+
+.wkh-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin-bottom: 0.9rem;
+}
+
+.wkh-chip {
+  padding: 0.32rem 0.85rem;
+  border: 1px solid var(--wkh-border);
+  border-radius: 999px;
+  background: var(--gd-bg-primary, #fff);
+  color: inherit;
+  font-size: 0.88rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.15s, background-color 0.15s, color 0.15s;
+}
+
+.wkh-chip:hover {
+  border-color: var(--wkh-accent);
+}
+
+.wkh-chip[aria-selected="true"] {
+  border-color: var(--wkh-accent);
+  background: var(--wkh-accent);
+  color: #fff;
+}
+
+/* The panels are stacked in one place, so that each is laid out all along; the stepper is as tall
+   as the one shown. The others are see-through (and inert), not hidden, so that their charts are
+   drawn at the panel's width (a chart in a hidden panel would have no width to fill) */
+
+.wkh-panels {
+  position: relative;
+  overflow: hidden;
+  transition: height 0.35s ease;
+}
+
+.wkh-stack {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+}
+
+.wkh-ready .wkh-panel {
+  grid-area: 1 / 1;
+  min-width: 0;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(6px);
+  transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+.wkh-ready .wkh-panel.wkh-active {
+  opacity: 1;
+  pointer-events: auto;
+  transform: none;
+  transition: opacity 0.35s ease, transform 0.35s ease;
+  z-index: 1;
+}
+
+.wkh-panel > p {
+  margin-bottom: 0.8rem;
+  color: var(--wkh-muted);
+}
+
+.wkh-panel .cell {
+  border: 1px solid var(--wkh-border);
+  border-radius: var(--wkh-radius);
+  overflow: hidden;
+  background: var(--gd-bg-primary, #fff);
+}
+
+/* (A margin, not padding, around the output: the charts fill the output's width) */
+.wkh-panel .cell-output-display {
+  margin: 1rem 1rem 0.6rem;
+  overflow-x: auto;
+}
+
+.wkh-panel .cell-output-display.scale-to-fit {
+  width: auto;
+}
+
+.wkh-panel .cell-code {
+  position: relative;
+  margin: 0;
+  border-radius: 0;
+}
+
+.wkh-stepper .wkh-panel .cell-code {
+  border-top: 1px solid var(--wkh-border);
+}
+
+.wkh-switch .wkh-panel .cell-code {
+  border-bottom: 1px solid var(--wkh-border);
+}
+
+.wkh-panel .cell-code pre {
+  max-height: 15.5rem;
+  margin: 0;
+  border: none;
+  border-radius: 0;
+  overflow-y: auto;
+}
+
+.wkh-panel .cell-code pre code {
+  display: block;
+  min-width: max-content;
+}
+
+.wkh-panel .cell-code pre code > span {
+  display: block;
+  margin-left: -0.6rem;
+  padding-left: 0.6rem;
+  border-left: 3px solid transparent;
+}
+
+.wkh-panel .cell-code pre code > span.wkh-new {
+  border-left-color: var(--wkh-accent);
+  background: var(--wkh-accent-soft);
+}
+
+.wkh-panel .cell-code pre code > span.wkh-folded {
+  display: none;
+}
+
+.wkh-panel .cell-code pre code > span.wkh-fold-mark {
+  height: 1.5em;
+  overflow: hidden;
+  color: transparent;
+  cursor: pointer;
+  user-select: none;
+}
+
+.wkh-panel .cell-code pre code > span.wkh-fold-mark * {
+  color: transparent !important;
+}
+
+.wkh-panel .cell-code pre code > span.wkh-fold-mark::before {
+  content: "⋯ " attr(data-fold);
+  display: block;
+  color: var(--wkh-muted);
+  font-style: italic;
+}
+
+.wkh-panel .cell-code pre code > span.wkh-fold-mark:hover::before,
+.wkh-panel .cell-code pre code > span.wkh-fold-mark:focus-visible::before {
+  color: var(--wkh-accent);
+}
+
+.wkh-panel .cell-code pre code > span.wkh-fold-mark:focus-visible {
+  outline: 2px solid var(--wkh-accent);
+  outline-offset: -2px;
+}
+
+.wkh-new-count {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.9rem;
+  z-index: 2;
+  padding: 0.1rem 0.55rem;
+  border-radius: 999px;
+  background: var(--wkh-accent);
+  color: #fff;
+  font-size: 0.72rem;
+  font-weight: 600;
+  pointer-events: none;
+}
+
+/* The backends */
+
+.wkh-backends {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 1rem 0 0.6rem;
+}
+
+.wkh-backends > p {
+  display: contents;
+}
+
+.wkh-backend {
+  padding: 0.32rem 0.8rem;
+  border: 1px solid var(--wkh-border);
+  border-radius: 8px;
+  background: var(--wkh-surface);
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+/* The features */
+
+.wkh-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(15.5rem, 1fr));
+  gap: 1rem;
+  margin: 1.2rem 0 1rem;
+}
+
+.wkh-card {
+  display: flex;
+  flex-direction: column;
+  padding: 1.1rem 1.15rem 0.9rem;
+  border: 1px solid var(--wkh-border);
+  border-radius: var(--wkh-radius);
+  transition: border-color 0.2s, transform 0.2s, box-shadow 0.2s;
+}
+
+.wkh-card:hover {
+  border-color: var(--wkh-accent-line);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.06);
+}
+
+.wkh-card > p {
+  margin-bottom: 0.6rem;
+  font-size: 0.93rem;
+}
+
+.wkh-card > p:last-child {
+  margin-top: auto;
+  margin-bottom: 0;
+}
+
+.wkh-card > p:last-child a {
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.gd-homepage .wkh-card h4 {
+  margin: 0.5rem 0 0.35rem;
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+
+.wkh-card-icon {
+  display: inline-grid;
+  place-items: center;
+  width: 2.3rem;
+  height: 2.3rem;
+  border-radius: 10px;
+  background: var(--wkh-accent-soft);
+  color: var(--wkh-accent);
+  font-size: 1.15rem;
+}
+
+/* Getting started, with the main parts of the docs beside it */
+
+.wkh-start {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 1rem 2.5rem;
+  margin-bottom: 2rem;
+}
+
+.wkh-start-text > :last-child {
+  margin-bottom: 0;
+}
+
+.wkh-start-links {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  min-width: 12rem;
+  margin-right: 1rem;
+}
+
+.wkh-start-links > p {
+  display: contents;
+}
+
+.gd-homepage .wkh-start-links a {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.55rem 0.9rem;
+  border: 1px solid var(--wkh-border);
+  border-radius: 10px;
+  color: inherit;
+  font-weight: 600;
+  text-decoration: none;
+  transition: border-color 0.15s, transform 0.15s;
+}
+
+.gd-homepage .wkh-start-links a:hover {
+  border-color: var(--wkh-accent);
+  transform: translateX(2px);
+}
+
+.wkh-start-links .bi {
+  color: var(--wkh-accent);
+}
+
+/* The stats */
+
+.wkh-stats {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 0.5rem;
+  margin: 0 0 2.4rem;
+  padding: 0.9rem 0.6rem;
+  border: 1px solid var(--wkh-border);
+  border-radius: var(--wkh-radius);
+  background: color-mix(in srgb, var(--wkh-surface) 82%, transparent);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+}
+
+.wkh-stats > p {
+  display: contents;
+}
+
+.wkh-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+.wkh-stat + .wkh-stat {
+  border-left: 1px solid var(--wkh-border);
+}
+
+.wkh-stat-num {
+  font-size: 1.55rem;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+  font-variant-numeric: tabular-nums;
+  color: var(--wkh-accent-text);
+}
+
+.wkh-stat-label {
+  color: var(--wkh-muted);
+  font-size: 0.82rem;
+}
+
+/* The marquee of smooths: two rows, moving opposite ways, paused when hovered */
+
+.wkh-marquee {
+  display: grid;
+  gap: 0.9rem;
+  margin: 1.2rem 0 1rem;
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 6%, #000 94%, transparent);
+  mask-image: linear-gradient(to right, transparent, #000 6%, #000 94%, transparent);
+}
+
+.wkh-marquee-row {
+  overflow: hidden;
+}
+
+.wkh-marquee-track {
+  display: flex;
+  gap: 0.9rem;
+  width: max-content;
+}
+
+.wkh-marquee.wkh-ready .wkh-marquee-track {
+  animation: wkh-marquee var(--wkh-marquee-time, 60s) linear infinite;
+}
+
+.wkh-marquee.wkh-ready .wkh-reverse .wkh-marquee-track {
+  animation-direction: reverse;
+}
+
+.wkh-marquee:hover .wkh-marquee-track,
+.wkh-marquee:focus-within .wkh-marquee-track {
+  animation-play-state: paused;
+}
+
+@keyframes wkh-marquee {
+  to {
+    transform: translateX(calc(-50% - 0.45rem));
+  }
+}
+
+.gd-homepage a.wkh-tile {
+  display: flex;
+  flex-direction: column;
+  flex: 0 0 auto;
+  width: 230px;
+  border: 1px solid var(--wkh-border);
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--gd-bg-primary, #fff);
+  color: inherit;
+  text-decoration: none;
+  transition: border-color 0.2s, transform 0.2s, box-shadow 0.2s;
+}
+
+.gd-homepage a.wkh-tile:hover,
+.gd-homepage a.wkh-tile:focus-visible {
+  border-color: var(--wkh-accent-line);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.08);
+}
+
+.wkh-tile svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+/* (The tiles' colors come from here, so that they follow the theme) */
+.wkh-tile .wkh-pts {
+  fill: var(--wkh-lavender);
+}
+
+.wkh-tile .wkh-band {
+  fill: var(--wkh-accent);
+  opacity: 0.14;
+}
+
+.wkh-tile .wkh-curve {
+  fill: none;
+  stroke: var(--wkh-accent);
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* (A surface's cells: rose above zero and purple below, as strong as the value) */
+.wkh-tile .wkh-pos {
+  fill: var(--wkh-accent);
+}
+
+.wkh-tile .wkh-neg {
+  fill: var(--wkh-purple);
+}
+
+.wkh-tile-name {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.4rem 0.7rem 0.45rem;
+  border-top: 1px solid var(--wkh-border);
+  font-size: 0.82rem;
+}
+
+.wkh-tile-name code {
+  padding: 0;
+  background: none;
+  color: var(--wkh-accent-text);
+  font-size: 0.8rem;
+}
+
+.wkh-tile-name span {
+  color: var(--wkh-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Dark mode */
+
+body.quarto-dark.gd-homepage,
+html.quarto-dark .gd-homepage {
+  --wkh-accent: #d3607e;
+  --wkh-accent-hover: #e07a95;
+  --wkh-accent-text: #ef8fa8;
+  --wkh-accent-soft: rgba(233, 117, 140, 0.15);
+  --wkh-accent-line: rgba(233, 117, 140, 0.5);
+  --wkh-lavender: #9c84b0;
+  --wkh-purple: #b394d0;
+  --wkh-surface: var(--gd-bg-secondary, #1d1f24);
+  --wkh-border: var(--gd-border-color, #33363d);
+}
+
+body.quarto-dark .wkh-tab[aria-selected="true"],
+html.quarto-dark .wkh-tab[aria-selected="true"] {
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+}
+
+body.quarto-dark .wkh-card:hover,
+html.quarto-dark .wkh-card:hover,
+:is(body.quarto-dark, html.quarto-dark) a.wkh-tile:hover {
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+}
+
+/* (The charts and printouts are drawn for a light page, so they keep one) */
+body.quarto-dark .wkh-panel .cell,
+html.quarto-dark .wkh-panel .cell {
+  background: #fff;
+  color: #222;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wkh-panels,
+  .wkh-ready .wkh-panel,
+  .wkh-ready .wkh-panel.wkh-active,
+  .wkh-card,
+  .gd-homepage a.wkh-btn,
+  .gd-homepage .wkh-start-links a,
+  .gd-homepage a.wkh-tile,
+  .gd-homepage .gd-hero > #wkh-backdrop {
+    transition: none;
+  }
+
+  /* (The marquee holds still, and its rows scroll instead) */
+  .wkh-marquee.wkh-ready .wkh-marquee-track {
+    animation: none;
+  }
+
+  .wkh-marquee-row {
+    overflow-x: auto;
+  }
+
+  .wkh-playing .wkh-tab[aria-selected="true"] .wkh-tab-progress {
+    animation: none;
+  }
+}
+
+@media (max-width: 767.98px) {
+  .wkh-stats {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    row-gap: 0.8rem;
+  }
+
+  .wkh-stat:nth-child(4) {
+    border-left: none;
+  }
+}
+
+@media (max-width: 575.98px) {
+  .wkh-tab {
+    padding: 0.4rem 0.6rem;
+  }
+
+  .wkh-tab-name {
+    display: none;
+  }
+
+  .wkh-tab[aria-selected="true"] .wkh-tab-name {
+    display: inline;
+  }
+
+  .wkh-panel .cell-output-display {
+    margin: 0.6rem 0.5rem 0.4rem;
+  }
+
+  .wkh-new-count {
+    display: none;
+  }
+
+  .wkh-start {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .wkh-start-links {
+    margin-right: 0;
+  }
+}
