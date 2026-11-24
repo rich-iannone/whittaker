@@ -359,6 +359,15 @@ class TestCoverage:
 
         assert model_wide.coverage() > model_narrow.coverage()
 
+    @pytest.mark.parametrize("scale", [50.0, 1000.0])
+    def test_response_on_a_large_scale(self, symmetric_data, scale):
+        # Residuals many `sigma` wide once made the ELF curvature vanish, and the fit diverged
+        data = {"x": symmetric_data["x"], "y": symmetric_data["y"] * scale}
+        model = QuantileGAM("y ~ s(x)", quantiles=[0.1, 0.5, 0.9]).fit(data)
+        preds = model.predict({"x": np.array([np.pi / 2, 3 * np.pi / 2])})
+        np.testing.assert_allclose(preds[0.5].values / scale, [1.0, -1.0], atol=0.15)
+        assert 0.7 < model.coverage() < 0.9
+
 
 class TestCrossingFraction:
     def test_non_crossing_zero(self, symmetric_data):
