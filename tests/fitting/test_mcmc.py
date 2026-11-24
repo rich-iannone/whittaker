@@ -790,6 +790,24 @@ class TestMassMatrixAdaptation:
         assert mr.samples.shape[1] == 50
         assert mr.r_hat.shape[0] > 0
 
+    @pytest.mark.parametrize("sampler", ["NUTS", "HMC"])
+    def test_converges_with_strongly_correlated_coefficients(self, sampler):
+        """On `mcycle` (clustered times), the posterior's correlation matrix has a condition
+        number over 1e10, which a diagonal metric alone left the chains stuck on (R-hat near 4).
+        """
+        from whittaker.datasets import load_dataset
+
+        data = load_dataset("mcycle")
+        mm, fr, _, fam = _build_components(
+            {"x": data["times"], "y": data["accel"]}, formula="y ~ s(x, k=20)"
+        )
+        mr = mcmc_fit(mm, fam, n_chains=2, n_samples=300, n_warmup=300, sampler=sampler, seed=3)
+        assert mr.r_hat.max() < 1.05
+        assert mr.ess.min() > 50
+        # (A Gaussian posterior: the draws' mean is the MAP)
+        sd = np.sqrt(np.diag(mr.posterior_cov))
+        assert np.all(np.abs(mr.posterior_mean - fr.coefficients) < 0.3 * sd)
+
 
 # ---------------------------------------------------------------------------
 # Offset and weights branches in _grad_U / _potential_U
