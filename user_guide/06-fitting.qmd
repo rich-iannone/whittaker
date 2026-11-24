@@ -597,7 +597,7 @@ model.gam_check()
 ::: {.callout-tip}
 ## A safe workflow for production models
 
-1. Start with the defaults: `method="REML"`, `k=10`.
+1. Start with `method="REML"` and the default `k=10`.
 2. Fit the model and run `model.gam_check()`.
 3. If any smooth fails the k-index test, increase `k` for that term and re-fit.
 4. Review the summary: are the EDF values plausible for the data?
