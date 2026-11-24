@@ -222,6 +222,7 @@ __marimo__/
 
 # Great Docs build output
 great-docs/
+.great-docs-cache/
 /*.md
 !README.md
 !ROADMAP.md
