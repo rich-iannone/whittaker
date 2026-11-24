@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import warnings
+
 import numpy as np
 from numpy.testing import assert_allclose
 
@@ -237,6 +239,26 @@ class TestContinuousBy:
 
         model = GAM("y ~ s(x, k=10, by='z')").fit({"y": y, "x": x, "z": z}, method="REML")
         assert model.is_fitted
+
+    def test_indicator_by_variables_summing_to_the_intercept(self) -> None:
+        # With an indicator for each group, the by-variables sum to the intercept, so the system
+        # is singular in one unpenalized direction. GCV must still find a good fit, not one stuck
+        # where the system happened not to factor (and without warnings from the optimizer)
+        rng = np.random.default_rng(23)
+        n = 100
+        x = rng.uniform(0, 1, size=2 * n)
+        y = np.concatenate([np.sin(np.pi * x[:n]), -np.sin(np.pi * x[n:])])
+        y = y + rng.normal(0, 0.15, 2 * n)
+        a = np.repeat([1.0, 0.0], n)
+        data = {"x": x, "y": y, "a": a, "b": 1.0 - a}
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", RuntimeWarning)
+            model = GAM("y ~ s(x, by=a) + s(x, by=b)").fit(data)
+
+        # (Both humps are curved, and the noise variance is about 0.15² = 0.0225)
+        assert min(model.edf) > 2
+        assert abs(model.scale - 0.0225) < 0.008
 
 
 # ---------------------------------------------------------------------------
