@@ -8,8 +8,10 @@ Two samplers are provided:
   adapts the trajectory length by growing a binary tree until a U-turn is detected. Dual-averaging
   adapts the step size during warmup.
 
-Both samplers use a diagonal mass matrix pre-conditioned from the Laplace posterior covariance,
-and run `n_chains` independent chains in parallel via `concurrent.futures.ProcessPoolExecutor`.
+Both samplers run on coefficients whitened by the Cholesky factor of the Laplace posterior
+covariance (a dense metric, since the coefficients of a smooth can be very strongly correlated),
+with a diagonal mass matrix adapted during warmup, and run `n_chains` independent chains in parallel
+via `concurrent.futures.ProcessPoolExecutor`.
 """
 
 from __future__ import annotations
@@ -543,11 +545,13 @@ def _hmc_chain(
         p_mom = rng.standard_normal(p) * np.sqrt(M_diag)
         K_curr = 0.5 * float(np.sum(p_mom**2 * M_diag_inv))
 
+        # (A jittered step size, so that a fixed trajectory length can't resonate with the period
+        # of a near-Gaussian posterior and leave the chain where it started, or opposite it)
         beta_prop, p_prop = _leapfrog(
             beta,
             p_mom,
             M_diag_inv,
-            eps,
+            eps * float(rng.uniform(0.8, 1.2)),
             leapfrog_steps,
             X,
             y,
@@ -1068,16 +1072,23 @@ def mcmc_fit(
     for lam, pen in zip(sp, penalties, strict=False):
         S_lambda += lam * pen
 
-    # 3. Diagonal mass matrix M = diag(1/V_β) = diagonal precision.
-    #
-    # With this convention the momentum p_i ~ N(0, M_ii) has std 1/sqrt(V_β_ii) and the
-    # leapfrog position step ε M^{-1} p = ε V_β_ii p_i ~ N(0, ε² V_β_ii), which is proportional
-    # to the posterior standard deviation sqrt(V_β_ii).  This gives step size ε = O(1) regardless
-    # of the absolute scale of the posterior.
+    # 3. Whitening: the chains run on θ, with β = L θ and L L' = V_β (the Laplace covariance). This
+    # is the same model with design X L and penalty L' S_λ L, and its posterior is close to
+    # N(L⁻¹ β̂, I) (exactly so for a Gaussian family). A diagonal mass matrix alone can't cope with
+    # the coefficients' correlations, which for a smooth on clustered covariate values can leave the
+    # posterior's correlation matrix with a condition number of 1e10 or more, and the chains stuck
     W_init = init_result.weights
     V_beta = _bayesian_covariance(X, penalties, sp, scale, W=W_init)
-    V_diag = np.maximum(np.diag(V_beta), 1e-15)
-    M_diag = 1.0 / V_diag  # precision; M_diag_inv inside _hmc_chain = V_diag
+    V_beta = 0.5 * (V_beta + V_beta.T)
+    jitter = 1e-12 * max(float(np.max(np.diag(V_beta))), 1e-300)
+    try:
+        L = np.linalg.cholesky(V_beta + jitter * np.eye(p))
+    except np.linalg.LinAlgError:
+        evals, evecs = np.linalg.eigh(V_beta)
+        L = evecs * np.sqrt(np.maximum(evals, jitter))
+    X_white = X @ L
+    S_white = L.T @ S_lambda @ L
+    M_diag = np.ones(p)
 
     # Stan-style initial step size: O(1) in the whitened (unit-mass) coordinate system.
     step_size_init = 0.3 / float(p**0.25)
@@ -1086,13 +1097,13 @@ def mcmc_fit(
     rng_master = np.random.default_rng(seed)
     chain_seeds = rng_master.integers(0, 2**31, size=n_chains).tolist()
 
-    beta_map = init_result.coefficients.copy()
+    theta_map = np.linalg.solve(L, init_result.coefficients)
     chain_inits: list[NDArray] = []
     for k in range(n_chains):
         perturb_rng = np.random.default_rng(int(chain_seeds[k]) + 1_000_000)
-        # Perturb by 0.1 * posterior_std in each direction (V_diag = posterior variance)
-        noise = perturb_rng.standard_normal(p) * np.sqrt(0.1 * V_diag)
-        chain_inits.append(beta_map + noise)
+        # Perturb by sqrt(0.1) posterior standard deviations (one, in the whitened coordinates)
+        noise = perturb_rng.standard_normal(p) * np.sqrt(0.1)
+        chain_inits.append(theta_map + noise)
 
     # 5. Build per-chain args and select worker based on sampler
     use_nuts = sampler.upper() == "NUTS"
@@ -1101,9 +1112,9 @@ def mcmc_fit(
             (
                 chain_inits[k],
                 M_diag,
-                X,
+                X_white,
                 y,
-                S_lambda,
+                S_white,
                 family,
                 scale,
                 pw,
@@ -1123,9 +1134,9 @@ def mcmc_fit(
             (
                 chain_inits[k],
                 M_diag,
-                X,
+                X_white,
                 y,
-                S_lambda,
+                S_white,
                 family,
                 scale,
                 pw,
@@ -1153,6 +1164,8 @@ def mcmc_fit(
 
     # 6. Collect samples and scalar summaries
     # each chain_result: (samples, step_size, acceptance_rate, mean_tree_depth, n_divergent)
+    # (Back from the whitened coordinates to the coefficients)
+    chain_results = [(L @ cr[0], *cr[1:]) for cr in chain_results]
     all_samples = np.concatenate([cr[0] for cr in chain_results], axis=1)  # (p, n_chains*n_samples)
     final_step_size = float(np.mean([cr[1] for cr in chain_results]))
     acceptance_rate = float(np.mean([cr[2] for cr in chain_results]))
@@ -1167,7 +1180,7 @@ def mcmc_fit(
 
     # 8. Posterior mean and covariance from samples
     posterior_mean = all_samples.mean(axis=1)
-    posterior_cov = np.cov(all_samples) if all_samples.shape[1] > 1 else np.diag(M_diag)
+    posterior_cov = np.cov(all_samples) if all_samples.shape[1] > 1 else V_beta
 
     # 9. EDF (evaluated at posterior mean, same formula as P-IRLS)
     smooths_info = [(s.col_start, s.col_end) for s in model.smooths]
