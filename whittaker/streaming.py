@@ -367,14 +367,16 @@ class StreamingGAM:
         batch_XtWX = Xw.T @ Xw
         batch_XtWz = Xw.T @ zw
 
+        # (Updated in place, through names that keep their non-`None` type)
+        XtWX, XtWz = self._XtWX, self._XtWz
         if self._decay < 1.0:
-            self._XtWX *= self._decay
-            self._XtWz *= self._decay
+            XtWX *= self._decay
+            XtWz *= self._decay
             self._sum_deviance *= self._decay
             self._n_obs = int(self._n_obs * self._decay)
 
-        self._XtWX += batch_XtWX
-        self._XtWz += batch_XtWz
+        XtWX += batch_XtWX
+        XtWz += batch_XtWz
         self._n_obs += n
         self._n_batches += 1
 
