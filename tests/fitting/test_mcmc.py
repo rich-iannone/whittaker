@@ -801,7 +801,10 @@ class TestMassMatrixAdaptation:
         mm, fr, _, fam = _build_components(
             {"x": data["times"], "y": data["accel"]}, formula="y ~ s(x, k=20)"
         )
-        mr = mcmc_fit(mm, fam, n_chains=2, n_samples=300, n_warmup=300, sampler=sampler, seed=3)
+        # (HMC mixes more slowly than NUTS, and at 300 draws its R-hat and ESS sit at the
+        # thresholds, where platform differences in floating point can tip them over)
+        n = 300 if sampler == "NUTS" else 500
+        mr = mcmc_fit(mm, fam, n_chains=2, n_samples=n, n_warmup=n, sampler=sampler, seed=3)
         assert mr.r_hat.max() < 1.05
         assert mr.ess.min() > 50
         # (A Gaussian posterior: the draws' mean is the MAP)
