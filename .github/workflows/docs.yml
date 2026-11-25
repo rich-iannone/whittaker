@@ -53,7 +53,7 @@ jobs:
       id-token: write
     environment:
       name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+      url: ${{ steps.deployment.outputs.page_url || steps.deployment-retry.outputs.page_url }}
     steps:
       - uses: actions/download-artifact@v8
         with:
@@ -66,6 +66,19 @@ jobs:
           path: great-docs/_site
           include-hidden-files: true
 
+      # The artifact listing can lag the upload by seconds (actions/deploy-pages#451), so the
+      # first try may not find the artifact just uploaded. Re-running the job can't recover
+      # (it uploads a second `github-pages` artifact), so wait and retry here instead
       - name: Deploy to GitHub Pages
         id: deployment
+        continue-on-error: true
+        uses: actions/deploy-pages@v5
+
+      - name: Wait for the artifact listing
+        if: steps.deployment.outcome == 'failure'
+        run: sleep 60
+
+      - name: Deploy to GitHub Pages (retry)
+        id: deployment-retry
+        if: steps.deployment.outcome == 'failure'
         uses: actions/deploy-pages@v5
