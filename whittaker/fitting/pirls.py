@@ -110,10 +110,12 @@ def _ridged_cho_factor(A: NDArray) -> tuple[NDArray, bool]:
     eye = np.eye(p)
     for k in (np.finfo(float).eps, 1e-10, 1e-8):
         try:
-            return cho_factor(A + k * scale * eye)
+            cho, lower = cho_factor(A + k * scale * eye)
+            return cho, bool(lower)
         except np.linalg.LinAlgError:
             continue
-    return cho_factor(A + 1e-6 * scale * eye)
+    cho, lower = cho_factor(A + 1e-6 * scale * eye)
+    return cho, bool(lower)
 
 
 def _penalized_solve(
