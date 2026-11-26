@@ -3,10 +3,10 @@ title: ""
 jupyter: python3
 ---
 
-Whittaker fits generalized additive models in Python: regressions where each effect is a smooth
-curve shaped by the data, with **how smooth chosen for you**. It brings the depth of R's mgcv to
-Pandas, Polars, and any [Narwhals](https://narwhals-dev.github.io/narwhals/) frame, with an
-interactive chart for every fit.
+Whittaker fits generalized additive models in Python: regressions in which each effect is a smooth
+curve learned from the data, with **its smoothness chosen automatically**. It brings the depth of
+R's mgcv to Pandas, Polars, and any [Narwhals](https://narwhals-dev.github.io/narwhals/)
+DataFrame, with an interactive chart for every fit.
 
 ```{=html}
 <link rel="stylesheet" href="assets/homepage.css">
@@ -176,7 +176,7 @@ wk.check(model)
 
 Thin plate and cubic splines, P-splines, cyclic and adaptive smooths, Gaussian processes, random
 effects, tensor products for surfaces, and smooths held to a shape (increasing, decreasing, convex,
-or concave). Each tile here is a real fit; select one to read about it.
+or concave). Each tile here is a real fit, so select one to read about it.
 
 ```{python}
 #| echo: false
@@ -356,10 +356,10 @@ HTML(
 [Smooth terms](user-guide/smooths.qmd){.wkh-more}
 [Shape constraints](user-guide/shape-constraints.qmd){.wkh-more}
 
-## More than the mean {.wkh-heading}
+## Four ways to draw a band {.wkh-heading}
 
-A smooth of the mean is only the start. Here the head's acceleration in a simulated motorcycle crash
-spreads out after the impact, and each of these models puts a 90% band around it in its own way.
+The head's acceleration in a simulated motorcycle crash spreads out after the impact. Each of these
+models puts a 90% band around it in its own way.
 
 ```{python}
 #| code-fold: true
