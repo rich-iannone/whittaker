@@ -1,5 +1,5 @@
 // The homepage's showcase: the stats that count up, the stepper that builds a model one step at a
-// time, the switch between the ways of modeling more than the mean, the marquee of smooths, and
+// time, the switch between the four ways of drawing a band, the marquee of smooths, and
 // the copy button
 (() => {
   "use strict";
@@ -383,7 +383,7 @@
         panel: "wkh-option",
         name: "wkh-option-name",
         stepper: false,
-        label: "Ways to model more than the mean",
+        label: "Four ways to draw a band",
       }),
     );
   }
