@@ -159,6 +159,10 @@ body.quarto-dark.gd-homepage :is(#quarto-content, main.content, #quarto-document
   text-decoration: none;
 }
 
+.wkh-more::after {
+  content: " →";
+}
+
 /* The stepper, and the switch between views of what failed: tabs (or chips) over panels */
 
 .wkh-stepper,
